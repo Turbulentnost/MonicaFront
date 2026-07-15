@@ -10,8 +10,8 @@ export default function EmailStep({ email, setEmail, onNext }) {
     setError('');
     setLoading(true);
     try {
-      await authApi.registerEmail(email);
-      onNext();
+      const { data } = await authApi.registerEmail(email);
+      onNext(data.debug_code || '');
     } catch (err) {
       setError(err.response?.data?.email?.[0] || err.response?.data?.detail || 'Ошибка отправки');
     } finally {

@@ -11,6 +11,7 @@ export default function RegisterPage() {
   const [step, setStep] = useState(0);
   const [email, setEmail] = useState('');
   const [registrationToken, setRegistrationToken] = useState('');
+  const [debugCode, setDebugCode] = useState('');
 
   const stepIndex = step + 1;
 
@@ -31,11 +32,19 @@ export default function RegisterPage() {
         </div>
 
         {step === 0 && (
-          <EmailStep email={email} setEmail={setEmail} onNext={() => setStep(1)} />
+          <EmailStep
+            email={email}
+            setEmail={setEmail}
+            onNext={(code) => {
+              setDebugCode(code || '');
+              setStep(1);
+            }}
+          />
         )}
         {step === 1 && (
           <CodeStep
             email={email}
+            debugCode={debugCode}
             setRegistrationToken={setRegistrationToken}
             onNext={() => setStep(2)}
           />

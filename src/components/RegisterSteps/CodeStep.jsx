@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { authApi } from '../../api/client';
 
-export default function CodeStep({ email, onNext, setRegistrationToken }) {
+export default function CodeStep({ email, onNext, setRegistrationToken, debugCode }) {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -25,6 +25,11 @@ export default function CodeStep({ email, onNext, setRegistrationToken }) {
     <form onSubmit={handleSubmit} className="auth-form">
       <h2>Подтверждение email</h2>
       <p className="hint">Код отправлен на {email}</p>
+      {debugCode && (
+        <p className="hint">
+          Dev-режим (SMTP не настроен): код — <strong>{debugCode}</strong>
+        </p>
+      )}
       <label>
         Код из письма
         <input
