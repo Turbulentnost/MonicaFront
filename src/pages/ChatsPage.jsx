@@ -77,6 +77,7 @@ export default function ChatsPage() {
   const lastTypingSentRef = useRef(false);
   const searchDebounceRef = useRef(null);
   const fileInputRef = useRef(null);
+  const markReadRef = useRef(null);
 
   const loadChats = useCallback(async () => {
     const { data } = await chatsApi.list();
@@ -131,16 +132,32 @@ export default function ChatsPage() {
     (message) => {
       setPartnerTyping(false);
       setMessages((prev) => {
-        if (prev.some((m) => m.id === message.id)) return prev;
-        return [...prev, message];
+        const withoutTemp = message.client_id
+          ? prev.filter((m) => m.client_id !== message.client_id && m.id !== `temp-${message.client_id}`)
+          : prev;
+        if (withoutTemp.some((m) => m.id === message.id)) return withoutTemp;
+        return [...withoutTemp, message];
       });
       if (message.message_type === 'photo' && message.content && message.content_url) {
         warmMediaCache(message.content, message.content_url);
       }
+      // Чужое сообщение в открытом чате — сразу прочитано
+      if (message.sender?.id && message.sender.id !== user?.id && !message.read_at) {
+        markReadRef.current?.([message.id]);
+      }
       loadChats();
     },
-    [loadChats]
+    [loadChats, user?.id]
   );
+
+  const handleMessagesRead = useCallback((data) => {
+    const ids = new Set((data.message_ids || []).map(String));
+    if (!ids.size) return;
+    const readAt = data.read_at || new Date().toISOString();
+    setMessages((prev) =>
+      prev.map((m) => (ids.has(String(m.id)) ? { ...m, read_at: readAt } : m))
+    );
+  }, []);
 
   const handleMessageDeleted = useCallback(
     (messageId) => {
@@ -161,11 +178,13 @@ export default function ChatsPage() {
     setPartnerTyping(Boolean(data.is_typing));
   }, [user?.id]);
 
-  const { connected, sendMessage, sendTyping } = useWebSocket(selectedChat?.id, {
+  const { connected, sendMessage, sendTyping, markRead: markMessagesRead } = useWebSocket(selectedChat?.id, {
     onMessage: handleNewMessage,
     onTyping: handleTyping,
     onDeleted: handleMessageDeleted,
+    onRead: handleMessagesRead,
   });
+  markReadRef.current = markMessagesRead;
 
   const {
     items: notifications,
@@ -240,7 +259,30 @@ export default function ChatsPage() {
     [pushNotification, openPrivateSession, privateSessionId, resolveInvitesBySession]
   );
 
-  const { isOnline, getLastSeen } = usePresence(Boolean(user), { onNotification: handleNotification });
+  const applyChatPreview = useCallback((message) => {
+    const chatId = message?.chat ? String(message.chat) : null;
+    if (!chatId) return;
+    setChats((prev) => {
+      const idx = prev.findIndex((c) => String(c.id) === chatId);
+      if (idx < 0) {
+        loadChats();
+        return prev;
+      }
+      const current = prev[idx];
+      const updated = {
+        ...current,
+        last_message: message,
+        updated_at: message.sent_at || current.updated_at,
+      };
+      const rest = prev.filter((_, i) => i !== idx);
+      return [updated, ...rest];
+    });
+  }, [loadChats]);
+
+  const { isOnline, getLastSeen } = usePresence(Boolean(user), {
+    onChatPreview: applyChatPreview,
+    onNotification: handleNotification,
+  });
 
   const handleInvitePrivate = async () => {
     if (!selectedChat || privateBusy || privateSessionId) return;
@@ -394,15 +436,51 @@ export default function ChatsPage() {
     setCodeFileName(`${base}${ext}`);
   };
 
+  const enqueueOptimistic = useCallback(
+    (content, messageType, metadata = {}) => {
+      const clientId =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `c-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const optimistic = {
+        id: `temp-${clientId}`,
+        client_id: clientId,
+        client_status: 'sending',
+        chat: selectedChat?.id,
+        sender: {
+          id: user?.id,
+          nickname: user?.nickname,
+          photo_url: user?.photo_url,
+        },
+        message_type: messageType,
+        content,
+        content_url: metadata.content_url || null,
+        file_name: metadata.file_name || '',
+        mime_type: metadata.mime_type || '',
+        file_size: metadata.file_size ?? null,
+        sent_at: new Date().toISOString(),
+        read_at: null,
+      };
+      setMessages((prev) => [...prev, optimistic]);
+      const ok = sendMessage(content, messageType, { ...metadata, client_id: clientId });
+      if (!ok) {
+        setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
+      }
+      return ok;
+    },
+    [selectedChat?.id, sendMessage, user]
+  );
+
   const uploadAndSendFiles = async (files) => {
     const { data } = await chatsApi.uploadMessageFiles(selectedChat.id, files);
     const uploaded = data.files || [];
     let allSent = true;
     uploaded.forEach((item) => {
-      const ok = sendMessage(item.path, item.message_type, {
+      const ok = enqueueOptimistic(item.path, item.message_type, {
         file_name: item.file_name,
         mime_type: item.mime_type,
         file_size: item.file_size,
+        content_url: item.content_url,
       });
       if (!ok) allSent = false;
       if (item.message_type === 'photo' && item.path && item.content_url) {
@@ -479,7 +557,7 @@ export default function ChatsPage() {
     setAttachError('');
 
     if (text) {
-      const ok = sendMessage(text);
+      const ok = enqueueOptimistic(text, 'text');
       if (!ok) {
         setAttachError('Не удалось отправить сообщение');
         return;
@@ -537,6 +615,7 @@ export default function ChatsPage() {
 
   const handleDeleteMessage = async (messageId, scope) => {
     if (!selectedChat) return;
+    if (String(messageId).startsWith('temp-')) return;
     try {
       await chatsApi.deleteMessage(selectedChat.id, messageId, scope);
       const removed = messages.find((m) => m.id === messageId);

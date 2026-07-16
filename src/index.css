@@ -496,8 +496,48 @@ body {
 .message-time {
   font-size: 10px;
   opacity: 0.6;
+}
+
+.message-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
   margin-top: 4px;
-  text-align: right;
+}
+
+.message-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+
+.message-status-sending {
+  opacity: 0.55;
+}
+
+.message-status-sent {
+  opacity: 0.7;
+}
+
+.message-status-read {
+  opacity: 0.95;
+  color: #b7f0c4;
+}
+
+.message.own .message-status-read {
+  color: #d4ffe0;
+}
+
+.message-status-label {
+  font-size: 10px;
+}
+
+.message.pending {
+  opacity: 0.85;
 }
 
 .typing-indicator {

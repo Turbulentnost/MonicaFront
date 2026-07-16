@@ -16,7 +16,7 @@ function resolveWsUrl() {
 }
 
 /** Presence + realtime in-app notifications on the same WS. */
-export function usePresence(enabled, { onNotification } = {}) {
+export function usePresence(enabled, { onNotification, onChatPreview } = {}) {
   const wsRef = useRef(null);
   const [onlineIds, setOnlineIds] = useState(() => new Set());
   const [lastSeenByUser, setLastSeenByUser] = useState(() => ({}));
@@ -25,6 +25,8 @@ export function usePresence(enabled, { onNotification } = {}) {
   const retryRef = useRef(0);
   const onNotificationRef = useRef(onNotification);
   onNotificationRef.current = onNotification;
+  const onChatPreviewRef = useRef(onChatPreview);
+  onChatPreviewRef.current = onChatPreview;
 
   useEffect(() => {
     if (!enabled) {
@@ -70,6 +72,10 @@ export function usePresence(enabled, { onNotification } = {}) {
         }
         if (data.action === 'notification.new' && onNotificationRef.current) {
           onNotificationRef.current(data.notification);
+        }
+
+        if (data.action === 'chat.preview' && data.message && onChatPreviewRef.current) {
+          onChatPreviewRef.current(data.message);
         }
       };
 

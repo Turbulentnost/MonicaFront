@@ -14,15 +14,17 @@ function resolveWsUrl() {
   }
 }
 
-export function useWebSocket(chatId, { onMessage, onTyping, onDeleted } = {}) {
+export function useWebSocket(chatId, { onMessage, onTyping, onDeleted, onRead } = {}) {
   const wsRef = useRef(null);
   const [connected, setConnected] = useState(false);
   const onMessageRef = useRef(onMessage);
   const onTypingRef = useRef(onTyping);
   const onDeletedRef = useRef(onDeleted);
+  const onReadRef = useRef(onRead);
   onMessageRef.current = onMessage;
   onTypingRef.current = onTyping;
   onDeletedRef.current = onDeleted;
+  onReadRef.current = onRead;
 
   useEffect(() => {
     if (!chatId) return undefined;
@@ -66,6 +68,9 @@ export function useWebSocket(chatId, { onMessage, onTyping, onDeleted } = {}) {
         if (data.action === 'message.deleted' && onDeletedRef.current) {
           onDeletedRef.current(data.message_id);
         }
+        if (data.action === 'messages.read' && onReadRef.current) {
+          onReadRef.current(data);
+        }
       };
     };
 
@@ -89,6 +94,7 @@ export function useWebSocket(chatId, { onMessage, onTyping, onDeleted } = {}) {
           action: 'message.send',
           message_type: messageType,
           content,
+          client_id: metadata.client_id || undefined,
           file_name: metadata.file_name || '',
           mime_type: metadata.mime_type || '',
           file_size: metadata.file_size ?? null,
@@ -99,6 +105,17 @@ export function useWebSocket(chatId, { onMessage, onTyping, onDeleted } = {}) {
     return false;
   }, []);
 
+  const markRead = useCallback((messageIds) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          action: 'messages.read',
+          message_ids: messageIds || undefined,
+        })
+      );
+    }
+  }, []);
+
   const sendTyping = useCallback((isTyping) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(
@@ -107,5 +124,5 @@ export function useWebSocket(chatId, { onMessage, onTyping, onDeleted } = {}) {
     }
   }, []);
 
-  return { connected, sendMessage, sendTyping };
+  return { connected, sendMessage, sendTyping, markRead };
 }
