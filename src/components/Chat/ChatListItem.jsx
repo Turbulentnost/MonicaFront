@@ -6,6 +6,7 @@ function formatPreview(lastMessage) {
   if (lastMessage.message_type === 'file') {
     const name = (lastMessage.file_name || '').toLowerCase();
     if (name.endsWith('.py')) return `Python: ${lastMessage.file_name}`;
+    if (name.endsWith('.js')) return `JS: ${lastMessage.file_name}`;
     return lastMessage.file_name ? `Файл: ${lastMessage.file_name}` : 'Файл';
   }
   return lastMessage.content || 'Нет сообщений';

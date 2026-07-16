@@ -30,28 +30,55 @@ export function useWebSocket(chatId, { onMessage, onTyping, onDeleted } = {}) {
     const token = localStorage.getItem('access_token');
     if (!token) return undefined;
 
-    const ws = new WebSocket(`${resolveWsUrl()}/ws/chat/${chatId}/?token=${token}`);
-    wsRef.current = ws;
+    let cancelled = false;
+    let retryTimer = null;
+    let attempt = 0;
 
-    ws.onopen = () => setConnected(true);
-    ws.onclose = () => setConnected(false);
-    ws.onerror = () => setConnected(false);
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.action === 'message.new' && onMessageRef.current) {
-        onMessageRef.current(data.message);
-      }
-      if (data.action === 'typing.update' && onTypingRef.current) {
-        onTypingRef.current(data);
-      }
-      if (data.action === 'message.deleted' && onDeletedRef.current) {
-        onDeletedRef.current(data.message_id);
-      }
+    const connect = () => {
+      if (cancelled) return;
+      const ws = new WebSocket(`${resolveWsUrl()}/ws/chat/${chatId}/?token=${token}`);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        if (cancelled) return;
+        setConnected(true);
+        attempt = 0;
+      };
+      ws.onclose = () => {
+        if (cancelled) return;
+        setConnected(false);
+        wsRef.current = null;
+        if (attempt < 6) {
+          const delay = Math.min(1000 * 2 ** attempt, 8000);
+          attempt += 1;
+          retryTimer = setTimeout(connect, delay);
+        }
+      };
+      ws.onerror = () => {};
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.action === 'message.new' && onMessageRef.current) {
+          onMessageRef.current(data.message);
+        }
+        if (data.action === 'typing.update' && onTypingRef.current) {
+          onTypingRef.current(data);
+        }
+        if (data.action === 'message.deleted' && onDeletedRef.current) {
+          onDeletedRef.current(data.message_id);
+        }
+      };
     };
 
+    connect();
+
     return () => {
-      ws.close();
-      wsRef.current = null;
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      if (wsRef.current) {
+        wsRef.current.onclose = null;
+        wsRef.current.close();
+        wsRef.current = null;
+      }
     };
   }, [chatId]);
 
@@ -67,7 +94,9 @@ export function useWebSocket(chatId, { onMessage, onTyping, onDeleted } = {}) {
           file_size: metadata.file_size ?? null,
         })
       );
+      return true;
     }
+    return false;
   }, []);
 
   const sendTyping = useCallback((isTyping) => {

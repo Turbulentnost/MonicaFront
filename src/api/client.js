@@ -90,4 +90,17 @@ export const chatsApi = {
     api.delete(`/chats/${chatId}/messages/${messageId}/`, { data: { scope } }),
   runCode: (chatId, messageId) =>
     api.post(`/chats/${chatId}/messages/${messageId}/run/`, null, { timeout: 30000 }),
+  invitePrivate: (chatId) => api.post(`/chats/${chatId}/private/invite/`),
+  acceptPrivate: (sessionId) => api.post(`/private/${sessionId}/accept/`),
+  declinePrivate: (sessionId) => api.post(`/private/${sessionId}/decline/`),
+  closePrivate: (sessionId) => api.post(`/private/${sessionId}/close/`),
+  leavePrivate: () => api.post('/private/leave/'),
+};
+
+export const notificationsApi = {
+  list: () => api.get('/notifications/'),
+  markRead: (id) => api.post(`/notifications/${id}/read/`),
+  markAllRead: () => api.post('/notifications/read-all/'),
+  clear: () => api.delete('/notifications/clear/'),
+  remove: (id) => api.delete(`/notifications/${id}/`),
 };
