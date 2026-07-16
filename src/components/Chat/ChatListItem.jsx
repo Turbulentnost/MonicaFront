@@ -4,6 +4,7 @@ import { formatChatListTime } from '../../utils/formatChatDate';
 function formatPreview(lastMessage) {
   if (!lastMessage) return 'Нет сообщений';
   if (lastMessage.message_type === 'photo') return 'Фото';
+  if (lastMessage.message_type === 'voice') return 'Голосовое сообщение';
   if (lastMessage.message_type === 'file') {
     const name = (lastMessage.file_name || '').toLowerCase();
     if (name.endsWith('.py')) return `Python: ${lastMessage.file_name}`;

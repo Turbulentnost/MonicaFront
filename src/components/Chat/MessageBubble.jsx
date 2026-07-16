@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { MessageMedia } from './MessageMedia';
+import { VoiceMessagePlayer } from './VoiceMessagePlayer';
 
 const DELETE_FOR_ALL_MS = 48 * 60 * 60 * 1000;
 
@@ -37,6 +38,9 @@ export function MessageBubble({ message, isOwn, onDelete, chatId }) {
     }
     if (message.message_type === 'photo' || message.message_type === 'file') {
       return <MessageMedia message={message} chatId={chatId} />;
+    }
+    if (message.message_type === 'voice') {
+      return <VoiceMessagePlayer message={message} />;
     }
     return (
       <div className="message-content">
