@@ -78,13 +78,16 @@ export const chatsApi = {
   messages: (chatId, params) => api.get(`/chats/${chatId}/messages/`, { params }),
   start: (recipientId) => api.post('/chats/start/', { recipient_id: recipientId }),
   searchUsers: (q) => api.get('/users/search/', { params: { q } }),
-  uploadMessageFile: (chatId, file) => {
+  uploadMessageFiles: (chatId, files) => {
     const form = new FormData();
-    form.append('file', file);
+    files.forEach((file) => form.append('files', file));
     return api.post(`/chats/${chatId}/messages/upload/`, form, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 600000,
     });
   },
   deleteMessage: (chatId, messageId, scope) =>
     api.delete(`/chats/${chatId}/messages/${messageId}/`, { data: { scope } }),
+  runCode: (chatId, messageId) =>
+    api.post(`/chats/${chatId}/messages/${messageId}/run/`, null, { timeout: 30000 }),
 };

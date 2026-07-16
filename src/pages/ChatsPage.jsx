@@ -3,12 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { chatsApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useWebSocket } from '../hooks/useWebSocket';
+import { usePresence } from '../hooks/usePresence';
 import { ChatHeader } from '../components/Chat/ChatHeader';
 import { ChatListItem } from '../components/Chat/ChatListItem';
 import { MessageBubble } from '../components/Chat/MessageBubble';
 import { UserSearchResult } from '../components/Chat/UserSearchResult';
 import { warmAvatarCache } from '../utils/avatarCache';
 import { invalidateMediaCache, warmMediaCache } from '../utils/mediaCache';
+
+const MAX_ATTACHMENTS = 10;
+const MAX_FILE_SIZE_BYTES = 300 * 1024 * 1024;
 
 export default function ChatsPage() {
   const { user, logout } = useAuth();
@@ -20,8 +24,8 @@ export default function ChatsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [partnerTyping, setPartnerTyping] = useState(false);
-  const [pendingFile, setPendingFile] = useState(null);
-  const [pendingPreview, setPendingPreview] = useState(null);
+  const [pendingAttachments, setPendingAttachments] = useState([]);
+  const [attachError, setAttachError] = useState('');
   const [uploading, setUploading] = useState(false);
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -48,15 +52,28 @@ export default function ChatsPage() {
     });
   }, []);
 
-  const clearPendingFile = useCallback(() => {
-    if (pendingPreview) URL.revokeObjectURL(pendingPreview);
-    setPendingFile(null);
-    setPendingPreview(null);
+  const clearPendingAttachments = useCallback(() => {
+    setPendingAttachments((prev) => {
+      prev.forEach((item) => {
+        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      });
+      return [];
+    });
+    setAttachError('');
     if (fileInputRef.current) fileInputRef.current.value = '';
-  }, [pendingPreview]);
+  }, []);
+
+  const removePendingAttachment = (id) => {
+    setPendingAttachments((prev) => {
+      const target = prev.find((item) => item.id === id);
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((item) => item.id !== id);
+    });
+    setAttachError('');
+  };
 
   const handleSelectChat = async (chat) => {
-    clearPendingFile();
+    clearPendingAttachments();
     setSelectedChat(chat);
     setPartnerTyping(false);
     setInput('');
@@ -97,11 +114,13 @@ export default function ChatsPage() {
     setPartnerTyping(Boolean(data.is_typing));
   }, [user?.id]);
 
-  const { connected, sendMessage, sendTyping } = useWebSocket(selectedChat?.id, {
+  const { sendMessage, sendTyping } = useWebSocket(selectedChat?.id, {
     onMessage: handleNewMessage,
     onTyping: handleTyping,
     onDeleted: handleMessageDeleted,
   });
+
+  const { isOnline } = usePresence(Boolean(user));
 
   useEffect(() => {
     setPartnerTyping(false);
@@ -127,43 +146,76 @@ export default function ChatsPage() {
     e.preventDefault();
     if (!selectedChat || uploading) return;
 
-    if (pendingFile) {
-      setUploading(true);
-      try {
-        const { data } = await chatsApi.uploadMessageFile(selectedChat.id, pendingFile);
-        sendMessage(data.path, data.message_type, {
-          file_name: data.file_name,
-          mime_type: data.mime_type,
-          file_size: data.file_size,
-        });
-        if (data.message_type === 'photo' && data.path && data.content_url) {
-          warmMediaCache(data.path, data.content_url);
-        }
-        clearPendingFile();
-      } catch {
-        // ошибка загрузки — оставляем вложение
-      } finally {
-        setUploading(false);
-      }
-      return;
+    const text = input.trim();
+    const hasFiles = pendingAttachments.length > 0;
+    if (!text && !hasFiles) return;
+
+    stopTyping();
+
+    if (text) {
+      sendMessage(text);
+      setInput('');
     }
 
-    if (!input.trim()) return;
-    stopTyping();
-    sendMessage(input.trim());
-    setInput('');
+    if (!hasFiles) return;
+
+    setUploading(true);
+    setAttachError('');
+    try {
+      const files = pendingAttachments.map((item) => item.file);
+      const { data } = await chatsApi.uploadMessageFiles(selectedChat.id, files);
+      const uploaded = data.files || [];
+      uploaded.forEach((item) => {
+        sendMessage(item.path, item.message_type, {
+          file_name: item.file_name,
+          mime_type: item.mime_type,
+          file_size: item.file_size,
+        });
+        if (item.message_type === 'photo' && item.path && item.content_url) {
+          warmMediaCache(item.path, item.content_url);
+        }
+      });
+      clearPendingAttachments();
+    } catch (err) {
+      setAttachError(err.response?.data?.detail || 'Не удалось загрузить файлы');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleFileChange = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (pendingPreview) URL.revokeObjectURL(pendingPreview);
-    setPendingFile(file);
-    if (file.type.startsWith('image/')) {
-      setPendingPreview(URL.createObjectURL(file));
-    } else {
-      setPendingPreview(null);
-    }
+    const picked = Array.from(e.target.files || []);
+    if (!picked.length) return;
+
+    setPendingAttachments((prev) => {
+      const room = MAX_ATTACHMENTS - prev.length;
+      if (room <= 0) {
+        setAttachError(`Можно прикрепить не больше ${MAX_ATTACHMENTS} файлов`);
+        return prev;
+      }
+
+      const accepted = [];
+      let error = '';
+      for (const file of picked) {
+        if (accepted.length >= room) {
+          error = `Можно прикрепить не больше ${MAX_ATTACHMENTS} файлов`;
+          break;
+        }
+        if (file.size > MAX_FILE_SIZE_BYTES) {
+          error = `«${file.name}» больше 300 МБ`;
+          continue;
+        }
+        accepted.push({
+          id: `${file.name}-${file.size}-${file.lastModified}-${Math.random()}`,
+          file,
+          previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
+        });
+      }
+      setAttachError(error);
+      return [...prev, ...accepted];
+    });
+
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleDeleteMessage = async (messageId, scope) => {
@@ -275,7 +327,12 @@ export default function ChatsPage() {
           {searchResults.length > 0 && (
             <ul className="search-results">
               {searchResults.map((u) => (
-                <UserSearchResult key={u.id} user={u} onSelect={startChat} />
+                <UserSearchResult
+                  key={u.id}
+                  user={u}
+                  onSelect={startChat}
+                  isOnline={isOnline(u.id, u.is_online)}
+                />
               ))}
             </ul>
           )}
@@ -287,6 +344,7 @@ export default function ChatsPage() {
               chat={chat}
               active={selectedChat?.id === chat.id}
               onSelect={handleSelectChat}
+              isOnline={isOnline(chat.partner?.id, chat.partner?.is_online)}
             />
           ))}
         </ul>
@@ -295,7 +353,10 @@ export default function ChatsPage() {
       <main className="chat-main">
         {selectedChat ? (
           <>
-            <ChatHeader partner={selectedChat.partner} connected={connected} />
+            <ChatHeader
+              partner={selectedChat.partner}
+              isOnline={isOnline(selectedChat.partner?.id, selectedChat.partner?.is_online)}
+            />
             <div className="messages-area">
               {messages.map((msg) => (
                 <MessageBubble
@@ -303,6 +364,7 @@ export default function ChatsPage() {
                   message={msg}
                   isOwn={msg.sender?.id === user?.id}
                   onDelete={handleDeleteMessage}
+                  chatId={selectedChat.id}
                 />
               ))}
               {partnerTyping && (
@@ -312,25 +374,44 @@ export default function ChatsPage() {
               )}
               <div ref={messagesEndRef} />
             </div>
-            {pendingFile && (
-              <div className="attachment-preview">
-                {pendingPreview ? (
-                  <img src={pendingPreview} alt="Превью" className="attachment-preview-image" />
-                ) : (
-                  <span className="attachment-preview-file">📎 {pendingFile.name}</span>
-                )}
-                <button type="button" className="attachment-remove" onClick={clearPendingFile}>
-                  ×
-                </button>
+            {pendingAttachments.length > 0 && (
+              <div className="attachment-preview-list">
+                {pendingAttachments.map((item) => (
+                  <div key={item.id} className="attachment-preview-item">
+                    {item.previewUrl ? (
+                      <img
+                        src={item.previewUrl}
+                        alt={item.file.name}
+                        className="attachment-preview-image"
+                      />
+                    ) : (
+                      <span className="attachment-preview-file" title={item.file.name}>
+                        📎 {item.file.name}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className="attachment-remove"
+                      onClick={() => removePendingAttachment(item.id)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                <span className="attachment-count">
+                  {pendingAttachments.length}/{MAX_ATTACHMENTS}
+                </span>
               </div>
             )}
+            {attachError && <div className="attachment-error">{attachError}</div>}
             <form className="message-input" onSubmit={handleSend}>
               <div className="message-input-toolbar">
                 <button
                   type="button"
                   className="btn-attach"
                   onClick={() => fileInputRef.current?.click()}
-                  title="Прикрепить файл"
+                  title="Прикрепить файлы (до 10, до 300 МБ)"
+                  disabled={pendingAttachments.length >= MAX_ATTACHMENTS || uploading}
                 >
                   📎
                 </button>
@@ -338,7 +419,8 @@ export default function ChatsPage() {
                   ref={fileInputRef}
                   type="file"
                   className="hidden-file-input"
-                  accept="image/*,.pdf,.doc,.docx,.txt"
+                  accept="image/*,.pdf,.doc,.docx,.txt,.py"
+                  multiple
                   onChange={handleFileChange}
                 />
               </div>
@@ -348,9 +430,11 @@ export default function ChatsPage() {
                 onChange={(e) => handleInputChange(e.target.value)}
                 onBlur={stopTyping}
                 placeholder="Сообщение..."
-                disabled={Boolean(pendingFile)}
               />
-              <button type="submit" disabled={uploading || (!input.trim() && !pendingFile)}>
+              <button
+                type="submit"
+                disabled={uploading || (!input.trim() && pendingAttachments.length === 0)}
+              >
                 {uploading ? '...' : 'Отправить'}
               </button>
             </form>

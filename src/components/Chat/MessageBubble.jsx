@@ -8,7 +8,7 @@ function canDeleteForEveryone(message, isOwn) {
   return Date.now() - new Date(message.sent_at).getTime() < DELETE_FOR_ALL_MS;
 }
 
-export function MessageBubble({ message, isOwn, onDelete }) {
+export function MessageBubble({ message, isOwn, onDelete, chatId }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const showDeleteForAll = canDeleteForEveryone(message, isOwn);
 
@@ -22,7 +22,7 @@ export function MessageBubble({ message, isOwn, onDelete }) {
       return <div className="message-content">{message.content}</div>;
     }
     if (message.message_type === 'photo' || message.message_type === 'file') {
-      return <MessageMedia message={message} />;
+      return <MessageMedia message={message} chatId={chatId} />;
     }
     return (
       <div className="message-content">
