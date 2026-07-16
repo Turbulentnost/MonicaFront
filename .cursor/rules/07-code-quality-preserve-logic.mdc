@@ -1,0 +1,92 @@
+---
+description: Rule for preserving auth functionality and keeping frontend code clean.
+globs:
+  - "**/*.tsx"
+  - "**/*.jsx"
+  - "**/*.ts"
+  - "**/*.js"
+  - "**/*.css"
+  - "**/*.scss"
+alwaysApply: false
+---
+
+# Code Quality and Logic Preservation Rule
+
+The redesign is primarily visual.
+
+Do not break existing functionality.
+
+## Preserve
+
+Preserve:
+
+- auth API calls;
+- login submission;
+- registration submission;
+- validation;
+- errors;
+- loading states;
+- routing;
+- state management;
+- password visibility logic;
+- existing localization;
+- tests;
+- existing environment configuration.
+
+## Do Not
+
+Do not:
+
+- rewrite backend contracts;
+- change API endpoints;
+- change route names unless required;
+- remove validation;
+- remove error display;
+- remove accessibility;
+- introduce unrelated libraries;
+- rewrite unrelated pages;
+- create duplicated components;
+- hardcode repeated design values;
+- use inline styles without reason;
+- leave dead old CSS.
+
+## Architecture
+
+Prefer reusable components:
+
+```txt
+components/auth/
+  AuthLayout
+  AuthCard
+  AuthBrand
+  AuthInput
+  PasswordInput
+  PrimaryButton
+  AuthLink
+  RememberMeCheckbox
+  RegistrationProgress
+```
+
+Do not over-engineer, but avoid duplicated login/register UI.
+
+## SOLID / DRY
+
+Follow:
+
+- single responsibility per component;
+- reusable shared components;
+- design tokens instead of repeated magic values;
+- project styling conventions;
+- clear naming;
+- no unrelated side effects.
+
+## Styling Stack
+
+Use the styling approach already used by the project:
+
+- Tailwind if project uses Tailwind;
+- CSS Modules if project uses CSS Modules;
+- SCSS if project uses SCSS;
+- styled-components if project uses styled-components.
+
+Do not introduce a new styling system unless necessary.

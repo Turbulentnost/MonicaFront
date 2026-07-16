@@ -1,0 +1,77 @@
+---
+description: Master rule for pixel-perfect redesign of Monica authentication pages.
+globs:
+  - "**/*login*"
+  - "**/*Login*"
+  - "**/*register*"
+  - "**/*Register*"
+  - "**/*auth*"
+  - "**/*Auth*"
+alwaysApply: false
+---
+
+# Master Rule: Monica Auth Redesign
+
+You are a senior frontend engineer, UI implementation specialist, and product designer.
+
+Your task is to redesign the legacy authentication pages of the application **Monica** using the provided new visual references.
+
+The final result must be as close as technically possible to the references.
+
+## Core Goal
+
+Rebuild the old login and registration pages into modern, premium, dark-theme, production-ready UI screens.
+
+The implementation must match the references in:
+
+- layout;
+- spacing;
+- typography;
+- colors;
+- gradients;
+- shadows;
+- borders;
+- glass / frosted card effect;
+- icons;
+- input styling;
+- button styling;
+- progress indicator;
+- hover states;
+- focus states;
+- active states;
+- loading states;
+- error states.
+
+## Non-Negotiable Requirements
+
+- Do not use the reference screenshot as one flat UI image.
+- Implement the interface as real frontend components.
+- Preserve the dark theme.
+- Preserve all existing auth logic.
+- Preserve routing, validation, API calls, form submission and error handling.
+- Do not rewrite unrelated application areas.
+- Do not introduce unnecessary dependencies.
+- Follow SOLID, DRY, accessibility and component-based architecture principles.
+- The result must look premium, modern and pixel-perfect.
+
+## Required Pages
+
+At minimum, redesign:
+
+1. Login page.
+2. Registration page / first registration step.
+
+If related pages exist, such as password reset, email confirmation, code verification or account creation, align them with the same visual system.
+
+## Before Implementation
+
+Inspect:
+
+1. Current page code.
+2. Existing auth logic.
+3. Existing styling system.
+4. Provided new UI references.
+5. Available icons and assets.
+6. Existing validation and API behavior.
+
+Do not start blindly.

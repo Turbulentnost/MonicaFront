@@ -14,6 +14,7 @@ import { UserSearchResult } from '../components/Chat/UserSearchResult';
 import { warmAvatarCache } from '../utils/avatarCache';
 import { groupMessagesByDay } from '../utils/formatChatDate';
 import { invalidateMediaCache, warmMediaCache } from '../utils/mediaCache';
+import { API_URL } from '../config';
 
 const MAX_ATTACHMENTS = 10;
 const MAX_FILE_SIZE_BYTES = 300 * 1024 * 1024;
@@ -21,24 +22,10 @@ const MAX_FILE_SIZE_BYTES = 300 * 1024 * 1024;
 function leavePrivateSessionsBestEffort() {
   const token = localStorage.getItem('access_token');
   if (!token) return;
-  const base = (typeof window !== 'undefined' && window.location)
-    ? (() => {
-        try {
-          const envUrl = process.env.REACT_APP_API_URL || 'http://localhost:5612';
-          const url = new URL(envUrl);
-          if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
-            url.hostname = window.location.hostname;
-          }
-          return url.origin;
-        } catch {
-          return process.env.REACT_APP_API_URL || 'http://localhost:5612';
-        }
-      })()
-    : (process.env.REACT_APP_API_URL || 'http://localhost:5612');
 
   try {
     // keepalive переживает закрытие вкладки; дублирует presence-disconnect
-    fetch(`${base}/api/private/leave/`, {
+    fetch(`${API_URL}/api/private/leave/`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,

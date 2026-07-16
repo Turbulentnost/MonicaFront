@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authApi } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { PrimaryButton } from '../auth';
 
 export default function AvatarStep({ registrationToken }) {
   const [photo, setPhoto] = useState(null);
@@ -41,25 +42,48 @@ export default function AvatarStep({ registrationToken }) {
   };
 
   return (
-    <div className="auth-form">
-      <h2>Фото профиля</h2>
-      <p className="hint">Загрузите аватар или пропустите этот шаг</p>
-      <div className="avatar-upload">
+    <div className="auth-form-body">
+      <h2 className="auth-title">Фото профиля</h2>
+      <p className="auth-helper">Загрузите аватар или пропустите этот шаг</p>
+
+      <div className="auth-avatar-upload">
         {preview ? (
-          <img src={preview} alt="Preview" className="avatar-preview" />
+          <img src={preview} alt="Предпросмотр аватара" className="auth-avatar-preview" />
         ) : (
-          <div className="avatar-placeholder">Нет фото</div>
+          <div className="auth-avatar-placeholder">Нет фото</div>
         )}
-        <input type="file" accept="image/*" onChange={handleFileChange} />
+        <input
+          type="file"
+          accept="image/*"
+          className="auth-file-input"
+          onChange={handleFileChange}
+        />
       </div>
-      {error && <p className="error">{error}</p>}
-      <div className="button-row">
-        <button type="button" onClick={() => finish(false)} disabled={loading}>
+
+      {error && (
+        <p className="auth-form-error" role="alert">
+          {error}
+        </p>
+      )}
+
+      <div className="auth-button-row">
+        <button
+          type="button"
+          className="auth-secondary-btn"
+          onClick={() => finish(false)}
+          disabled={loading}
+        >
           Пропустить
         </button>
-        <button type="button" onClick={() => finish(true)} disabled={loading || !photo}>
-          {loading ? 'Завершение...' : 'Завершить'}
-        </button>
+        <PrimaryButton
+          type="button"
+          loading={loading}
+          loadingText="Завершение..."
+          disabled={!photo}
+          onClick={() => finish(true)}
+        >
+          Завершить
+        </PrimaryButton>
       </div>
     </div>
   );

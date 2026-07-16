@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { authApi } from '../../api/client';
+import { AuthInput, PasswordInput, PrimaryButton } from '../auth';
 
 export default function ProfileStep({ registrationToken, onNext }) {
   const [form, setForm] = useState({
@@ -43,44 +44,73 @@ export default function ProfileStep({ registrationToken, onNext }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="auth-form">
-      <h2>Ваш профиль</h2>
-      <p className="hint">У вас 5 минут на заполнение данных</p>
-      <label>
-        Имя *
-        <input name="first_name" value={form.first_name} onChange={handleChange} required />
-      </label>
-      <label>
-        Фамилия *
-        <input name="last_name" value={form.last_name} onChange={handleChange} required />
-      </label>
-      <label>
-        Никнейм *
-        <input name="nickname" value={form.nickname} onChange={handleChange} required />
-      </label>
-      <label>
-        Пароль *
-        <input
-          name="password"
-          type="password"
-          value={form.password}
-          onChange={handleChange}
-          required
-          minLength={8}
-        />
-      </label>
-      <label>
-        Город
-        <input name="city" value={form.city} onChange={handleChange} />
-      </label>
-      <label>
-        Дата рождения
-        <input name="birth_date" type="date" value={form.birth_date} onChange={handleChange} />
-      </label>
-      {error && <p className="error">{error}</p>}
-      <button type="submit" disabled={loading}>
-        {loading ? 'Сохранение...' : 'Далее'}
-      </button>
+    <form onSubmit={handleSubmit} className="auth-form-body" noValidate>
+      <h2 className="auth-title">Ваш профиль</h2>
+      <p className="auth-helper">У вас 5 минут на заполнение данных</p>
+
+      <AuthInput
+        id="profile-first-name"
+        label="Имя *"
+        name="first_name"
+        value={form.first_name}
+        onChange={handleChange}
+        required
+        autoComplete="given-name"
+      />
+      <AuthInput
+        id="profile-last-name"
+        label="Фамилия *"
+        name="last_name"
+        value={form.last_name}
+        onChange={handleChange}
+        required
+        autoComplete="family-name"
+      />
+      <AuthInput
+        id="profile-nickname"
+        label="Никнейм *"
+        name="nickname"
+        value={form.nickname}
+        onChange={handleChange}
+        required
+        autoComplete="username"
+      />
+      <PasswordInput
+        id="profile-password"
+        name="password"
+        value={form.password}
+        onChange={handleChange}
+        required
+        minLength={8}
+        autoComplete="new-password"
+        placeholder="Минимум 8 символов"
+      />
+      <AuthInput
+        id="profile-city"
+        label="Город"
+        name="city"
+        value={form.city}
+        onChange={handleChange}
+        autoComplete="address-level2"
+      />
+      <AuthInput
+        id="profile-birth-date"
+        label="Дата рождения"
+        name="birth_date"
+        type="date"
+        value={form.birth_date}
+        onChange={handleChange}
+      />
+
+      {error && (
+        <p className="auth-form-error" role="alert">
+          {error}
+        </p>
+      )}
+
+      <PrimaryButton loading={loading} loadingText="Сохранение...">
+        Далее
+      </PrimaryButton>
     </form>
   );
 }

@@ -1,18 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-
-function resolveWsUrl() {
-  const envUrl = process.env.REACT_APP_WS_URL || 'ws://localhost:5612';
-  if (typeof window === 'undefined') return envUrl;
-  try {
-    const url = new URL(envUrl);
-    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
-      url.hostname = window.location.hostname;
-    }
-    return url.origin;
-  } catch {
-    return envUrl;
-  }
-}
+import { WS_URL } from '../config';
 
 export function useWebSocket(chatId, { onMessage, onTyping, onDeleted, onRead } = {}) {
   const wsRef = useRef(null);
@@ -38,7 +25,7 @@ export function useWebSocket(chatId, { onMessage, onTyping, onDeleted, onRead } 
 
     const connect = () => {
       if (cancelled) return;
-      const ws = new WebSocket(`${resolveWsUrl()}/ws/chat/${chatId}/?token=${token}`);
+      const ws = new WebSocket(`${WS_URL}/ws/chat/${chatId}/?token=${token}`);
       wsRef.current = ws;
 
       ws.onopen = () => {
