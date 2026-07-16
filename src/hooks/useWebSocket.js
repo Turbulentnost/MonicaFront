@@ -14,13 +14,15 @@ function resolveWsUrl() {
   }
 }
 
-export function useWebSocket(chatId, { onMessage, onTyping } = {}) {
+export function useWebSocket(chatId, { onMessage, onTyping, onDeleted } = {}) {
   const wsRef = useRef(null);
   const [connected, setConnected] = useState(false);
   const onMessageRef = useRef(onMessage);
   const onTypingRef = useRef(onTyping);
+  const onDeletedRef = useRef(onDeleted);
   onMessageRef.current = onMessage;
   onTypingRef.current = onTyping;
+  onDeletedRef.current = onDeleted;
 
   useEffect(() => {
     if (!chatId) return undefined;
@@ -42,6 +44,9 @@ export function useWebSocket(chatId, { onMessage, onTyping } = {}) {
       if (data.action === 'typing.update' && onTypingRef.current) {
         onTypingRef.current(data);
       }
+      if (data.action === 'message.deleted' && onDeletedRef.current) {
+        onDeletedRef.current(data.message_id);
+      }
     };
 
     return () => {
@@ -50,10 +55,17 @@ export function useWebSocket(chatId, { onMessage, onTyping } = {}) {
     };
   }, [chatId]);
 
-  const sendMessage = useCallback((content, messageType = 'text') => {
+  const sendMessage = useCallback((content, messageType = 'text', metadata = {}) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(
-        JSON.stringify({ action: 'message.send', message_type: messageType, content })
+        JSON.stringify({
+          action: 'message.send',
+          message_type: messageType,
+          content,
+          file_name: metadata.file_name || '',
+          mime_type: metadata.mime_type || '',
+          file_size: metadata.file_size ?? null,
+        })
       );
     }
   }, []);

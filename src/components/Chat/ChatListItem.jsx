@@ -1,8 +1,17 @@
 import { UserAvatar } from './UserAvatar';
 
+function formatPreview(lastMessage) {
+  if (!lastMessage) return 'Нет сообщений';
+  if (lastMessage.message_type === 'photo') return 'Фото';
+  if (lastMessage.message_type === 'file') {
+    return lastMessage.file_name ? `Файл: ${lastMessage.file_name}` : 'Файл';
+  }
+  return lastMessage.content || 'Нет сообщений';
+}
+
 export function ChatListItem({ chat, active, onSelect }) {
   const partner = chat.partner;
-  const preview = chat.last_message?.content || 'Нет сообщений';
+  const preview = formatPreview(chat.last_message);
 
   return (
     <li className={active ? 'active' : ''}>

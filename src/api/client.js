@@ -78,4 +78,13 @@ export const chatsApi = {
   messages: (chatId, params) => api.get(`/chats/${chatId}/messages/`, { params }),
   start: (recipientId) => api.post('/chats/start/', { recipient_id: recipientId }),
   searchUsers: (q) => api.get('/users/search/', { params: { q } }),
+  uploadMessageFile: (chatId, file) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post(`/chats/${chatId}/messages/upload/`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  deleteMessage: (chatId, messageId, scope) =>
+    api.delete(`/chats/${chatId}/messages/${messageId}/`, { data: { scope } }),
 };

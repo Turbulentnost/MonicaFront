@@ -8,6 +8,7 @@ import { ChatListItem } from '../components/Chat/ChatListItem';
 import { MessageBubble } from '../components/Chat/MessageBubble';
 import { UserSearchResult } from '../components/Chat/UserSearchResult';
 import { warmAvatarCache } from '../utils/avatarCache';
+import { invalidateMediaCache, warmMediaCache } from '../utils/mediaCache';
 
 export default function ChatsPage() {
   const { user, logout } = useAuth();
@@ -19,10 +20,14 @@ export default function ChatsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [partnerTyping, setPartnerTyping] = useState(false);
+  const [pendingFile, setPendingFile] = useState(null);
+  const [pendingPreview, setPendingPreview] = useState(null);
+  const [uploading, setUploading] = useState(false);
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const lastTypingSentRef = useRef(false);
   const searchDebounceRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const loadChats = useCallback(async () => {
     const { data } = await chatsApi.list();
@@ -36,9 +41,22 @@ export default function ChatsPage() {
   const loadMessages = useCallback(async (chatId) => {
     const { data } = await chatsApi.messages(chatId);
     setMessages(data);
+    data.forEach((msg) => {
+      if (msg.message_type === 'photo' && msg.content && msg.content_url) {
+        warmMediaCache(msg.content, msg.content_url);
+      }
+    });
   }, []);
 
+  const clearPendingFile = useCallback(() => {
+    if (pendingPreview) URL.revokeObjectURL(pendingPreview);
+    setPendingFile(null);
+    setPendingPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }, [pendingPreview]);
+
   const handleSelectChat = async (chat) => {
+    clearPendingFile();
     setSelectedChat(chat);
     setPartnerTyping(false);
     setInput('');
@@ -51,6 +69,23 @@ export default function ChatsPage() {
       setMessages((prev) => {
         if (prev.some((m) => m.id === message.id)) return prev;
         return [...prev, message];
+      });
+      if (message.message_type === 'photo' && message.content && message.content_url) {
+        warmMediaCache(message.content, message.content_url);
+      }
+      loadChats();
+    },
+    [loadChats]
+  );
+
+  const handleMessageDeleted = useCallback(
+    (messageId) => {
+      setMessages((prev) => {
+        const removed = prev.find((m) => m.id === messageId);
+        if (removed?.message_type === 'photo' && removed.content) {
+          invalidateMediaCache(removed.content);
+        }
+        return prev.filter((m) => m.id !== messageId);
       });
       loadChats();
     },
@@ -65,6 +100,7 @@ export default function ChatsPage() {
   const { connected, sendMessage, sendTyping } = useWebSocket(selectedChat?.id, {
     onMessage: handleNewMessage,
     onTyping: handleTyping,
+    onDeleted: handleMessageDeleted,
   });
 
   useEffect(() => {
@@ -87,12 +123,62 @@ export default function ChatsPage() {
     }
   }, [sendTyping]);
 
-  const handleSend = (e) => {
+  const handleSend = async (e) => {
     e.preventDefault();
+    if (!selectedChat || uploading) return;
+
+    if (pendingFile) {
+      setUploading(true);
+      try {
+        const { data } = await chatsApi.uploadMessageFile(selectedChat.id, pendingFile);
+        sendMessage(data.path, data.message_type, {
+          file_name: data.file_name,
+          mime_type: data.mime_type,
+          file_size: data.file_size,
+        });
+        if (data.message_type === 'photo' && data.path && data.content_url) {
+          warmMediaCache(data.path, data.content_url);
+        }
+        clearPendingFile();
+      } catch {
+        // ошибка загрузки — оставляем вложение
+      } finally {
+        setUploading(false);
+      }
+      return;
+    }
+
     if (!input.trim()) return;
     stopTyping();
     sendMessage(input.trim());
     setInput('');
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (pendingPreview) URL.revokeObjectURL(pendingPreview);
+    setPendingFile(file);
+    if (file.type.startsWith('image/')) {
+      setPendingPreview(URL.createObjectURL(file));
+    } else {
+      setPendingPreview(null);
+    }
+  };
+
+  const handleDeleteMessage = async (messageId, scope) => {
+    if (!selectedChat) return;
+    try {
+      await chatsApi.deleteMessage(selectedChat.id, messageId, scope);
+      const removed = messages.find((m) => m.id === messageId);
+      if (scope === 'everyone' && removed?.message_type === 'photo' && removed.content) {
+        invalidateMediaCache(removed.content);
+      }
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+      loadChats();
+    } catch {
+      // ignore
+    }
   };
 
   const handleInputChange = (value) => {
@@ -216,6 +302,7 @@ export default function ChatsPage() {
                   key={msg.id}
                   message={msg}
                   isOwn={msg.sender?.id === user?.id}
+                  onDelete={handleDeleteMessage}
                 />
               ))}
               {partnerTyping && (
@@ -225,15 +312,47 @@ export default function ChatsPage() {
               )}
               <div ref={messagesEndRef} />
             </div>
+            {pendingFile && (
+              <div className="attachment-preview">
+                {pendingPreview ? (
+                  <img src={pendingPreview} alt="Превью" className="attachment-preview-image" />
+                ) : (
+                  <span className="attachment-preview-file">📎 {pendingFile.name}</span>
+                )}
+                <button type="button" className="attachment-remove" onClick={clearPendingFile}>
+                  ×
+                </button>
+              </div>
+            )}
             <form className="message-input" onSubmit={handleSend}>
+              <div className="message-input-toolbar">
+                <button
+                  type="button"
+                  className="btn-attach"
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Прикрепить файл"
+                >
+                  📎
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden-file-input"
+                  accept="image/*,.pdf,.doc,.docx,.txt"
+                  onChange={handleFileChange}
+                />
+              </div>
               <input
                 type="text"
                 value={input}
                 onChange={(e) => handleInputChange(e.target.value)}
                 onBlur={stopTyping}
                 placeholder="Сообщение..."
+                disabled={Boolean(pendingFile)}
               />
-              <button type="submit">Отправить</button>
+              <button type="submit" disabled={uploading || (!input.trim() && !pendingFile)}>
+                {uploading ? '...' : 'Отправить'}
+              </button>
             </form>
           </>
         ) : (
