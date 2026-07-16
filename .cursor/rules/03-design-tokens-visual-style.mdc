@@ -1,0 +1,165 @@
+---
+description: Rule for Monica auth design tokens, colors, typography, gradients and glass visual style.
+globs:
+  - "**/*.css"
+  - "**/*.scss"
+  - "**/*.module.css"
+  - "**/*.tsx"
+  - "**/*.jsx"
+  - "**/*theme*"
+  - "**/*tokens*"
+alwaysApply: false
+---
+
+# Design Tokens and Visual Style Rule
+
+Use reusable design tokens for the Monica auth redesign.
+
+Do not scatter repeated colors, radii, shadows or transition values across files.
+
+## Visual Direction
+
+The interface must feel:
+
+- dark;
+- premium;
+- elegant;
+- glass-like;
+- minimal;
+- modern;
+- spacious;
+- polished;
+- professional.
+
+## Recommended Color Tokens
+
+Use these as a starting point and tune visually against the references:
+
+```css
+:root {
+  --auth-bg-main: #0B1020;
+  --auth-bg-deep: #070A14;
+
+  --auth-card-bg: rgba(14, 20, 39, 0.74);
+  --auth-card-border: rgba(136, 158, 255, 0.22);
+
+  --auth-text-primary: #F6F8FF;
+  --auth-text-secondary: #AAB4D4;
+  --auth-text-muted: #737D99;
+
+  --auth-accent: #5B7CFF;
+  --auth-accent-strong: #3F6BFF;
+  --auth-accent-violet: #7A5CFF;
+
+  --auth-input-bg: rgba(7, 11, 22, 0.76);
+  --auth-input-border: rgba(158, 172, 216, 0.30);
+  --auth-input-border-hover: rgba(178, 190, 232, 0.48);
+  --auth-input-border-focus: rgba(91, 124, 255, 0.95);
+
+  --auth-error: #FF5F7A;
+  --auth-success: #45D69A;
+  --auth-warning: #F5B84B;
+
+  --auth-radius-card: 28px;
+  --auth-radius-control: 13px;
+
+  --auth-transition-fast: 140ms ease;
+  --auth-transition-base: 180ms ease;
+}
+```
+
+## Typography
+
+Use a modern sans-serif font stack:
+
+```css
+font-family:
+  Inter,
+  Manrope,
+  "SF Pro Display",
+  "Segoe UI",
+  system-ui,
+  -apple-system,
+  BlinkMacSystemFont,
+  sans-serif;
+```
+
+Recommended hierarchy:
+
+```css
+.brand {
+  font-size: 48px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+.page-title {
+  font-size: 36px;
+  line-height: 1.15;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+}
+
+.helper-text {
+  font-size: 17px;
+  line-height: 1.6;
+  font-weight: 400;
+}
+
+.label {
+  font-size: 15px;
+  line-height: 1.3;
+  font-weight: 500;
+}
+```
+
+Tune exact values to the references.
+
+## Brand
+
+The brand name must remain:
+
+```txt
+Monica
+```
+
+Use gradient text for the brand.
+
+Example:
+
+```css
+.brand {
+  background: linear-gradient(135deg, #6EA2FF 0%, #4D73FF 45%, #8A5CFF 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+```
+
+If the reference includes a small sparkle/star near the brand, recreate it as SVG or CSS, not as part of a screenshot.
+
+## Glass Card
+
+The auth card should use:
+
+- semi-transparent dark background;
+- subtle border;
+- soft shadow;
+- inner highlight;
+- backdrop blur;
+- large rounded corners.
+
+Example starting point:
+
+```css
+.auth-card {
+  border-radius: 28px;
+  background: rgba(14, 20, 39, 0.74);
+  border: 1px solid rgba(136, 158, 255, 0.22);
+  box-shadow:
+    0 32px 90px rgba(0, 0, 0, 0.48),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(22px);
+}
+```

@@ -1,0 +1,92 @@
+---
+description: Rule for accessibility, keyboard behavior and responsive auth UI.
+globs:
+  - "**/*auth*"
+  - "**/*Auth*"
+  - "**/*login*"
+  - "**/*Login*"
+  - "**/*register*"
+  - "**/*Register*"
+  - "**/*.tsx"
+  - "**/*.jsx"
+  - "**/*.css"
+  - "**/*.scss"
+alwaysApply: false
+---
+
+# Accessibility and Responsive Rule
+
+The redesigned auth pages must be beautiful and accessible.
+
+## Accessibility Requirements
+
+Mandatory:
+
+- use semantic `form`;
+- connect labels to inputs using `htmlFor` and `id`;
+- keep visible labels, not placeholder-only fields;
+- support keyboard navigation;
+- support Enter to submit form;
+- provide visible focus states;
+- provide `aria-label` for icon-only buttons;
+- password visibility button must have accessible label;
+- validation errors must be associated with fields;
+- error messages must be readable;
+- disabled states must be clear;
+- text contrast must be adequate on dark background.
+
+## Keyboard Behavior
+
+Check:
+
+- Tab order is logical.
+- Checkbox is keyboard accessible.
+- Password visibility button is keyboard accessible.
+- Submit button is reachable.
+- Links are reachable.
+- Focus is never hidden.
+
+## Responsive Requirements
+
+Desktop must match the references first.
+
+Then test and adapt for:
+
+- 1920×1080;
+- 1440×900;
+- 1366×768;
+- 1280×720;
+- tablet width;
+- mobile width if supported.
+
+## Mobile / Small Screen Rules
+
+On smaller screens:
+
+- reduce card padding;
+- reduce brand size;
+- reduce title size;
+- keep input/button touch targets at least 44px high;
+- avoid horizontal scrolling;
+- keep footer links readable;
+- preserve spacing hierarchy.
+
+Example:
+
+```css
+@media (max-width: 720px) {
+  .auth-card {
+    width: calc(100% - 32px);
+    padding: 36px 24px;
+    border-radius: 22px;
+  }
+
+  .brand {
+    font-size: 40px;
+  }
+
+  .page-title {
+    font-size: 30px;
+  }
+}
+```

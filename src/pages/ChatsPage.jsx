@@ -1,19 +1,26 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { chatsApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useNotifications, usePresence } from '../hooks/usePresence';
+import { useSecretFavoritesShortcut } from '../hooks/useSecretFavoritesShortcut';
 import { ChatHeader } from '../components/Chat/ChatHeader';
 import { ChatListItem } from '../components/Chat/ChatListItem';
+import { ChatIconRail } from '../components/Chat/ChatIconRail';
+import { ChatFilters } from '../components/Chat/ChatFilters';
+import { ChatDetailsPanel } from '../components/Chat/ChatDetailsPanel';
+import { ChatDevStatusBar } from '../components/Chat/ChatDevStatusBar';
 import { MessageBubble } from '../components/Chat/MessageBubble';
 import { NotificationBell } from '../components/Chat/NotificationBell';
 import { CodeEditorInput } from '../components/Chat/CodeEditorInput';
+import { EmojiPicker } from '../components/Chat/EmojiPicker';
 import { PrivatePanel } from '../components/Chat/PrivatePanel';
 import { UserSearchResult } from '../components/Chat/UserSearchResult';
 import { warmAvatarCache } from '../utils/avatarCache';
 import { groupMessagesByDay } from '../utils/formatChatDate';
 import { invalidateMediaCache, warmMediaCache } from '../utils/mediaCache';
+import { API_URL } from '../config';
 
 const MAX_ATTACHMENTS = 10;
 const MAX_FILE_SIZE_BYTES = 300 * 1024 * 1024;
@@ -21,24 +28,10 @@ const MAX_FILE_SIZE_BYTES = 300 * 1024 * 1024;
 function leavePrivateSessionsBestEffort() {
   const token = localStorage.getItem('access_token');
   if (!token) return;
-  const base = (typeof window !== 'undefined' && window.location)
-    ? (() => {
-        try {
-          const envUrl = process.env.REACT_APP_API_URL || 'http://localhost:5612';
-          const url = new URL(envUrl);
-          if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
-            url.hostname = window.location.hostname;
-          }
-          return url.origin;
-        } catch {
-          return process.env.REACT_APP_API_URL || 'http://localhost:5612';
-        }
-      })()
-    : (process.env.REACT_APP_API_URL || 'http://localhost:5612');
 
   try {
     // keepalive переживает закрытие вкладки; дублирует presence-disconnect
-    fetch(`${base}/api/private/leave/`, {
+    fetch(`${API_URL}/api/private/leave/`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -72,12 +65,18 @@ export default function ChatsPage() {
   const [privateBusy, setPrivateBusy] = useState(false);
   const [invitePending, setInvitePending] = useState(false);
   const [pendingInviteSessionId, setPendingInviteSessionId] = useState(null);
+  const [chatFilter, setChatFilter] = useState('all');
+  const [isSpecialFavoritesOpen, setIsSpecialFavoritesOpen] = useState(false);
+  const [detailsPanelOpen, setDetailsPanelOpen] = useState(true);
+  const [messageReactions, setMessageReactions] = useState({});
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const lastTypingSentRef = useRef(false);
   const searchDebounceRef = useRef(null);
   const fileInputRef = useRef(null);
   const markReadRef = useRef(null);
+  const emojiHideTimeoutRef = useRef(null);
+  const [emojiPickerVisible, setEmojiPickerVisible] = useState(false);
 
   const loadChats = useCallback(async () => {
     const { data } = await chatsApi.list();
@@ -613,6 +612,37 @@ export default function ChatsPage() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const handleToggleReaction = useCallback((messageId, emoji) => {
+    setMessageReactions((prev) => {
+      const list = [...(prev[messageId] || [])];
+      const idx = list.findIndex((r) => r.emoji === emoji);
+
+      if (idx >= 0) {
+        const item = list[idx];
+        if (item.reactedByMe) {
+          const newCount = item.count - 1;
+          if (newCount <= 0) {
+            list.splice(idx, 1);
+          } else {
+            list[idx] = { ...item, count: newCount, reactedByMe: false };
+          }
+        } else {
+          list[idx] = { ...item, count: item.count + 1, reactedByMe: true };
+        }
+      } else {
+        list.push({ emoji, count: 1, reactedByMe: true });
+      }
+
+      const next = { ...prev };
+      if (list.length === 0) {
+        delete next[messageId];
+      } else {
+        next[messageId] = list;
+      }
+      return next;
+    });
+  }, []);
+
   const handleDeleteMessage = async (messageId, scope) => {
     if (!selectedChat) return;
     if (String(messageId).startsWith('temp-')) return;
@@ -623,6 +653,12 @@ export default function ChatsPage() {
         invalidateMediaCache(removed.content);
       }
       setMessages((prev) => prev.filter((m) => m.id !== messageId));
+      setMessageReactions((prev) => {
+        if (!prev[messageId]) return prev;
+        const next = { ...prev };
+        delete next[messageId];
+        return next;
+      });
       loadChats();
     } catch {
       // ignore
@@ -649,6 +685,34 @@ export default function ChatsPage() {
       lastTypingSentRef.current = false;
     }, 1500);
   };
+
+  const clearEmojiHideTimeout = useCallback(() => {
+    if (emojiHideTimeoutRef.current) {
+      clearTimeout(emojiHideTimeoutRef.current);
+      emojiHideTimeoutRef.current = null;
+    }
+  }, []);
+
+  const handleEmojiZoneEnter = useCallback(() => {
+    clearEmojiHideTimeout();
+    setEmojiPickerVisible(true);
+  }, [clearEmojiHideTimeout]);
+
+  const handleEmojiZoneLeave = useCallback(() => {
+    clearEmojiHideTimeout();
+    emojiHideTimeoutRef.current = setTimeout(() => {
+      setEmojiPickerVisible(false);
+    }, 150);
+  }, [clearEmojiHideTimeout]);
+
+  const handleEmojiSelect = useCallback(
+    (emoji) => {
+      handleInputChange(input + emoji);
+    },
+    [handleInputChange, input]
+  );
+
+  useEffect(() => () => clearEmojiHideTimeout(), [clearEmojiHideTimeout]);
 
   const searchLocalCacheRef = useRef(new Map());
 
@@ -698,11 +762,59 @@ export default function ChatsPage() {
     await handleSelectChat(chat);
   };
 
+  const isChatUnread = useCallback(
+    (chat) => {
+      const lm = chat.last_message;
+      if (!lm || !user?.id) return false;
+      if (lm.sender?.id === user.id) return false;
+      return !lm.read_at;
+    },
+    [user?.id]
+  );
+
+  const unreadChatCount = useMemo(
+    () => chats.filter(isChatUnread).length,
+    [chats, isChatUnread]
+  );
+
+  const filteredChats = useMemo(() => {
+    if (isSpecialFavoritesOpen) return chats;
+    if (chatFilter === 'unread') return chats.filter(isChatUnread);
+    if (chatFilter === 'mentions') return [];
+    return chats;
+  }, [chats, chatFilter, isSpecialFavoritesOpen, isChatUnread]);
+
+  useSecretFavoritesShortcut(() => setIsSpecialFavoritesOpen(true));
+
+  useEffect(() => {
+    if (!isSpecialFavoritesOpen) return undefined;
+    function onKeyDown(e) {
+      if (e.key === 'Escape') {
+        setIsSpecialFavoritesOpen(false);
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isSpecialFavoritesOpen]);
+
   return (
-    <div className={`chats-page ${privateSessionId ? 'with-private' : ''}`}>
+    <div
+      className={[
+        'chats-page',
+        privateSessionId ? 'with-private' : '',
+        isSpecialFavoritesOpen ? 'chats-page--special' : '',
+        selectedChat ? 'has-selected-chat' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
+      {isSpecialFavoritesOpen && <ChatDevStatusBar />}
+      {isSpecialFavoritesOpen && <div className="chat-dev-grid" aria-hidden="true" />}
+      <div className="chats-page__body">
+      <ChatIconRail user={user} onLogout={handleLogout} specialMode={isSpecialFavoritesOpen} />
       <aside className="chat-sidebar">
         <div className="sidebar-header">
-          <h2>Monica</h2>
+          <h2>{isSpecialFavoritesOpen ? 'Chats' : 'Чаты'}</h2>
           <div className="sidebar-header-actions">
             <NotificationBell
               open={notifOpen}
@@ -715,15 +827,18 @@ export default function ChatsPage() {
               onMarkAllRead={markAllRead}
               onClearAll={clearAll}
             />
-            <button type="button" onClick={handleLogout} className="btn-text">
-              Выйти
-            </button>
           </div>
         </div>
+        <ChatFilters
+          active={chatFilter}
+          onChange={setChatFilter}
+          unreadCount={unreadChatCount}
+          specialMode={isSpecialFavoritesOpen}
+        />
         <div className="search-box">
           <input
             type="text"
-            placeholder="Имя, фамилия, email или ник..."
+            placeholder={isSpecialFavoritesOpen ? 'Search chats…  ⌘K' : 'Имя, фамилия, email или ник...'}
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
           />
@@ -741,7 +856,7 @@ export default function ChatsPage() {
           )}
         </div>
         <ul className="chat-list">
-          {chats.map((chat) => (
+          {filteredChats.map((chat) => (
             <ChatListItem
               key={chat.id}
               chat={chat}
@@ -765,6 +880,7 @@ export default function ChatsPage() {
               )}
               onInvitePrivate={handleInvitePrivate}
               privateBusy={privateBusy || invitePending || Boolean(privateSessionId)}
+              onOpenDetails={() => setDetailsPanelOpen(true)}
             />
             {invitePending && !privateSessionId && (
               <div className="private-invite-banner">
@@ -791,6 +907,9 @@ export default function ChatsPage() {
                       isOwn={msg.sender?.id === user?.id}
                       onDelete={handleDeleteMessage}
                       chatId={selectedChat.id}
+                      specialMode={isSpecialFavoritesOpen}
+                      reactions={messageReactions[msg.id] || []}
+                      onToggleReaction={handleToggleReaction}
                     />
                   ))}
                 </div>
@@ -833,103 +952,170 @@ export default function ChatsPage() {
             )}
             {attachError && <div className="attachment-error">{attachError}</div>}
             <form
-              className={`message-input ${codeMode ? 'code-mode' : ''}`}
+              className={[
+                'message-input',
+                codeMode ? 'code-mode' : '',
+                isSpecialFavoritesOpen ? 'message-input--special' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
               onSubmit={handleSend}
             >
-              <div className="message-input-toolbar">
-                <button
-                  type="button"
-                  className="btn-attach"
-                  onClick={() => fileInputRef.current?.click()}
-                  title="Прикрепить файлы (до 10, до 300 МБ)"
-                  disabled={codeMode || pendingAttachments.length >= MAX_ATTACHMENTS || uploading}
-                >
-                  📎
-                </button>
-                <button
-                  type="button"
-                  className={`btn-code-mode ${codeMode ? 'active' : ''}`}
-                  onClick={toggleCodeMode}
-                  title={codeMode ? 'Обычное сообщение' : 'Написать код'}
-                  disabled={uploading}
-                >
-                  {'</>'}
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  className="hidden-file-input"
-                  accept="image/*,.pdf,.doc,.docx,.txt,.py,.js"
-                  multiple
-                  onChange={handleFileChange}
-                />
-              </div>
-              <div className="message-input-main">
-                {codeMode ? (
-                  <>
-                    <CodeEditorInput
-                      value={input}
-                      language={codeLanguage || 'python'}
-                      onChange={handleInputChange}
-                      onSubmit={handleSendCode}
-                    />
-                    <div className="code-meta">
-                      <label className="code-meta-field">
-                        <span>Язык</span>
-                        <select
-                          value={codeLanguage}
-                          onChange={(e) => handleCodeLanguageChange(e.target.value)}
-                          required
-                        >
-                          <option value="" disabled>
-                            Выберите язык
-                          </option>
-                          <option value="python">Python</option>
-                          <option value="javascript">JavaScript</option>
-                        </select>
-                      </label>
-                      <label className="code-meta-field code-meta-filename">
-                        <span>Имя файла</span>
-                        <input
-                          type="text"
-                          value={codeFileName}
-                          onChange={(e) => setCodeFileName(e.target.value)}
-                          placeholder={codeLanguage === 'javascript' ? 'script.js' : 'script.py'}
-                          required
-                        />
-                      </label>
-                      <span className="code-meta-hint">Ctrl+Enter — отправить</span>
+              {isSpecialFavoritesOpen && !codeMode && (
+                <div className="message-input-formatbar" aria-hidden="true">
+                  <span className="message-input-formatbar__btn">B</span>
+                  <span className="message-input-formatbar__btn">I</span>
+                  <span className="message-input-formatbar__btn">S</span>
+                  <span className="message-input-formatbar__btn message-input-formatbar__code">{'</>'}</span>
+                  <span className="message-input-formatbar__btn">🔗</span>
+                  <span className="message-input-formatbar__btn">≡</span>
+                </div>
+              )}
+              <div className="message-input-row">
+                <div className="message-input-toolbar">
+                  <button
+                    type="button"
+                    className="btn-attach"
+                    onClick={() => fileInputRef.current?.click()}
+                    title="Прикрепить файлы (до 10, до 300 МБ)"
+                    aria-label="Прикрепить файлы"
+                    disabled={codeMode || pendingAttachments.length >= MAX_ATTACHMENTS || uploading}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+                      <path
+                        d="M16 8v8a4 4 0 0 1-8 0V7a3 3 0 0 1 6 0v9a2 2 0 0 1-4 0V8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn-code-mode ${codeMode ? 'active' : ''}`}
+                    onClick={toggleCodeMode}
+                    title={codeMode ? 'Обычное сообщение' : 'Написать код'}
+                    aria-label={codeMode ? 'Обычное сообщение' : 'Написать код'}
+                    disabled={uploading}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+                      <path d="M8 6L2 12l6 6M16 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                  {!codeMode && (
+                    <div
+                      className="message-input-toolbar-emoji-wrap"
+                      onMouseEnter={handleEmojiZoneEnter}
+                      onMouseLeave={handleEmojiZoneLeave}
+                    >
+                      <button
+                        type="button"
+                        className="btn-emoji"
+                        title="Эмодзи"
+                        aria-label="Эмодзи"
+                        disabled={uploading}
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+                          <circle cx="12" cy="12" r="10" />
+                          <path d="M8 14s1.5 2 4 2 4-2 4-2" strokeLinecap="round" />
+                          <line x1="9" y1="9" x2="9.01" y2="9" strokeLinecap="round" />
+                          <line x1="15" y1="9" x2="15.01" y2="9" strokeLinecap="round" />
+                        </svg>
+                      </button>
+                      <EmojiPicker
+                        visible={emojiPickerVisible}
+                        specialMode={isSpecialFavoritesOpen}
+                        onSelect={handleEmojiSelect}
+                      />
                     </div>
-                  </>
-                ) : (
+                  )}
                   <input
-                    type="text"
-                    value={input}
-                    onChange={(e) => handleInputChange(e.target.value)}
-                    onBlur={stopTyping}
-                    placeholder="Сообщение..."
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden-file-input"
+                    accept="image/*,.pdf,.doc,.docx,.txt,.py,.js"
+                    multiple
+                    onChange={handleFileChange}
                   />
-                )}
+                </div>
+                <div className="message-input-main">
+                  {codeMode ? (
+                    <>
+                      <CodeEditorInput
+                        value={input}
+                        language={codeLanguage || 'python'}
+                        onChange={handleInputChange}
+                        onSubmit={handleSendCode}
+                      />
+                      <div className="code-meta">
+                        <label className="code-meta-field">
+                          <span>Язык</span>
+                          <select
+                            value={codeLanguage}
+                            onChange={(e) => handleCodeLanguageChange(e.target.value)}
+                            required
+                          >
+                            <option value="" disabled>
+                              Выберите язык
+                            </option>
+                            <option value="python">Python</option>
+                            <option value="javascript">JavaScript</option>
+                          </select>
+                        </label>
+                        <label className="code-meta-field code-meta-filename">
+                          <span>Имя файла</span>
+                          <input
+                            type="text"
+                            value={codeFileName}
+                            onChange={(e) => setCodeFileName(e.target.value)}
+                            placeholder={codeLanguage === 'javascript' ? 'script.js' : 'script.py'}
+                            required
+                          />
+                        </label>
+                        <span className="code-meta-hint">Ctrl+Enter — отправить</span>
+                      </div>
+                    </>
+                  ) : (
+                    <input
+                      type="text"
+                      value={input}
+                      onChange={(e) => handleInputChange(e.target.value)}
+                      onBlur={stopTyping}
+                      placeholder={isSpecialFavoritesOpen ? "Let's ship this! 💪" : 'Сообщение...'}
+                    />
+                  )}
+                </div>
+                <button
+                  type="submit"
+                  disabled={
+                    uploading
+                    || (codeMode
+                      ? !input.trim() || !codeLanguage || !codeFileName.trim()
+                      : !input.trim() && pendingAttachments.length === 0)
+                  }
+                >
+                  {uploading ? '...' : isSpecialFavoritesOpen ? 'Send ▷' : 'Отправить'}
+                </button>
               </div>
-              <button
-                type="submit"
-                disabled={
-                  uploading
-                  || (codeMode
-                    ? !input.trim() || !codeLanguage || !codeFileName.trim()
-                    : !input.trim() && pendingAttachments.length === 0)
-                }
-              >
-                {uploading ? '...' : 'Отправить'}
-              </button>
             </form>
           </>
         ) : (
           <div className="chat-empty">
-            <p>Выберите чат или найдите пользователя для начала диалога</p>
+            <p>
+              {isSpecialFavoritesOpen
+                ? 'Select a channel from the sidebar'
+                : 'Выберите чат или найдите пользователя для начала диалога'}
+            </p>
           </div>
         )}
       </main>
+      {detailsPanelOpen && selectedChat && (
+        <ChatDetailsPanel
+          partner={selectedChat.partner}
+          isOnline={isOnline(selectedChat.partner?.id, selectedChat.partner?.is_online)}
+          onClose={() => setDetailsPanelOpen(false)}
+          specialMode={isSpecialFavoritesOpen}
+        />
+      )}
       {privateSessionId && (
         <PrivatePanel
           sessionId={privateSessionId}
@@ -940,6 +1126,7 @@ export default function ChatsPage() {
           }}
         />
       )}
+      </div>
     </div>
   );
 }

@@ -1,0 +1,102 @@
+---
+description: Final QA and acceptance checklist for Monica auth redesign.
+globs:
+  - "**/*auth*"
+  - "**/*Auth*"
+  - "**/*login*"
+  - "**/*Login*"
+  - "**/*register*"
+  - "**/*Register*"
+alwaysApply: false
+---
+
+# Visual QA and Acceptance Rule
+
+Before finishing the task, perform visual and functional QA.
+
+## Visual QA
+
+Verify:
+
+- card is centered like the reference;
+- card width matches the reference;
+- card height matches the reference;
+- card border radius matches the reference;
+- card background opacity matches the reference;
+- card border and shadow match the reference;
+- background gradient and glow match the reference;
+- brand text matches the reference;
+- title size and weight match the reference;
+- helper text is readable and correctly spaced;
+- inputs match the reference;
+- button matches the reference;
+- links match the reference;
+- icons match the reference;
+- registration progress bar matches the reference.
+
+## Interaction QA
+
+Verify:
+
+- button hover works;
+- button active state works;
+- button disabled state works;
+- button loading state works if applicable;
+- input hover works;
+- input focus works;
+- input error state works;
+- link hover works;
+- checkbox hover and checked states work;
+- password visibility button works;
+- focus-visible states are clear.
+
+## Functional QA
+
+Verify:
+
+- login still submits correctly;
+- registration still works;
+- validation still works;
+- error messages still show;
+- API calls are unchanged;
+- routing is unchanged;
+- Enter submits the form;
+- keyboard navigation works.
+
+## Responsive QA
+
+Test:
+
+- 1920×1080;
+- 1440×900;
+- 1366×768;
+- 1280×720;
+- narrow width.
+
+## Completion Report
+
+When finished, report:
+
+1. Changed files.
+2. New or updated components.
+3. Background implementation approach.
+4. Preserved auth logic.
+5. Interaction states added.
+6. Any assumptions.
+7. How to run and verify visually.
+
+## Acceptance Criteria
+
+The task is complete only when:
+
+- login page visually matches the new login reference;
+- registration page visually matches the new registration reference;
+- dark theme remains;
+- UI is real components, not a static screenshot;
+- background approach was confirmed with the user;
+- interactive states exist where needed;
+- keyboard accessibility works;
+- forms still work;
+- code follows project conventions;
+- implementation is responsive;
+- no obvious visual inconsistencies remain.

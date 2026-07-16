@@ -1,19 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { notificationsApi } from '../api/client';
-
-function resolveWsUrl() {
-  const envUrl = process.env.REACT_APP_WS_URL || 'ws://localhost:5612';
-  if (typeof window === 'undefined') return envUrl;
-  try {
-    const url = new URL(envUrl);
-    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
-      url.hostname = window.location.hostname;
-    }
-    return url.origin;
-  } catch {
-    return envUrl;
-  }
-}
+import { WS_URL } from '../config';
 
 /** Presence + realtime in-app notifications on the same WS. */
 export function usePresence(enabled, { onNotification, onChatPreview } = {}) {
@@ -49,7 +36,7 @@ export function usePresence(enabled, { onNotification, onChatPreview } = {}) {
       const token = localStorage.getItem('access_token');
       if (!token || cancelled) return;
 
-      const ws = new WebSocket(`${resolveWsUrl()}/ws/presence/?token=${token}`);
+      const ws = new WebSocket(`${WS_URL}/ws/presence/?token=${token}`);
       wsRef.current = ws;
 
       ws.onmessage = (event) => {

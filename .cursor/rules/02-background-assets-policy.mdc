@@ -1,0 +1,60 @@
+---
+description: Rule for implementing auth backgrounds without blindly inserting screenshots.
+globs:
+  - "**/*auth*"
+  - "**/*Auth*"
+  - "**/*login*"
+  - "**/*Login*"
+  - "**/*register*"
+  - "**/*Register*"
+  - "**/*.css"
+  - "**/*.scss"
+  - "**/*.module.css"
+  - "**/*.tsx"
+  - "**/*.jsx"
+alwaysApply: false
+---
+
+# Background and Asset Policy
+
+Do not blindly use the reference screenshot as a full-screen background image.
+
+The auth UI must be implemented as real frontend code.
+
+## Required Question Before Background Implementation
+
+Before implementing the background, ask the user:
+
+> Should I recreate the background using CSS gradients, radial glows, blur and subtle effects, or should I use the reference as an image asset?
+
+Recommend:
+
+> I recommend recreating it through code for better responsiveness, maintainability and performance.
+
+## Preferred Background Implementation
+
+Use CSS-based background effects:
+
+- linear gradients;
+- radial gradients;
+- blurred glow layers;
+- pseudo-elements;
+- subtle vignette;
+- optional subtle grain/noise;
+- optional tiny particles only if they do not distract.
+
+## Allowed Image Usage
+
+Image assets are allowed only for:
+
+- logo if provided as SVG/PNG;
+- decorative assets explicitly approved by the user;
+- background image only if the user explicitly chooses image-based implementation.
+
+## Do Not
+
+- Do not place the entire reference image behind the UI.
+- Do not make the page look correct only at one resolution.
+- Do not use huge raster images when CSS can reproduce the effect.
+- Do not add heavy animated background libraries.
+- Do not make background effects interfere with readability.

@@ -2,7 +2,14 @@ import { useEffect, useState } from 'react';
 import { formatLastSeen } from '../../utils/formatLastSeen';
 import { UserAvatar } from './UserAvatar';
 
-export function ChatHeader({ partner, isOnline, lastSeenAt, onInvitePrivate, privateBusy }) {
+export function ChatHeader({
+  partner,
+  isOnline,
+  lastSeenAt,
+  onInvitePrivate,
+  privateBusy,
+  onOpenDetails,
+}) {
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -17,12 +24,26 @@ export function ChatHeader({ partner, isOnline, lastSeenAt, onInvitePrivate, pri
 
   return (
     <div className="chat-header">
-      <UserAvatar user={partner} size={40} showOnline isOnline={isOnline} />
-      <div className="chat-header-info">
-        <h3>@{partner?.nickname || '—'}</h3>
-        <span className="chat-header-sub">
-          {partner?.first_name} {partner?.last_name}
-        </span>
+      <div
+        className="chat-header-partner"
+        role="button"
+        tabIndex={0}
+        onClick={onOpenDetails}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onOpenDetails?.();
+          }
+        }}
+        aria-label="Открыть детали"
+      >
+        <UserAvatar user={partner} size={40} showOnline isOnline={isOnline} />
+        <div className="chat-header-info">
+          <h3>@{partner?.nickname || '—'}</h3>
+          <span className="chat-header-sub">
+            {partner?.first_name} {partner?.last_name}
+          </span>
+        </div>
       </div>
       <button
         type="button"

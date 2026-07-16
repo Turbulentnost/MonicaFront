@@ -1,19 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { chatsApi } from '../api/client';
-
-function resolveWsUrl() {
-  const envUrl = process.env.REACT_APP_WS_URL || 'ws://localhost:5612';
-  if (typeof window === 'undefined') return envUrl;
-  try {
-    const url = new URL(envUrl);
-    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
-      url.hostname = window.location.hostname;
-    }
-    return url.origin;
-  } catch {
-    return envUrl;
-  }
-}
+import { WS_URL } from '../config';
 
 export function usePrivateSession(sessionId, { onClosed } = {}) {
   const wsRef = useRef(null);
@@ -36,7 +23,7 @@ export function usePrivateSession(sessionId, { onClosed } = {}) {
       const token = localStorage.getItem('access_token');
       if (!token || cancelled) return;
 
-      const ws = new WebSocket(`${resolveWsUrl()}/ws/private/${sessionId}/?token=${token}`);
+      const ws = new WebSocket(`${WS_URL}/ws/private/${sessionId}/?token=${token}`);
       wsRef.current = ws;
 
       ws.onopen = () => {

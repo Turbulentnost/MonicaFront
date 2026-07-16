@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { authApi } from '../../api/client';
+import { AuthInput, PrimaryButton } from '../auth';
 
 export default function EmailStep({ email, setEmail, onNext }) {
   const [loading, setLoading] = useState(false);
@@ -20,23 +21,30 @@ export default function EmailStep({ email, setEmail, onNext }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="auth-form">
-      <h2>Регистрация</h2>
-      <p className="hint">Введите email — мы отправим код подтверждения</p>
-      <label>
-        Email
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          autoFocus
-        />
-      </label>
-      {error && <p className="error">{error}</p>}
-      <button type="submit" disabled={loading}>
-        {loading ? 'Отправка...' : 'Далее'}
-      </button>
+    <form onSubmit={handleSubmit} className="auth-form-body" noValidate>
+      <h2 className="auth-title">Регистрация</h2>
+      <p className="auth-helper">
+        Введите email, и мы отправим вам
+        <br />
+        код подтверждения.
+      </p>
+      <AuthInput
+        id="register-email"
+        label="Email"
+        icon="mail"
+        type="email"
+        name="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="name@example.com"
+        autoComplete="email"
+        required
+        autoFocus
+        error={error || undefined}
+      />
+      <PrimaryButton loading={loading} loadingText="Отправка...">
+        Далее
+      </PrimaryButton>
     </form>
   );
 }

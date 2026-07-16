@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" role="img" aria-label="Monica">
+  <circle cx="6.05" cy="3.35" r="2.4" stroke="#6E79FD" stroke-width="2.45" stroke-linecap="round" />
+  <path
+    d="M6.05 5.75C4.95 6.15 3.75 6.55 2.85 7.45L2.85 20.35L17.55 20.35L21.45 11"
+    stroke="#6E79FD"
+    stroke-width="2.45"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>

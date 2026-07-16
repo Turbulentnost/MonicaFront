@@ -1,5 +1,12 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import {
+  AuthLayout,
+  AuthCard,
+  AuthBrand,
+  AuthLink,
+  AuthFooter,
+  RegistrationProgress,
+} from '../components/auth';
 import EmailStep from '../components/RegisterSteps/EmailStep';
 import CodeStep from '../components/RegisterSteps/CodeStep';
 import ProfileStep from '../components/RegisterSteps/ProfileStep';
@@ -16,20 +23,10 @@ export default function RegisterPage() {
   const stepIndex = step + 1;
 
   return (
-    <div className="auth-page">
-      <div className="auth-form register-wizard">
-        <div className="wizard-header">
-          <h1>Monica</h1>
-          <div className="progress-bar">
-            <div
-              className="progress-fill"
-              style={{ width: `${(stepIndex / STEPS.length) * 100}%` }}
-            />
-          </div>
-          <p className="step-label">
-            Шаг {stepIndex} из {STEPS.length}
-          </p>
-        </div>
+    <AuthLayout>
+      <AuthCard className="register-wizard">
+        <AuthBrand />
+        <RegistrationProgress currentStep={stepIndex} totalSteps={STEPS.length} />
 
         {step === 0 && (
           <EmailStep
@@ -55,11 +52,11 @@ export default function RegisterPage() {
         {step === 3 && <AvatarStep registrationToken={registrationToken} />}
 
         {step < 3 && (
-          <p className="auth-link">
-            Уже есть аккаунт? <Link to="/login">Войти</Link>
-          </p>
+          <AuthFooter>
+            Уже есть аккаунт? <AuthLink to="/login">Войти</AuthLink>
+          </AuthFooter>
         )}
-      </div>
-    </div>
+      </AuthCard>
+    </AuthLayout>
   );
 }

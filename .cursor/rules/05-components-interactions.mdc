@@ -1,0 +1,202 @@
+---
+description: Rule for auth components, hover states, focus states, animations and micro-interactions.
+globs:
+  - "**/*Button*"
+  - "**/*Input*"
+  - "**/*Link*"
+  - "**/*Badge*"
+  - "**/*Checkbox*"
+  - "**/*auth*"
+  - "**/*Auth*"
+  - "**/*.tsx"
+  - "**/*.jsx"
+  - "**/*.css"
+  - "**/*.scss"
+alwaysApply: false
+---
+
+# Components and Interactions Rule
+
+Every interactive component must feel polished, clear and usable.
+
+Add interaction states only where they improve usability.
+
+Do not over-animate.
+
+## Components Requiring States
+
+Add states for:
+
+- primary buttons;
+- secondary buttons if present;
+- input fields;
+- password visibility button;
+- links;
+- checkboxes;
+- clickable badges;
+- tabs;
+- progress steps if interactive.
+
+## Required States
+
+Each relevant component must support:
+
+- default;
+- hover;
+- focus-visible;
+- active;
+- disabled if applicable;
+- loading if applicable;
+- error if applicable.
+
+## Inputs
+
+Inputs must include:
+
+- visible label;
+- placeholder;
+- left icon if shown in reference;
+- dark background;
+- subtle border;
+- hover border;
+- focus glow;
+- error style;
+- disabled style;
+- dark autofill handling.
+
+Example:
+
+```css
+.auth-input {
+  height: 60px;
+  border-radius: 13px;
+  border: 1px solid var(--auth-input-border);
+  background: var(--auth-input-bg);
+  color: var(--auth-text-primary);
+  padding: 0 48px 0 56px;
+  outline: none;
+  transition:
+    border-color var(--auth-transition-base),
+    box-shadow var(--auth-transition-base),
+    background var(--auth-transition-base);
+}
+
+.auth-input:hover {
+  border-color: var(--auth-input-border-hover);
+}
+
+.auth-input:focus {
+  border-color: var(--auth-input-border-focus);
+  box-shadow:
+    0 0 0 4px rgba(91, 124, 255, 0.14),
+    0 0 28px rgba(91, 124, 255, 0.18);
+}
+
+input:-webkit-autofill {
+  -webkit-text-fill-color: var(--auth-text-primary);
+  box-shadow: 0 0 0 1000px rgba(7, 11, 22, 0.96) inset;
+  caret-color: var(--auth-text-primary);
+}
+```
+
+## Buttons
+
+Primary buttons must have:
+
+- blue / periwinkle / violet gradient;
+- white text;
+- subtle shadow;
+- hover lift;
+- active press;
+- disabled state;
+- loading state if async action exists.
+
+Example:
+
+```css
+.primary-button {
+  height: 62px;
+  border: none;
+  border-radius: 13px;
+  color: #FFFFFF;
+  font-weight: 700;
+  background: linear-gradient(135deg, #5F83FF 0%, #3F6BFF 52%, #695CFF 100%);
+  box-shadow:
+    0 16px 32px rgba(63, 107, 255, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    box-shadow 180ms ease,
+    filter 180ms ease;
+}
+
+.primary-button:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+
+.primary-button:active {
+  transform: translateY(0);
+  filter: brightness(0.98);
+}
+
+.primary-button:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+```
+
+## Links
+
+Links must have:
+
+- accent color;
+- hover color;
+- focus-visible outline;
+- no layout jump.
+
+## Icons
+
+Use one icon style only.
+
+Recommended:
+
+- Lucide;
+- Heroicons outline;
+- or custom SVGs.
+
+Do not mix inconsistent icon libraries.
+
+Required icons:
+
+- envelope;
+- lock;
+- eye;
+- eye-off;
+- optional sparkle/star.
+
+## Motion
+
+Use subtle motion:
+
+- button hover lift;
+- input focus glow;
+- link color transition;
+- checkbox check animation;
+- card entrance only if it does not distract.
+
+Respect reduced motion:
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+```

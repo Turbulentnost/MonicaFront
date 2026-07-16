@@ -1,0 +1,126 @@
+---
+description: Rule for login and registration page layout/content.
+globs:
+  - "**/*login*"
+  - "**/*Login*"
+  - "**/*register*"
+  - "**/*Register*"
+  - "**/*auth*"
+  - "**/*Auth*"
+alwaysApply: false
+---
+
+# Auth Pages Layout Rule
+
+Rebuild the login and registration pages according to the provided references.
+
+## Shared Layout
+
+Use this logical structure:
+
+```txt
+AuthPage
+  BackgroundLayer
+  AuthCard
+    AuthBrand
+    PageTitle / StepProgress
+    HelperText
+    Form
+    SecondaryActions
+    FooterLink
+```
+
+The card must be centered horizontally and vertically.
+
+The desktop version must match the references first.
+
+Then adapt for smaller screens.
+
+## Login Page Required Content
+
+The login page must contain:
+
+```txt
+Monica
+Вход
+Добро пожаловать! Войдите в свой аккаунт,
+чтобы продолжить работу.
+
+Email
+name@example.com
+
+Пароль
+Введите пароль
+
+Войти
+
+Запомнить меня
+Забыли пароль?
+
+Нет аккаунта? Зарегистрироваться
+```
+
+## Registration Page Required Content
+
+The registration page must contain:
+
+```txt
+Monica
+Шаг 1 из 4
+
+Регистрация
+Введите email, и мы отправим вам
+код подтверждения.
+
+Email
+name@example.com
+
+Далее
+
+Уже есть аккаунт? Войти
+```
+
+## Registration Progress Indicator
+
+Use a segmented progress indicator:
+
+- 4 segments;
+- first segment active;
+- remaining segments inactive;
+- active segment uses accent gradient;
+- inactive segments are muted;
+- rounded segment ends;
+- subtle glow on active segment.
+
+Example:
+
+```css
+.progress {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  width: 360px;
+  max-width: 100%;
+}
+
+.progress-segment {
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(160, 170, 210, 0.20);
+}
+
+.progress-segment.active {
+  background: linear-gradient(90deg, #7C8CFF 0%, #3F6BFF 100%);
+  box-shadow: 0 0 18px rgba(91, 124, 255, 0.45);
+}
+```
+
+## Layout Rules
+
+- Do not create cramped forms.
+- Do not over-expand the card.
+- Do not align elements randomly.
+- Keep form width consistent.
+- Keep input and button widths aligned.
+- Keep vertical rhythm consistent.
+- Desktop must look very close to the reference.

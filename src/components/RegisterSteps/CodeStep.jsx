@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { authApi } from '../../api/client';
+import { AuthInput, PrimaryButton } from '../auth';
 
 export default function CodeStep({ email, onNext, setRegistrationToken, debugCode }) {
   const [code, setCode] = useState('');
@@ -22,30 +23,38 @@ export default function CodeStep({ email, onNext, setRegistrationToken, debugCod
   };
 
   return (
-    <form onSubmit={handleSubmit} className="auth-form">
-      <h2>Подтверждение email</h2>
-      <p className="hint">Код отправлен на {email}</p>
+    <form onSubmit={handleSubmit} className="auth-form-body" noValidate>
+      <h2 className="auth-title">Подтверждение email</h2>
+      <p className="auth-helper">
+        Код отправлен на {email}
+      </p>
       {debugCode && (
-        <p className="hint">
+        <p className="auth-helper auth-helper--compact">
           Dev-режим (SMTP не настроен): код — <strong>{debugCode}</strong>
         </p>
       )}
-      <label>
-        Код из письма
-        <input
-          type="text"
-          value={code}
-          onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-          required
-          maxLength={6}
-          pattern="\d{6}"
-          autoFocus
-        />
-      </label>
-      {error && <p className="error">{error}</p>}
-      <button type="submit" disabled={loading || code.length !== 6}>
-        {loading ? 'Проверка...' : 'Далее'}
-      </button>
+      <AuthInput
+        id="register-code"
+        label="Код из письма"
+        type="text"
+        inputMode="numeric"
+        value={code}
+        onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+        placeholder="000000"
+        required
+        maxLength={6}
+        pattern="\d{6}"
+        autoFocus
+        autoComplete="one-time-code"
+        error={error || undefined}
+      />
+      <PrimaryButton
+        loading={loading}
+        loadingText="Проверка..."
+        disabled={code.length !== 6}
+      >
+        Далее
+      </PrimaryButton>
     </form>
   );
 }

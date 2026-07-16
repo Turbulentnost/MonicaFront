@@ -1,0 +1,78 @@
+---
+description: Rule for matching attached UI references with maximum pixel-perfect accuracy.
+globs:
+  - "**/*login*"
+  - "**/*Login*"
+  - "**/*register*"
+  - "**/*Register*"
+  - "**/*auth*"
+  - "**/*Auth*"
+alwaysApply: false
+---
+
+# Reference Fidelity Rule
+
+The attached reference images are the visual source of truth.
+
+Your task is not to create a loosely inspired redesign. Your task is to reproduce the references as closely as possible.
+
+## Analyze the References
+
+Before coding, inspect and infer:
+
+- screen resolution and aspect ratio;
+- card width;
+- card height;
+- card position;
+- card padding;
+- card radius;
+- card border;
+- card shadow;
+- background gradient;
+- radial glow positions;
+- typography sizes;
+- typography weights;
+- line heights;
+- input height;
+- button height;
+- icon size;
+- icon placement;
+- spacing between elements;
+- link placement;
+- progress bar dimensions;
+- active and inactive progress colors.
+
+## Matching Priority
+
+Follow this order of priority:
+
+1. Overall composition.
+2. Card geometry and placement.
+3. Background color and glow.
+4. Typography hierarchy.
+5. Inputs and buttons.
+6. Icons.
+7. Interactive states.
+8. Minor decorative effects.
+
+## Do Not
+
+- Do not invent a different layout.
+- Do not simplify the UI into generic components.
+- Do not replace the reference style with default framework styles.
+- Do not ignore spacing.
+- Do not mix icon styles.
+- Do not use random gradients.
+- Do not use arbitrary colors.
+
+## Visual Comparison Workflow
+
+After implementation:
+
+1. Run the app.
+2. Open login page.
+3. Compare with the login reference.
+4. Open registration page.
+5. Compare with the registration reference.
+6. Adjust until differences are minimal.
+7. Do not stop after the first implementation if the result is obviously different.

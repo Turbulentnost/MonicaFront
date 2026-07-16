@@ -1,0 +1,50 @@
+---
+description: Master-правило premium chat redesign — два референса, секретный Favorites, сохранение логики
+globs: src/pages/ChatsPage.jsx,src/components/Chat/**/*.{jsx,css},src/styles/chats.css,src/hooks/useSecretFavoritesShortcut.js,src/design-references/chats/**
+alwaysApply: false
+---
+
+# Monica Chat Redesign — Master
+
+Эталоны:
+- `src/design-references/chats/chats.png` — **default** чат
+- `src/design-references/chats/chats-special.png` — **secret Favorites** (только после шортката)
+
+Полный промпт: `premium-chat-dual-reference-cursor-prompt.md`
+
+## Секретный режим (обязательно)
+
+Активация последовательностью (без Shift):
+
+`F` → `R` → `O` → `N` → `T`
+
+Не срабатывает при фокусе в input/textarea.
+
+- Хук: `src/hooks/useSecretFavoritesShortcut.js`
+- Состояние: `isSpecialFavoritesOpen` (session-only, без localStorage)
+- `Escape` закрывает special mode
+- Нет видимой кнопки / роута / query для special view
+
+## Layout (default = chats.png)
+
+```
+ChatIconRail | ConversationsPanel | MainChat | DetailsPanel
+```
+
+Стили: `src/styles/chats.css` (CSS-only фон, glass panels, токены)
+
+## Preserve logic
+
+Не ломать: API, WebSocket, отправку, приватные сессии, presence, notifications, поиск, вложения, code mode, удаление сообщений.
+
+## Special mode (chats-special.png)
+
+Класс `.chats-page--special` — усиленные glow, gradient border на active chat, special filters UI.
+
+## QA
+
+1. По умолчанию — default layout
+2. `F R O N T` с Shift — не открывает (Shift сбрасывает)
+3. Полная последовательность `F→R→O→N→T` — special view
+4. Escape — возврат к default
+5. Refresh — снова default
