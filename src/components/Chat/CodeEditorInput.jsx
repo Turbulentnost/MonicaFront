@@ -1,119 +1,212 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
-import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
-import javascriptLang from 'react-syntax-highlighter/dist/esm/languages/prism/javascript';
-import pythonLang from 'react-syntax-highlighter/dist/esm/languages/prism/python';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import Editor from '@monaco-editor/react';
+import { useEffect, useRef } from 'react';
 
-SyntaxHighlighter.registerLanguage('python', pythonLang);
-SyntaxHighlighter.registerLanguage('javascript', javascriptLang);
+const PYTHON_KEYWORDS = [
+  'False', 'None', 'True', 'and', 'as', 'assert', 'async', 'await', 'break',
+  'class', 'continue', 'def', 'del', 'elif', 'else', 'except', 'finally', 'for',
+  'from', 'global', 'if', 'import', 'in', 'is', 'lambda', 'nonlocal', 'not',
+  'or', 'pass', 'raise', 'return', 'try', 'while', 'with', 'yield',
+];
 
-const highlightStyle = {
-  ...vscDarkPlus,
-  'pre[class*="language-"]': {
-    ...vscDarkPlus['pre[class*="language-"]'],
-    margin: 0,
-    padding: 0,
-    background: 'transparent',
-    fontSize: '13px',
-    lineHeight: 1.45,
-    fontFamily: "ui-monospace, Consolas, 'Courier New', monospace",
-    whiteSpace: 'pre-wrap',
-    wordBreak: 'break-word',
-    overflow: 'visible',
-  },
-  'code[class*="language-"]': {
-    ...vscDarkPlus['code[class*="language-"]'],
-    background: 'transparent',
-    fontFamily: "ui-monospace, Consolas, 'Courier New', monospace",
-    textShadow: 'none',
-    whiteSpace: 'pre-wrap',
-    wordBreak: 'break-word',
-  },
-};
+const PYTHON_BUILTINS = [
+  'abs', 'all', 'any', 'bin', 'bool', 'bytearray', 'bytes', 'callable', 'chr',
+  'classmethod', 'compile', 'complex', 'dict', 'dir', 'divmod', 'enumerate',
+  'eval', 'exec', 'filter', 'float', 'format', 'frozenset', 'getattr',
+  'globals', 'hasattr', 'hash', 'help', 'hex', 'id', 'input', 'int',
+  'isinstance', 'issubclass', 'iter', 'len', 'list', 'locals', 'map', 'max',
+  'memoryview', 'min', 'next', 'object', 'oct', 'open', 'ord', 'pow', 'print',
+  'property', 'range', 'repr', 'reversed', 'round', 'set', 'setattr', 'slice',
+  'sorted', 'staticmethod', 'str', 'sum', 'super', 'tuple', 'type', 'vars',
+  'zip', '__import__',
+];
 
-export const CodeEditorInput = forwardRef(function CodeEditorInput(
+const PYTHON_SNIPPETS = [
   {
-    value,
-    language = 'python',
-    onChange,
-    onKeyDown,
-    onBlur,
-    placeholder = '// Введите код…',
+    label: 'def',
+    insertText: 'def ${1:name}(${2:args}):\n\t${3:pass}',
+    detail: 'function',
   },
-  ref
-) {
-  const textareaRef = useRef(null);
-  const highlightRef = useRef(null);
+  {
+    label: 'class',
+    insertText: 'class ${1:Name}:\n\tdef __init__(self${2:}):\n\t\t${3:pass}',
+    detail: 'class',
+  },
+  {
+    label: 'if',
+    insertText: 'if ${1:condition}:\n\t${2:pass}',
+    detail: 'if',
+  },
+  {
+    label: 'for',
+    insertText: 'for ${1:item} in ${2:iterable}:\n\t${3:pass}',
+    detail: 'for loop',
+  },
+  {
+    label: 'while',
+    insertText: 'while ${1:condition}:\n\t${2:pass}',
+    detail: 'while loop',
+  },
+  {
+    label: 'try',
+    insertText: 'try:\n\t${1:pass}\nexcept ${2:Exception} as ${3:e}:\n\t${4:pass}',
+    detail: 'try/except',
+  },
+  {
+    label: 'with',
+    insertText: 'with ${1:expr} as ${2:var}:\n\t${3:pass}',
+    detail: 'with',
+  },
+  {
+    label: 'main',
+    insertText: 'if __name__ == "__main__":\n\t${1:main()}',
+    detail: 'main guard',
+  },
+];
 
-  useImperativeHandle(ref, () => textareaRef.current);
+let pythonProviderRegistered = false;
 
-  const syncScroll = () => {
-    const ta = textareaRef.current;
-    const hi = highlightRef.current;
-    if (!ta || !hi) return;
-    hi.scrollTop = ta.scrollTop;
-    hi.scrollLeft = ta.scrollLeft;
-  };
+function ensurePythonCompletions(monaco) {
+  if (pythonProviderRegistered) return;
+  pythonProviderRegistered = true;
 
-  const resize = () => {
-    const ta = textareaRef.current;
-    const hi = highlightRef.current;
-    if (!ta) return;
-    ta.style.height = 'auto';
-    const height = Math.min(Math.max(ta.scrollHeight, 96), 360);
-    ta.style.height = `${height}px`;
-    if (hi) {
-      hi.style.height = `${height}px`;
-    }
+  monaco.languages.registerCompletionItemProvider('python', {
+    triggerCharacters: ['.', '_'],
+    provideCompletionItems(model, position) {
+      const word = model.getWordUntilPosition(position);
+      const range = {
+        startLineNumber: position.lineNumber,
+        endLineNumber: position.lineNumber,
+        startColumn: word.startColumn,
+        endColumn: word.endColumn,
+      };
+
+      const suggestions = [
+        ...PYTHON_KEYWORDS.map((label) => ({
+          label,
+          kind: monaco.languages.CompletionItemKind.Keyword,
+          insertText: label,
+          range,
+        })),
+        ...PYTHON_BUILTINS.map((label) => ({
+          label,
+          kind: monaco.languages.CompletionItemKind.Function,
+          insertText: label,
+          range,
+        })),
+        ...PYTHON_SNIPPETS.map((snip) => ({
+          label: snip.label,
+          kind: monaco.languages.CompletionItemKind.Snippet,
+          insertText: snip.insertText,
+          insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+          detail: snip.detail,
+          range,
+        })),
+      ];
+
+      return { suggestions };
+    },
+  });
+}
+
+export function CodeEditorInput({
+  value,
+  language = 'python',
+  onChange,
+  onSubmit,
+}) {
+  const editorRef = useRef(null);
+  const monacoRef = useRef(null);
+  const onSubmitRef = useRef(onSubmit);
+  onSubmitRef.current = onSubmit;
+
+  const monacoLang = language === 'javascript' ? 'javascript' : 'python';
+  const tabSize = monacoLang === 'python' ? 4 : 2;
+
+  const handleMount = (editor, monaco) => {
+    editorRef.current = editor;
+    monacoRef.current = monaco;
+    ensurePythonCompletions(monaco);
+
+    // Ctrl/Cmd+Enter — отправить файл
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
+      onSubmitRef.current?.();
+    });
+
+    editor.focus();
   };
 
   useEffect(() => {
-    resize();
-    syncScroll();
-  }, [value, language]);
-
-  const prismLang = language === 'javascript' ? 'javascript' : 'python';
-  // Trailing newline иначе не рисуется последняя пустая строка
-  const highlightValue = value ? (value.endsWith('\n') ? `${value} ` : value) : ' ';
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    if (!editor || !monaco) return;
+    const model = editor.getModel();
+    if (model) {
+      monaco.editor.setModelLanguage(model, monacoLang);
+    }
+    editor.updateOptions({ tabSize, detectIndentation: false });
+  }, [monacoLang, tabSize]);
 
   return (
-    <div className={`code-editor-wrap ${value ? '' : 'is-empty'}`}>
-      <div className="code-editor-highlight" ref={highlightRef} aria-hidden="true">
-        <SyntaxHighlighter
-          language={prismLang}
-          style={highlightStyle}
-          customStyle={{
-            margin: 0,
-            padding: 0,
-            background: 'transparent',
-            maxHeight: 'none',
-            overflow: 'visible',
-          }}
-          codeTagProps={{ style: { fontFamily: 'inherit' } }}
-          PreTag="div"
-        >
-          {highlightValue}
-        </SyntaxHighlighter>
-      </div>
-      {!value && (
-        <div className="code-editor-placeholder" aria-hidden="true">
-          {placeholder}
-        </div>
-      )}
-      <textarea
-        ref={textareaRef}
-        className="code-editor-input"
+    <div className="code-editor-wrap monaco">
+      <Editor
+        height="320px"
+        theme="vs-dark"
+        language={monacoLang}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={onKeyDown}
-        onBlur={onBlur}
-        onScroll={syncScroll}
-        spellCheck={false}
-        autoCapitalize="off"
-        autoCorrect="off"
-        rows={4}
-        aria-label="Редактор кода"
+        onChange={(next) => onChange(next ?? '')}
+        onMount={handleMount}
+        loading={<div className="code-editor-loading">Загрузка редактора…</div>}
+        options={{
+          fontSize: 13,
+          fontFamily: "ui-monospace, Consolas, 'Courier New', monospace",
+          lineHeight: 20,
+          minimap: { enabled: false },
+          scrollBeyondLastLine: false,
+          automaticLayout: true,
+          tabSize,
+          insertSpaces: true,
+          detectIndentation: false,
+          autoIndent: 'full',
+          formatOnType: true,
+          formatOnPaste: true,
+          wordWrap: 'on',
+          wrappingIndent: 'same',
+          renderLineHighlight: 'line',
+          cursorBlinking: 'smooth',
+          smoothScrolling: true,
+          padding: { top: 12, bottom: 12 },
+          quickSuggestions: {
+            other: true,
+            comments: false,
+            strings: true,
+          },
+          suggestOnTriggerCharacters: true,
+          acceptSuggestionOnEnter: 'on',
+          acceptSuggestionOnCommitCharacter: true,
+          tabCompletion: 'on',
+          wordBasedSuggestions: 'currentDocument',
+          snippetSuggestions: 'inline',
+          suggest: {
+            showKeywords: true,
+            showSnippets: true,
+            showWords: true,
+            preview: true,
+            insertMode: 'insert',
+          },
+          useTabStops: true,
+          autoClosingBrackets: 'languageDefined',
+          autoClosingQuotes: 'languageDefined',
+          matchBrackets: 'always',
+          bracketPairColorization: { enabled: true },
+          scrollbar: {
+            verticalScrollbarSize: 8,
+            horizontalScrollbarSize: 8,
+          },
+          overviewRulerLanes: 0,
+          hideCursorInOverviewRuler: true,
+          overviewRulerBorder: false,
+        }}
       />
     </div>
   );
-});
+}

@@ -12,6 +12,7 @@ import { CodeEditorInput } from '../components/Chat/CodeEditorInput';
 import { PrivatePanel } from '../components/Chat/PrivatePanel';
 import { UserSearchResult } from '../components/Chat/UserSearchResult';
 import { warmAvatarCache } from '../utils/avatarCache';
+import { groupMessagesByDay } from '../utils/formatChatDate';
 import { invalidateMediaCache, warmMediaCache } from '../utils/mediaCache';
 
 const MAX_ATTACHMENTS = 10;
@@ -76,7 +77,6 @@ export default function ChatsPage() {
   const lastTypingSentRef = useRef(false);
   const searchDebounceRef = useRef(null);
   const fileInputRef = useRef(null);
-  const codeTextareaRef = useRef(null);
 
   const loadChats = useCallback(async () => {
     const { data } = await chatsApi.list();
@@ -374,20 +374,6 @@ export default function ChatsPage() {
     }
   }, [sendTyping]);
 
-  const resizeCodeTextarea = useCallback(() => {
-    const el = codeTextareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(Math.max(el.scrollHeight, 96), 360)}px`;
-  }, []);
-
-  useEffect(() => {
-    if (codeMode) {
-      resizeCodeTextarea();
-      codeTextareaRef.current?.focus();
-    }
-  }, [codeMode, resizeCodeTextarea]);
-
   const toggleCodeMode = () => {
     setCodeMode((prev) => {
       const next = !prev;
@@ -464,7 +450,6 @@ export default function ChatsPage() {
       await uploadAndSendFiles([file]);
       setInput('');
       setCodeFileName(codeLanguage === 'javascript' ? 'script.js' : 'script.py');
-      requestAnimationFrame(resizeCodeTextarea);
     } catch (err) {
       setAttachError(err.response?.data?.detail || err.message || 'Не удалось отправить код');
     } finally {
@@ -512,13 +497,6 @@ export default function ChatsPage() {
       setAttachError(err.response?.data?.detail || err.message || 'Не удалось загрузить файлы');
     } finally {
       setUploading(false);
-    }
-  };
-
-  const handleCodeKeyDown = (e) => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      handleSendCode();
     }
   };
 
@@ -574,9 +552,6 @@ export default function ChatsPage() {
 
   const handleInputChange = (value) => {
     setInput(value);
-    if (codeMode) {
-      requestAnimationFrame(resizeCodeTextarea);
-    }
     if (!selectedChat) return;
 
     if (!value.trim()) {
@@ -725,14 +700,21 @@ export default function ChatsPage() {
               </div>
             )}
             <div className="messages-area">
-              {messages.map((msg) => (
-                <MessageBubble
-                  key={msg.id}
-                  message={msg}
-                  isOwn={msg.sender?.id === user?.id}
-                  onDelete={handleDeleteMessage}
-                  chatId={selectedChat.id}
-                />
+              {groupMessagesByDay(messages).map((group) => (
+                <div key={group.key} className="message-day-group">
+                  <div className="message-day-separator">
+                    <span>{group.label}</span>
+                  </div>
+                  {group.messages.map((msg) => (
+                    <MessageBubble
+                      key={msg.id}
+                      message={msg}
+                      isOwn={msg.sender?.id === user?.id}
+                      onDelete={handleDeleteMessage}
+                      chatId={selectedChat.id}
+                    />
+                  ))}
+                </div>
               ))}
               {partnerTyping && (
                 <div className="typing-indicator">
@@ -807,13 +789,10 @@ export default function ChatsPage() {
                 {codeMode ? (
                   <>
                     <CodeEditorInput
-                      ref={codeTextareaRef}
                       value={input}
                       language={codeLanguage || 'python'}
                       onChange={handleInputChange}
-                      onKeyDown={handleCodeKeyDown}
-                      onBlur={stopTyping}
-                      placeholder="// Введите код… Enter — новая строка, Ctrl+Enter — отправить"
+                      onSubmit={handleSendCode}
                     />
                     <div className="code-meta">
                       <label className="code-meta-field">
