@@ -236,11 +236,16 @@ body {
   padding: 0;
   background: #1e2230;
   border-radius: 8px;
-  max-height: 200px;
+  max-height: 260px;
   overflow-y: auto;
+  z-index: 2;
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
-.search-results button {
+.search-result-btn {
   width: 100%;
   padding: 10px 12px;
   border: none;
@@ -248,10 +253,47 @@ body {
   color: #e8eaed;
   text-align: left;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-.search-results button:hover {
+.search-result-btn:hover {
   background: #2d3140;
+}
+
+.search-result-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.search-result-nick {
+  font-weight: 600;
+}
+
+.search-result-name {
+  font-size: 12px;
+  color: #9aa0a6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-avatar {
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #3c4048;
+}
+
+.user-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #e8eaed;
+  background: linear-gradient(135deg, #5b7fff, #7c9cff);
 }
 
 .chat-list {
@@ -262,20 +304,30 @@ body {
   flex: 1;
 }
 
-.chat-list li button {
+.chat-item-btn {
   width: 100%;
-  padding: 14px 20px;
+  padding: 12px 16px;
   border: none;
   background: none;
   color: #e8eaed;
   text-align: left;
   cursor: pointer;
   border-bottom: 1px solid #2d3140;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
-.chat-list li.active button,
-.chat-list li button:hover {
+.chat-list li.active .chat-item-btn,
+.chat-item-btn:hover {
   background: #252836;
+}
+
+.chat-item-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
 }
 
 .chat-item-name {
@@ -296,6 +348,7 @@ body {
   display: flex;
   flex-direction: column;
   background: #0f1117;
+  min-width: 0;
 }
 
 .chat-header {
@@ -306,14 +359,26 @@ body {
   border-bottom: 1px solid #2d3140;
 }
 
+.chat-header-info {
+  flex: 1;
+  min-width: 0;
+}
+
 .chat-header h3 {
   margin: 0;
+  font-size: 16px;
+}
+
+.chat-header-sub {
+  font-size: 12px;
+  color: #9aa0a6;
 }
 
 .ws-status {
   font-size: 12px;
   padding: 2px 8px;
   border-radius: 10px;
+  margin-left: auto;
 }
 
 .ws-status.online {
@@ -366,6 +431,14 @@ body {
   opacity: 0.6;
   margin-top: 4px;
   text-align: right;
+}
+
+.typing-indicator {
+  align-self: flex-start;
+  font-size: 13px;
+  color: #9aa0a6;
+  font-style: italic;
+  padding: 4px 8px;
 }
 
 .message-input {

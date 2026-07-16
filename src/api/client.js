@@ -1,6 +1,21 @@
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+/** На других устройствах в LAN localhost — это их машина; подставляем hostname страницы. */
+function resolveApiUrl() {
+  const envUrl = process.env.REACT_APP_API_URL || 'http://localhost:5612';
+  if (typeof window === 'undefined') return envUrl;
+  try {
+    const url = new URL(envUrl);
+    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+      url.hostname = window.location.hostname;
+    }
+    return url.origin;
+  } catch {
+    return envUrl;
+  }
+}
+
+const API_URL = resolveApiUrl();
 
 const api = axios.create({
   baseURL: `${API_URL}/api`,

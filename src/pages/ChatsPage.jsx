@@ -3,26 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { chatsApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useWebSocket } from '../hooks/useWebSocket';
-
-function MessageBubble({ message, isOwn }) {
-  const content =
-    message.message_type === 'text'
-      ? message.content
-      : `[${message.message_type}] ${message.content}`;
-
-  return (
-    <div className={`message ${isOwn ? 'own' : 'other'}`}>
-      <div className="message-meta">{message.sender?.nickname}</div>
-      <div className="message-content">{content}</div>
-      <div className="message-time">
-        {new Date(message.sent_at).toLocaleTimeString('ru-RU', {
-          hour: '2-digit',
-          minute: '2-digit',
-        })}
-      </div>
-    </div>
-  );
-}
+import { ChatHeader } from '../components/Chat/ChatHeader';
+import { ChatListItem } from '../components/Chat/ChatListItem';
+import { MessageBubble } from '../components/Chat/MessageBubble';
+import { UserSearchResult } from '../components/Chat/UserSearchResult';
+import { warmAvatarCache } from '../utils/avatarCache';
 
 export default function ChatsPage() {
   const { user, logout } = useAuth();
@@ -33,7 +18,11 @@ export default function ChatsPage() {
   const [input, setInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+  const [partnerTyping, setPartnerTyping] = useState(false);
   const messagesEndRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
+  const lastTypingSentRef = useRef(false);
+  const searchDebounceRef = useRef(null);
 
   const loadChats = useCallback(async () => {
     const { data } = await chatsApi.list();
@@ -51,11 +40,14 @@ export default function ChatsPage() {
 
   const handleSelectChat = async (chat) => {
     setSelectedChat(chat);
+    setPartnerTyping(false);
+    setInput('');
     await loadMessages(chat.id);
   };
 
   const handleNewMessage = useCallback(
     (message) => {
+      setPartnerTyping(false);
       setMessages((prev) => {
         if (prev.some((m) => m.id === message.id)) return prev;
         return [...prev, message];
@@ -65,27 +57,97 @@ export default function ChatsPage() {
     [loadChats]
   );
 
-  const { connected, sendMessage } = useWebSocket(selectedChat?.id, handleNewMessage);
+  const handleTyping = useCallback((data) => {
+    if (data.user_id === user?.id) return;
+    setPartnerTyping(Boolean(data.is_typing));
+  }, [user?.id]);
+
+  const { connected, sendMessage, sendTyping } = useWebSocket(selectedChat?.id, {
+    onMessage: handleNewMessage,
+    onTyping: handleTyping,
+  });
+
+  useEffect(() => {
+    setPartnerTyping(false);
+    lastTypingSentRef.current = false;
+  }, [selectedChat?.id]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, partnerTyping]);
+
+  const stopTyping = useCallback(() => {
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+    if (lastTypingSentRef.current) {
+      sendTyping(false);
+      lastTypingSentRef.current = false;
+    }
+  }, [sendTyping]);
 
   const handleSend = (e) => {
     e.preventDefault();
     if (!input.trim()) return;
+    stopTyping();
     sendMessage(input.trim());
     setInput('');
   };
 
-  const handleSearch = async (q) => {
+  const handleInputChange = (value) => {
+    setInput(value);
+    if (!selectedChat) return;
+
+    if (!value.trim()) {
+      stopTyping();
+      return;
+    }
+
+    if (!lastTypingSentRef.current) {
+      sendTyping(true);
+      lastTypingSentRef.current = true;
+    }
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      sendTyping(false);
+      lastTypingSentRef.current = false;
+    }, 1500);
+  };
+
+  const searchLocalCacheRef = useRef(new Map());
+
+  const handleSearch = (q) => {
     setSearchQuery(q);
-    if (q.length < 2) {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+
+    if (q.trim().length < 2) {
       setSearchResults([]);
       return;
     }
-    const { data } = await chatsApi.searchUsers(q);
-    setSearchResults(data);
+
+    const key = q.trim().toLowerCase();
+    const cached = searchLocalCacheRef.current.get(key);
+    if (cached) {
+      setSearchResults(cached);
+      return;
+    }
+
+    searchDebounceRef.current = setTimeout(async () => {
+      try {
+        const { data } = await chatsApi.searchUsers(q.trim());
+        searchLocalCacheRef.current.set(key, data);
+        setSearchResults(data);
+        data.forEach((u) => {
+          if (u.photo && u.photo_url) {
+            warmAvatarCache(u.photo, u.photo_url);
+          }
+        });
+      } catch {
+        setSearchResults([]);
+      }
+    }, 250);
   };
 
   const startChat = async (recipientId) => {
@@ -103,6 +165,7 @@ export default function ChatsPage() {
   };
 
   const handleLogout = () => {
+    stopTyping();
     logout();
     navigate('/login');
   };
@@ -119,35 +182,26 @@ export default function ChatsPage() {
         <div className="search-box">
           <input
             type="text"
-            placeholder="Поиск по никнейму..."
+            placeholder="Имя, фамилия, email или ник..."
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
           />
           {searchResults.length > 0 && (
             <ul className="search-results">
               {searchResults.map((u) => (
-                <li key={u.id}>
-                  <button type="button" onClick={() => startChat(u.id)}>
-                    {u.nickname} ({u.first_name} {u.last_name})
-                  </button>
-                </li>
+                <UserSearchResult key={u.id} user={u} onSelect={startChat} />
               ))}
             </ul>
           )}
         </div>
         <ul className="chat-list">
           {chats.map((chat) => (
-            <li
+            <ChatListItem
               key={chat.id}
-              className={selectedChat?.id === chat.id ? 'active' : ''}
-            >
-              <button type="button" onClick={() => handleSelectChat(chat)}>
-                <div className="chat-item-name">{chat.partner?.nickname}</div>
-                <div className="chat-item-preview">
-                  {chat.last_message?.content || 'Нет сообщений'}
-                </div>
-              </button>
-            </li>
+              chat={chat}
+              active={selectedChat?.id === chat.id}
+              onSelect={handleSelectChat}
+            />
           ))}
         </ul>
       </aside>
@@ -155,12 +209,7 @@ export default function ChatsPage() {
       <main className="chat-main">
         {selectedChat ? (
           <>
-            <div className="chat-header">
-              <h3>{selectedChat.partner?.nickname}</h3>
-              <span className={`ws-status ${connected ? 'online' : 'offline'}`}>
-                {connected ? 'online' : 'offline'}
-              </span>
-            </div>
+            <ChatHeader partner={selectedChat.partner} connected={connected} />
             <div className="messages-area">
               {messages.map((msg) => (
                 <MessageBubble
@@ -169,13 +218,19 @@ export default function ChatsPage() {
                   isOwn={msg.sender?.id === user?.id}
                 />
               ))}
+              {partnerTyping && (
+                <div className="typing-indicator">
+                  @{selectedChat.partner?.nickname} печатает...
+                </div>
+              )}
               <div ref={messagesEndRef} />
             </div>
             <form className="message-input" onSubmit={handleSend}>
               <input
                 type="text"
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => handleInputChange(e.target.value)}
+                onBlur={stopTyping}
                 placeholder="Сообщение..."
               />
               <button type="submit">Отправить</button>
