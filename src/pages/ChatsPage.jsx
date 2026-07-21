@@ -1,29 +1,44 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useNavigate } from 'react-router-dom';
 import { chatsApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useNotifications, usePresence } from '../hooks/usePresence';
+import { useCall } from '../hooks/useCall';
 import { useSecretSequenceShortcut, FRONT_SEQUENCE, BACK_SEQUENCE } from '../hooks/useSecretFavoritesShortcut';
+import { useUserIdle } from '../hooks/useUserIdle';
 import { ChatHeader } from '../components/Chat/ChatHeader';
 import { ChatListItem } from '../components/Chat/ChatListItem';
 import { ChatIconRail } from '../components/Chat/ChatIconRail';
 import { ChatFilters } from '../components/Chat/ChatFilters';
 import { ChatDetailsPanel } from '../components/Chat/ChatDetailsPanel';
 import { ChatDevStatusBar } from '../components/Chat/ChatDevStatusBar';
+import { AccountSettings } from '../components/AccountSettings';
 import { MessageBubble } from '../components/Chat/MessageBubble';
 import { NotificationBell } from '../components/Chat/NotificationBell';
 import { CodeEditorInput } from '../components/Chat/CodeEditorInput';
 import { EmojiPicker } from '../components/Chat/EmojiPicker';
 import { PrivatePanel } from '../components/Chat/PrivatePanel';
 import { UserSearchResult } from '../components/Chat/UserSearchResult';
+import { IncomingCallOverlay } from '../components/Chat/IncomingCallOverlay';
+import { CallScreen } from '../components/Chat/CallScreen';
 import { warmAvatarCache } from '../utils/avatarCache';
 import { groupMessagesByDay } from '../utils/formatChatDate';
 import { invalidateMediaCache, warmMediaCache } from '../utils/mediaCache';
 import { API_URL } from '../config';
+import { VoiceRecorder, canUseMicrophone } from '../utils/voiceRecorder';
 
 const MAX_ATTACHMENTS = 10;
 const MAX_FILE_SIZE_BYTES = 300 * 1024 * 1024;
+const CHAT_IDLE_MS = 60_000;
+const lastChatStorageKey = (userId) => (userId ? `monica_last_chat_id:${userId}` : null);
 
 function leavePrivateSessionsBestEffort() {
   const token = localStorage.getItem('access_token');
@@ -46,11 +61,13 @@ function leavePrivateSessionsBestEffort() {
 }
 
 export default function ChatsPage() {
-  const { user, logout } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const navigate = useNavigate();
   const [chats, setChats] = useState([]);
   const [selectedChat, setSelectedChat] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [input, setInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -69,15 +86,48 @@ export default function ChatsPage() {
   const [isSpecialFavoritesOpen, setIsSpecialFavoritesOpen] = useState(false);
   const [isBackModeOpen, setIsBackModeOpen] = useState(false);
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(true);
+  const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [messageReactions, setMessageReactions] = useState({});
+  const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const messagesEndRef = useRef(null);
+  const messagesAreaRef = useRef(null);
+  const loadingOlderRef = useRef(false);
+  const prependScrollRef = useRef(null);
+  const shouldStickToBottomRef = useRef(true);
+  const suppressHistoryLoadRef = useRef(false);
+  const highlightTimeoutRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const lastTypingSentRef = useRef(false);
   const searchDebounceRef = useRef(null);
   const fileInputRef = useRef(null);
+  const messageInputRef = useRef(null);
   const markReadRef = useRef(null);
+  const isIdleRef = useRef(false);
+  const didRestoreChatRef = useRef(false);
+  const lastImagePasteAtRef = useRef(0);
   const emojiHideTimeoutRef = useRef(null);
+  const voiceRecorderRef = useRef(null);
   const [emojiPickerVisible, setEmojiPickerVisible] = useState(false);
+  const [micAvailable, setMicAvailable] = useState(false);
+  const [voiceRecording, setVoiceRecording] = useState(false);
+  const [voiceElapsedMs, setVoiceElapsedMs] = useState(0);
+  const [voiceLiveWaveform, setVoiceLiveWaveform] = useState([]);
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const callController = useCall(user);
+  const callChatId = callController.call?.chat_id
+    || (typeof callController.call?.chat === 'object'
+      ? callController.call.chat?.id
+      : callController.call?.chat);
+  const callScreenVisible = ['outgoing', 'connecting', 'active'].includes(callController.status);
+  const dispatchCallEvent = callController.onCallEvent;
+  const isIdle = useUserIdle(CHAT_IDLE_MS);
+  isIdleRef.current = isIdle;
+
+  const persistSelectedChat = useCallback((chat) => {
+    const key = lastChatStorageKey(user?.id);
+    if (!key || !chat?.id) return;
+    localStorage.setItem(key, String(chat.id));
+  }, [user?.id]);
 
   const loadChats = useCallback(async () => {
     const { data } = await chatsApi.list();
@@ -88,15 +138,101 @@ export default function ChatsPage() {
     loadChats();
   }, [loadChats]);
 
+  useEffect(() => {
+    if (!callScreenVisible || selectedChat || !callChatId) return;
+    const activeChat = chats.find((item) => String(item.id) === String(callChatId));
+    if (activeChat) {
+      setSelectedChat(activeChat);
+      persistSelectedChat(activeChat);
+    }
+  }, [callChatId, callScreenVisible, chats, selectedChat, persistSelectedChat]);
+
   const loadMessages = useCallback(async (chatId) => {
-    const { data } = await chatsApi.messages(chatId);
+    shouldStickToBottomRef.current = true;
+    suppressHistoryLoadRef.current = true;
+    setHighlightedMessageId(null);
+    const { data } = await chatsApi.messages(chatId, { limit: 100 });
     setMessages(data);
+    setHasMoreMessages(data.length === 100);
+    loadingOlderRef.current = false;
+    setLoadingOlderMessages(false);
+    prependScrollRef.current = null;
     data.forEach((msg) => {
-      if (msg.message_type === 'photo' && msg.content && msg.content_url) {
-        warmMediaCache(msg.content, msg.content_url);
-      }
+      if (msg.message_type !== 'photo') return;
+      const items = Array.isArray(msg.attachments) && msg.attachments.length
+        ? msg.attachments
+        : [{ path: msg.content, content_url: msg.content_url }];
+      items.forEach((item) => {
+        if (item.path && item.content_url) warmMediaCache(item.path, item.content_url);
+      });
     });
   }, []);
+
+  const loadOlderMessages = useCallback(async () => {
+    if (
+      loadingOlderRef.current
+      || !hasMoreMessages
+      || !selectedChat?.id
+      || messages.length === 0
+    ) {
+      return;
+    }
+
+    const oldestMessage = messages.find((message) => !String(message.id).startsWith('temp-'));
+    if (!oldestMessage) return;
+
+    const container = messagesAreaRef.current;
+    loadingOlderRef.current = true;
+    setLoadingOlderMessages(true);
+    try {
+      const { data } = await chatsApi.messages(selectedChat.id, {
+        limit: 100,
+        before: oldestMessage.id,
+      });
+
+      if (!data.length) {
+        setHasMoreMessages(false);
+        return;
+      }
+
+      if (container) {
+        prependScrollRef.current = {
+          scrollHeight: container.scrollHeight,
+          scrollTop: container.scrollTop,
+        };
+      }
+      setMessages((current) => {
+        const knownIds = new Set(current.map((message) => String(message.id)));
+        const older = data.filter((message) => !knownIds.has(String(message.id)));
+        return older.length ? [...older, ...current] : current;
+      });
+      setHasMoreMessages(data.length === 100);
+      data.forEach((message) => {
+        if (message.message_type !== 'photo') return;
+        const items = Array.isArray(message.attachments) && message.attachments.length
+          ? message.attachments
+          : [{ path: message.content, content_url: message.content_url }];
+        items.forEach((item) => {
+          if (item.path && item.content_url) warmMediaCache(item.path, item.content_url);
+        });
+      });
+    } catch {
+      setAttachError('Не удалось загрузить более старые сообщения');
+    } finally {
+      loadingOlderRef.current = false;
+      setLoadingOlderMessages(false);
+    }
+  }, [hasMoreMessages, messages, selectedChat?.id]);
+
+  const handleMessagesScroll = useCallback((event) => {
+    const container = event.currentTarget;
+    if (suppressHistoryLoadRef.current) return;
+    const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+    shouldStickToBottomRef.current = maxScroll - container.scrollTop < 96;
+    if (container.scrollTop <= 80) {
+      loadOlderMessages();
+    }
+  }, [loadOlderMessages]);
 
   const clearPendingAttachments = useCallback(() => {
     setPendingAttachments((prev) => {
@@ -120,13 +256,27 @@ export default function ChatsPage() {
 
   const handleSelectChat = async (chat) => {
     clearPendingAttachments();
+    setAccountSettingsOpen(false);
     setSelectedChat(chat);
+    persistSelectedChat(chat);
     setPartnerTyping(false);
     setInput('');
     setCodeMode(false);
     setAttachError('');
     await loadMessages(chat.id);
   };
+
+  useEffect(() => {
+    if (!user?.id || !chats.length || selectedChat || didRestoreChatRef.current) return;
+    didRestoreChatRef.current = true;
+    const savedId = localStorage.getItem(lastChatStorageKey(user.id));
+    if (!savedId) return;
+    const chat = chats.find((item) => String(item.id) === String(savedId));
+    if (chat) {
+      handleSelectChat(chat);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- restore once after first chats load
+  }, [user?.id, chats, selectedChat]);
 
   const handleNewMessage = useCallback(
     (message) => {
@@ -138,11 +288,21 @@ export default function ChatsPage() {
         if (withoutTemp.some((m) => m.id === message.id)) return withoutTemp;
         return [...withoutTemp, message];
       });
-      if (message.message_type === 'photo' && message.content && message.content_url) {
-        warmMediaCache(message.content, message.content_url);
+      if (message.message_type === 'photo') {
+        const items = Array.isArray(message.attachments) && message.attachments.length
+          ? message.attachments
+          : [{ path: message.content, content_url: message.content_url }];
+        items.forEach((item) => {
+          if (item.path && item.content_url) warmMediaCache(item.path, item.content_url);
+        });
       }
-      // Чужое сообщение в открытом чате — сразу прочитано
-      if (message.sender?.id && message.sender.id !== user?.id && !message.read_at) {
+      // Mark read only while the user is actively using the page.
+      if (
+        !isIdleRef.current
+        && message.sender?.id
+        && message.sender.id !== user?.id
+        && !message.read_at
+      ) {
         markReadRef.current?.([message.id]);
       }
       loadChats();
@@ -163,8 +323,13 @@ export default function ChatsPage() {
     (messageId) => {
       setMessages((prev) => {
         const removed = prev.find((m) => m.id === messageId);
-        if (removed?.message_type === 'photo' && removed.content) {
-          invalidateMediaCache(removed.content);
+        if (removed?.message_type === 'photo') {
+          const items = Array.isArray(removed.attachments) && removed.attachments.length
+            ? removed.attachments
+            : [{ path: removed.content }];
+          items.forEach((item) => {
+            if (item?.path) invalidateMediaCache(item.path);
+          });
         }
         return prev.filter((m) => m.id !== messageId);
       });
@@ -173,18 +338,44 @@ export default function ChatsPage() {
     [loadChats]
   );
 
+  const handleMessageEdited = useCallback((message) => {
+    if (!message?.id) return;
+    setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, ...message } : m)));
+    const chatId = message?.chat ? String(message.chat) : null;
+    if (!chatId) return;
+    setChats((prev) => {
+      const idx = prev.findIndex((c) => String(c.id) === chatId);
+      if (idx < 0) return prev;
+      const current = prev[idx];
+      if (String(current.last_message?.id) !== String(message.id)) return prev;
+      const next = [...prev];
+      next[idx] = {
+        ...current,
+        last_message: { ...current.last_message, ...message },
+      };
+      return next;
+    });
+  }, []);
+
   const handleTyping = useCallback((data) => {
     if (data.user_id === user?.id) return;
     setPartnerTyping(Boolean(data.is_typing));
   }, [user?.id]);
 
-  const { connected, sendMessage, sendTyping, markRead: markMessagesRead } = useWebSocket(selectedChat?.id, {
+  const { connected, sendMessage, editMessage, sendTyping, markRead: markMessagesRead } = useWebSocket(selectedChat?.id, {
     onMessage: handleNewMessage,
     onTyping: handleTyping,
     onDeleted: handleMessageDeleted,
+    onEdited: handleMessageEdited,
     onRead: handleMessagesRead,
   });
   markReadRef.current = markMessagesRead;
+
+  // When the open chat is connected and the user is active, mark backlog as read.
+  useEffect(() => {
+    if (!selectedChat?.id || !connected || isIdle) return;
+    markMessagesRead();
+  }, [selectedChat?.id, connected, isIdle, markMessagesRead]);
 
   const {
     items: notifications,
@@ -218,6 +409,7 @@ export default function ChatsPage() {
         if (chat && String(selectedChat?.id) !== String(chat.id)) {
           clearPendingAttachments();
           setSelectedChat(chat);
+          persistSelectedChat(chat);
           setPartnerTyping(false);
           setInput('');
           setCodeMode(false);
@@ -228,7 +420,7 @@ export default function ChatsPage() {
         // панель уже открыта
       }
     },
-    [chats, selectedChat?.id, loadMessages, clearPendingAttachments]
+    [chats, selectedChat?.id, loadMessages, clearPendingAttachments, persistSelectedChat]
   );
 
   const handleNotification = useCallback(
@@ -279,9 +471,27 @@ export default function ChatsPage() {
     });
   }, [loadChats]);
 
+  const handleCallEvent = useCallback((event) => {
+    dispatchCallEvent(event);
+    if (event.action !== 'call.incoming') return;
+    const eventCall = event.call || event;
+    const chatId = eventCall.chat_id
+      || (typeof eventCall.chat === 'object' ? eventCall.chat?.id : eventCall.chat);
+    if (!chatId) return;
+    setChats((prev) => {
+      const index = prev.findIndex((item) => String(item.id) === String(chatId));
+      if (index < 0) {
+        loadChats();
+        return prev;
+      }
+      return [prev[index], ...prev.filter((_, itemIndex) => itemIndex !== index)];
+    });
+  }, [dispatchCallEvent, loadChats]);
+
   const { isOnline, getLastSeen } = usePresence(Boolean(user), {
     onChatPreview: applyChatPreview,
     onNotification: handleNotification,
+    onCallEvent: handleCallEvent,
   });
 
   const handleInvitePrivate = async () => {
@@ -401,9 +611,69 @@ export default function ChatsPage() {
     lastTypingSentRef.current = false;
   }, [selectedChat?.id]);
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  useEffect(() => () => {
+    if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+  }, []);
+
+  useLayoutEffect(() => {
+    const container = messagesAreaRef.current;
+    const previous = prependScrollRef.current;
+    if (container && previous) {
+      container.scrollTop =
+        container.scrollHeight - previous.scrollHeight + previous.scrollTop;
+      prependScrollRef.current = null;
+      return;
+    }
+    if (!container || !shouldStickToBottomRef.current) return;
+    container.scrollTop = container.scrollHeight;
+    requestAnimationFrame(() => {
+      if (!messagesAreaRef.current || !shouldStickToBottomRef.current) return;
+      messagesAreaRef.current.scrollTop = messagesAreaRef.current.scrollHeight;
+      suppressHistoryLoadRef.current = false;
+    });
   }, [messages, partnerTyping]);
+
+  const jumpToMessage = useCallback(async (messageId) => {
+    if (!selectedChat?.id || !messageId) return;
+
+    if (highlightTimeoutRef.current) {
+      clearTimeout(highlightTimeoutRef.current);
+      highlightTimeoutRef.current = null;
+    }
+    setHighlightedMessageId(String(messageId));
+    shouldStickToBottomRef.current = false;
+
+    const scrollToTarget = () => {
+      const el = messagesAreaRef.current?.querySelector(
+        `[data-message-id="${CSS.escape(String(messageId))}"]`
+      );
+      if (!el) return false;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return true;
+    };
+
+    if (scrollToTarget()) {
+      highlightTimeoutRef.current = setTimeout(() => setHighlightedMessageId(null), 2200);
+      return;
+    }
+
+    suppressHistoryLoadRef.current = true;
+    try {
+      const { data } = await chatsApi.messages(selectedChat.id, {
+        around: messageId,
+        limit: 100,
+      });
+      setMessages(Array.isArray(data) ? data : []);
+      setHasMoreMessages(true);
+      requestAnimationFrame(() => {
+        scrollToTarget();
+        suppressHistoryLoadRef.current = false;
+      });
+    } catch {
+      suppressHistoryLoadRef.current = false;
+    }
+    highlightTimeoutRef.current = setTimeout(() => setHighlightedMessageId(null), 2200);
+  }, [selectedChat?.id]);
 
   const stopTyping = useCallback(() => {
     if (typingTimeoutRef.current) {
@@ -442,6 +712,9 @@ export default function ChatsPage() {
         typeof crypto !== 'undefined' && crypto.randomUUID
           ? crypto.randomUUID()
           : `c-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const attachments = Array.isArray(metadata.attachments)
+        ? metadata.attachments.slice(0, 10)
+        : undefined;
       const optimistic = {
         id: `temp-${clientId}`,
         client_id: clientId,
@@ -458,7 +731,12 @@ export default function ChatsPage() {
         file_name: metadata.file_name || '',
         mime_type: metadata.mime_type || '',
         file_size: metadata.file_size ?? null,
+        attachments,
+        caption: metadata.caption || '',
+        waveform: Array.isArray(metadata.waveform) ? metadata.waveform : [],
+        voice_duration_ms: metadata.voice_duration_ms ?? null,
         sent_at: new Date().toISOString(),
+        edited_at: null,
         read_at: null,
       };
       setMessages((prev) => [...prev, optimistic]);
@@ -471,24 +749,207 @@ export default function ChatsPage() {
     [selectedChat?.id, sendMessage, user]
   );
 
-  const uploadAndSendFiles = async (files) => {
+  const uploadAndSendFiles = async (files, extra = {}) => {
+    const caption = (extra.caption || '').trim();
+    const voiceMeta = extra.waveform || extra.voiceDurationMs != null
+      ? { waveform: extra.waveform, voiceDurationMs: extra.voiceDurationMs }
+      : null;
     const { data } = await chatsApi.uploadMessageFiles(selectedChat.id, files);
     const uploaded = data.files || [];
     let allSent = true;
-    uploaded.forEach((item) => {
-      const ok = enqueueOptimistic(item.path, item.message_type, {
+
+    const photos = uploaded.filter((item) => item.message_type === 'photo');
+    const others = uploaded.filter((item) => item.message_type !== 'photo');
+
+    if (photos.length) {
+      photos.forEach((item) => {
+        if (item.path && item.content_url) {
+          warmMediaCache(item.path, item.content_url);
+        }
+      });
+      const attachments = photos.map((item) => ({
+        path: item.path,
         file_name: item.file_name,
         mime_type: item.mime_type,
         file_size: item.file_size,
         content_url: item.content_url,
+      }));
+      const first = attachments[0];
+      const content = caption || first.path;
+      const ok = enqueueOptimistic(content, 'photo', {
+        file_name: first.file_name,
+        mime_type: first.mime_type,
+        file_size: first.file_size,
+        content_url: first.content_url,
+        attachments,
+        caption: caption || '',
       });
       if (!ok) allSent = false;
-      if (item.message_type === 'photo' && item.path && item.content_url) {
-        warmMediaCache(item.path, item.content_url);
-      }
+    }
+
+    others.forEach((item) => {
+      const isVoice = item.message_type === 'voice' || Boolean(voiceMeta);
+      const ok = enqueueOptimistic(item.path, isVoice ? 'voice' : item.message_type, {
+        file_name: item.file_name,
+        mime_type: item.mime_type,
+        file_size: item.file_size,
+        content_url: item.content_url,
+        waveform: voiceMeta?.waveform || [],
+        voice_duration_ms: voiceMeta?.voiceDurationMs ?? null,
+      });
+      if (!ok) allSent = false;
     });
+
     if (!allSent) {
       throw new Error('Файл загружен, но WebSocket отключился — обновите страницу');
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const detectMic = async () => {
+      if (!canUseMicrophone()) {
+        if (!cancelled) setMicAvailable(false);
+        return;
+      }
+      try {
+        if (navigator.mediaDevices.enumerateDevices) {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const hasInput = devices.some((device) => device.kind === 'audioinput');
+          if (!cancelled) setMicAvailable(hasInput || devices.length === 0);
+          return;
+        }
+      } catch {
+        // fallback below
+      }
+      if (!cancelled) setMicAvailable(true);
+    };
+    detectMic();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => () => {
+    voiceRecorderRef.current?.cancel?.();
+    voiceRecorderRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (!voiceRecorderRef.current) return;
+      voiceRecorderRef.current.cancel?.();
+      voiceRecorderRef.current = null;
+      setVoiceRecording(false);
+      setVoiceElapsedMs(0);
+      setVoiceLiveWaveform([]);
+    };
+  }, [selectedChat?.id]);
+
+  const formatVoiceClock = (milliseconds) => {
+    const seconds = Math.max(0, Math.floor((milliseconds || 0) / 1000));
+    return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+  };
+
+  const startVoiceRecording = async (event) => {
+    event.preventDefault();
+    if (
+      !selectedChat
+      || !micAvailable
+      || voiceRecording
+      || voiceBusy
+      || uploading
+      || codeMode
+    ) {
+      return;
+    }
+    if (!connected) {
+      setAttachError('Нет соединения с чатом — подождите и попробуйте снова');
+      return;
+    }
+
+    stopTyping();
+    setAttachError('');
+    const recorder = new VoiceRecorder();
+    voiceRecorderRef.current = recorder;
+    try {
+      await recorder.start(({ elapsedMs, waveform }) => {
+        setVoiceElapsedMs(elapsedMs);
+        setVoiceLiveWaveform(waveform.slice(-28));
+      });
+      setVoiceRecording(true);
+      setVoiceElapsedMs(0);
+      setVoiceLiveWaveform([]);
+    } catch (err) {
+      voiceRecorderRef.current = null;
+      setVoiceRecording(false);
+      setMicAvailable(false);
+      setAttachError(err.message || 'Не удалось получить доступ к микрофону');
+    }
+  };
+
+  const cancelVoiceRecording = async () => {
+    const recorder = voiceRecorderRef.current;
+    voiceRecorderRef.current = null;
+    setVoiceRecording(false);
+    setVoiceElapsedMs(0);
+    setVoiceLiveWaveform([]);
+    if (recorder) {
+      await recorder.cancel();
+    }
+  };
+
+  const stopVoiceBeforeCall = async () => {
+    if (voiceRecorderRef.current) await cancelVoiceRecording();
+  };
+
+  const handleStartCall = async () => {
+    if (!selectedChat?.id) return;
+    await stopVoiceBeforeCall();
+    stopTyping();
+    callController.startCall(selectedChat.id);
+  };
+
+  const handleAcceptCall = async () => {
+    await stopVoiceBeforeCall();
+    stopTyping();
+    callController.acceptCall();
+  };
+
+  const sendVoiceRecording = async () => {
+    if (!selectedChat || voiceBusy) return;
+    const recorder = voiceRecorderRef.current;
+    if (!recorder) return;
+
+    setVoiceBusy(true);
+    setAttachError('');
+    try {
+      const result = await recorder.stop(true);
+      voiceRecorderRef.current = null;
+      setVoiceRecording(false);
+      setVoiceElapsedMs(0);
+      setVoiceLiveWaveform([]);
+
+      if (!result) {
+        setAttachError('Запись слишком короткая');
+        return;
+      }
+      if (!connected) {
+        setAttachError('Нет соединения с чатом — подождите и попробуйте снова');
+        return;
+      }
+
+      setUploading(true);
+      await uploadAndSendFiles([result.file], {
+        waveform: result.waveform,
+        voiceDurationMs: result.voiceDurationMs,
+      });
+    } catch (err) {
+      setAttachError(err.response?.data?.detail || err.message || 'Не удалось отправить голосовое');
+      await cancelVoiceRecording();
+    } finally {
+      setUploading(false);
+      setVoiceBusy(false);
     }
   };
 
@@ -556,20 +1017,31 @@ export default function ChatsPage() {
     stopTyping();
     setAttachError('');
 
-    if (text) {
+    if (!hasFiles) {
       const ok = enqueueOptimistic(text, 'text');
       if (!ok) {
         setAttachError('Не удалось отправить сообщение');
         return;
       }
       setInput('');
+      return;
     }
 
-    if (!hasFiles) return;
-
+    const hasPhotos = pendingAttachments.some((item) => item.file?.type?.startsWith('image/'));
     setUploading(true);
     try {
-      await uploadAndSendFiles(pendingAttachments.map((item) => item.file));
+      await uploadAndSendFiles(
+        pendingAttachments.map((item) => item.file),
+        { caption: hasPhotos ? text : '' }
+      );
+      // Text without photos stays a separate message.
+      if (text && !hasPhotos) {
+        const ok = enqueueOptimistic(text, 'text');
+        if (!ok) {
+          setAttachError('Файлы отправлены, но текст не удалось отправить');
+        }
+      }
+      setInput('');
       clearPendingAttachments();
     } catch (err) {
       setAttachError(err.response?.data?.detail || err.message || 'Не удалось загрузить файлы');
@@ -578,8 +1050,20 @@ export default function ChatsPage() {
     }
   };
 
-  const handleFileChange = (e) => {
-    const picked = Array.from(e.target.files || []);
+  const handleEditMessage = useCallback((messageId, content) => {
+    if (!connected) {
+      setAttachError('Нет соединения с чатом — подождите и попробуйте снова');
+      return false;
+    }
+    const ok = editMessage(messageId, content);
+    if (!ok) {
+      setAttachError('Не удалось отредактировать сообщение');
+    }
+    return ok;
+  }, [connected, editMessage]);
+
+  const addPendingFiles = useCallback((fileList) => {
+    const picked = Array.from(fileList || []).filter(Boolean);
     if (!picked.length) return;
 
     setPendingAttachments((prev) => {
@@ -597,21 +1081,73 @@ export default function ChatsPage() {
           break;
         }
         if (file.size > MAX_FILE_SIZE_BYTES) {
-          error = `«${file.name}» больше 300 МБ`;
+          error = `«${file.name || 'файл'}» больше 300 МБ`;
           continue;
         }
         accepted.push({
-          id: `${file.name}-${file.size}-${file.lastModified}-${Math.random()}`,
+          id: `${file.name || 'paste'}-${file.size}-${file.lastModified || Date.now()}-${Math.random()}`,
           file,
           previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
         });
       }
       setAttachError(error);
-      return [...prev, ...accepted];
+      return accepted.length ? [...prev, ...accepted] : prev;
     });
+  }, []);
 
+  const handleFileChange = (e) => {
+    addPendingFiles(e.target.files);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
+
+  const handlePasteFiles = useCallback(
+    (event) => {
+      if (!selectedChat || codeMode || voiceRecording || uploading) return;
+      if (
+        event.currentTarget !== messageInputRef.current
+        || document.activeElement !== messageInputRef.current
+      ) {
+        return;
+      }
+
+      const clipboard = event.clipboardData;
+      if (!clipboard) return;
+
+      const imageItems = Array.from(clipboard.items || []).filter(
+        (item) => item.kind === 'file' && item.type.startsWith('image/')
+      );
+      const clipboardFiles = Array.from(clipboard.files || []).filter((file) =>
+        file.type?.startsWith('image/')
+      );
+
+      // A screenshot may be exposed in several formats; one Ctrl+V adds one image.
+      const sourceFile = imageItems[0]?.getAsFile() || clipboardFiles[0];
+      if (!sourceFile) return;
+      event.preventDefault();
+      event.stopPropagation();
+
+      // Some Windows screenshot tools dispatch two paste events for one Ctrl+V.
+      const now = Date.now();
+      if (now - lastImagePasteAtRef.current < 2000) return;
+      lastImagePasteAtRef.current = now;
+
+      const rawExt = (sourceFile.type.split('/')[1] || 'png').toLowerCase();
+      const ext = rawExt === 'jpeg' ? 'jpg' : rawExt;
+      const hasName = Boolean(
+        sourceFile.name
+        && sourceFile.name.trim()
+        && sourceFile.name !== 'image.png'
+      );
+      const image = hasName
+        ? sourceFile
+        : new File([sourceFile], `paste-${now}.${ext}`, {
+            type: sourceFile.type || `image/${ext === 'jpg' ? 'jpeg' : ext}`,
+            lastModified: now,
+          });
+      addPendingFiles([image]);
+    },
+    [addPendingFiles, codeMode, selectedChat, uploading, voiceRecording]
+  );
 
   const handleToggleReaction = useCallback((messageId, emoji) => {
     setMessageReactions((prev) => {
@@ -650,8 +1186,13 @@ export default function ChatsPage() {
     try {
       await chatsApi.deleteMessage(selectedChat.id, messageId, scope);
       const removed = messages.find((m) => m.id === messageId);
-      if (scope === 'everyone' && removed?.message_type === 'photo' && removed.content) {
-        invalidateMediaCache(removed.content);
+      if (scope === 'everyone' && removed?.message_type === 'photo') {
+        const items = Array.isArray(removed.attachments) && removed.attachments.length
+          ? removed.attachments
+          : [{ path: removed.content }];
+        items.forEach((item) => {
+          if (item?.path) invalidateMediaCache(item.path);
+        });
       }
       setMessages((prev) => prev.filter((m) => m.id !== messageId));
       setMessageReactions((prev) => {
@@ -665,6 +1206,20 @@ export default function ChatsPage() {
       // ignore
     }
   };
+
+  const resizeMessageInput = useCallback(() => {
+    const el = messageInputRef.current;
+    if (!el) return;
+    el.style.height = '0px';
+    const styles = window.getComputedStyle(el);
+    const lineHeight = Number.parseFloat(styles.lineHeight) || 24;
+    const paddingY =
+      (Number.parseFloat(styles.paddingTop) || 0) + (Number.parseFloat(styles.paddingBottom) || 0);
+    const minHeight = lineHeight + paddingY;
+    const maxHeight = lineHeight * 2 + paddingY;
+    const nextHeight = Math.min(Math.max(el.scrollHeight, minHeight), maxHeight);
+    el.style.height = `${nextHeight}px`;
+  }, []);
 
   const handleInputChange = (value) => {
     setInput(value);
@@ -686,6 +1241,11 @@ export default function ChatsPage() {
       lastTypingSentRef.current = false;
     }, 1500);
   };
+
+  useEffect(() => {
+    if (codeMode) return;
+    resizeMessageInput();
+  }, [input, codeMode, selectedChat?.id, resizeMessageInput]);
 
   const clearEmojiHideTimeout = useCallback(() => {
     if (emojiHideTimeoutRef.current) {
@@ -789,12 +1349,10 @@ export default function ChatsPage() {
     setIsBackModeOpen(false);
     setIsSpecialFavoritesOpen(true);
   }, []);
-
   const unlockBack = useCallback(() => {
     setIsSpecialFavoritesOpen(false);
     setIsBackModeOpen(true);
   }, []);
-
   useSecretSequenceShortcut(FRONT_SEQUENCE, unlockFront);
   useSecretSequenceShortcut(BACK_SEQUENCE, unlockBack);
 
@@ -862,13 +1420,27 @@ export default function ChatsPage() {
         isSpecialFavoritesOpen ? 'chats-page--special' : '',
         isBackModeOpen ? 'chats-page--back' : '',
         selectedChat ? 'has-selected-chat' : '',
+        callScreenVisible ? 'chats-page--call-active' : '',
       ]
         .filter(Boolean)
         .join(' ')}
     >
+      {callController.status === 'incoming' && (
+        <IncomingCallOverlay
+          partner={callController.partner}
+          error={callController.error}
+          onAccept={handleAcceptCall}
+          onReject={callController.rejectCall}
+        />
+      )}
+      {callController.status === 'ended' && callController.error && (
+        <div className="call-error-toast" role="alert">{callController.error}</div>
+      )}
       {isSpecialFavoritesOpen && <ChatDevStatusBar variant="front" />}
       {isBackModeOpen && <ChatDevStatusBar variant="back" />}
-      {isSpecialFavoritesOpen && <div className="chat-dev-grid" aria-hidden="true" />}
+      {isSpecialFavoritesOpen && (
+        <div className="chat-dev-grid" aria-hidden="true" />
+      )}
       {isBackModeOpen && <div className="chat-back-rain" aria-hidden="true" />}
       {isBackModeOpen && (
         <div className="chat-back-banner" aria-hidden="true">
@@ -879,9 +1451,23 @@ export default function ChatsPage() {
       <ChatIconRail
         user={user}
         onLogout={handleLogout}
+        onOpenSettings={() => {
+          setAccountSettingsOpen(true);
+          setIsSpecialFavoritesOpen(false);
+          setIsBackModeOpen(false);
+        }}
+        settingsActive={accountSettingsOpen}
         specialMode={isSpecialFavoritesOpen}
         backMode={isBackModeOpen}
       />
+      {accountSettingsOpen ? (
+        <AccountSettings
+          user={user}
+          onUserUpdated={updateUser}
+          onClose={() => setAccountSettingsOpen(false)}
+        />
+      ) : (
+        <>
       <aside className="chat-sidebar">
         <div className="sidebar-header">
           <h2>{sidebarTitle}</h2>
@@ -934,6 +1520,10 @@ export default function ChatsPage() {
               active={selectedChat?.id === chat.id}
               onSelect={handleSelectChat}
               isOnline={isOnline(chat.partner?.id, chat.partner?.is_online)}
+              ringing={
+                callController.status === 'incoming'
+                && String(callChatId) === String(chat.id)
+              }
             />
           ))}
         </ul>
@@ -952,6 +1542,8 @@ export default function ChatsPage() {
               onInvitePrivate={handleInvitePrivate}
               privateBusy={privateBusy || invitePending || Boolean(privateSessionId)}
               onOpenDetails={() => setDetailsPanelOpen(true)}
+              onStartCall={handleStartCall}
+              callDisabled={!selectedChat?.partner || !['idle', 'ended'].includes(callController.status)}
             />
             {invitePending && !privateSessionId && (
               <div className="private-invite-banner">
@@ -965,7 +1557,15 @@ export default function ChatsPage() {
                 </button>
               </div>
             )}
-            <div className="messages-area">
+            <>
+            <div
+              ref={messagesAreaRef}
+              className="messages-area"
+              onScroll={handleMessagesScroll}
+            >
+              {loadingOlderMessages && (
+                <div className="messages-history-loading">Загрузка истории…</div>
+              )}
               {groupMessagesByDay(messages).map((group) => (
                 <div key={group.key} className="message-day-group">
                   <div className="message-day-separator">
@@ -977,11 +1577,13 @@ export default function ChatsPage() {
                       message={msg}
                       isOwn={msg.sender?.id === user?.id}
                       onDelete={handleDeleteMessage}
+                      onEdit={handleEditMessage}
                       chatId={selectedChat.id}
                       specialMode={isSpecialFavoritesOpen}
                       backMode={isBackModeOpen}
                       reactions={messageReactions[msg.id] || []}
                       onToggleReaction={handleToggleReaction}
+                      highlighted={String(highlightedMessageId) === String(msg.id)}
                     />
                   ))}
                 </div>
@@ -1052,6 +1654,44 @@ export default function ChatsPage() {
                   <span className="message-input-formatbar__btn">ø</span>
                 </div>
               )}
+              {voiceRecording && (
+                <div className="voice-record-bar" role="status" aria-live="polite">
+                  <button
+                    type="button"
+                    className="voice-record-cancel"
+                    onClick={cancelVoiceRecording}
+                    title="Отменить запись"
+                    aria-label="Отменить запись"
+                    disabled={voiceBusy}
+                  >
+                    <span className="voice-record-cancel__square" />
+                  </button>
+                  <div className="voice-record-live">
+                    <span className="voice-record-dot" />
+                    <span className="voice-record-timer">{formatVoiceClock(voiceElapsedMs)}</span>
+                    <div className="voice-record-waveform" aria-hidden="true">
+                      {(voiceLiveWaveform.length ? voiceLiveWaveform : Array(16).fill(0.2)).map((level, index) => (
+                        <span
+                          key={`voice-bar-${index}`}
+                          style={{ height: `${18 + level * 18}px` }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="voice-record-send"
+                    onClick={sendVoiceRecording}
+                    title="Отправить голосовое"
+                    aria-label="Отправить голосовое"
+                    disabled={voiceBusy || voiceElapsedMs < 400}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+                      <path d="M5 12.5l4.5 4.5L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                </div>
+              )}
               <div className="message-input-row">
                 <div className="message-input-toolbar">
                   <button
@@ -1060,7 +1700,7 @@ export default function ChatsPage() {
                     onClick={() => fileInputRef.current?.click()}
                     title="Прикрепить файлы (до 10, до 300 МБ)"
                     aria-label="Прикрепить файлы"
-                    disabled={codeMode || pendingAttachments.length >= MAX_ATTACHMENTS || uploading}
+                    disabled={codeMode || voiceRecording || pendingAttachments.length >= MAX_ATTACHMENTS || uploading}
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
                       <path
@@ -1076,7 +1716,7 @@ export default function ChatsPage() {
                     onClick={toggleCodeMode}
                     title={codeMode ? 'Обычное сообщение' : 'Написать код'}
                     aria-label={codeMode ? 'Обычное сообщение' : 'Написать код'}
-                    disabled={uploading}
+                    disabled={uploading || voiceRecording}
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
                       <path d="M8 6L2 12l6 6M16 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
@@ -1093,7 +1733,7 @@ export default function ChatsPage() {
                         className="btn-emoji"
                         title="Эмодзи"
                         aria-label="Эмодзи"
-                        disabled={uploading}
+                        disabled={uploading || voiceRecording}
                       >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
                           <circle cx="12" cy="12" r="10" />
@@ -1109,6 +1749,24 @@ export default function ChatsPage() {
                         onSelect={handleEmojiSelect}
                       />
                     </div>
+                  )}
+                  {!codeMode && (
+                    <button
+                      type="button"
+                      className={`btn-voice ${voiceRecording ? 'active' : ''}`}
+                      title={micAvailable ? 'Зажмите, чтобы записать голосовое' : 'Микрофон недоступен'}
+                      aria-label={micAvailable ? 'Записать голосовое' : 'Микрофон недоступен'}
+                      disabled={!micAvailable || uploading || voiceBusy}
+                      onPointerDown={startVoiceRecording}
+                      onContextMenu={(event) => event.preventDefault()}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+                        <rect x="9" y="3" width="6" height="11" rx="3" />
+                        <path d="M6 11a6 6 0 0 0 12 0" strokeLinecap="round" />
+                        <line x1="12" y1="17" x2="12" y2="21" strokeLinecap="round" />
+                        <line x1="9" y1="21" x2="15" y2="21" strokeLinecap="round" />
+                      </svg>
+                    </button>
                   )}
                   <input
                     ref={fileInputRef}
@@ -1157,11 +1815,21 @@ export default function ChatsPage() {
                       </div>
                     </>
                   ) : (
-                    <input
-                      type="text"
+                    <textarea
+                      ref={messageInputRef}
+                      className="message-input-textarea"
+                      rows={1}
                       value={input}
                       onChange={(e) => handleInputChange(e.target.value)}
+                      onPaste={handlePasteFiles}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          e.currentTarget.form?.requestSubmit();
+                        }
+                      }}
                       onBlur={stopTyping}
+                      disabled={voiceRecording}
                       placeholder={inputPlaceholder}
                     />
                   )}
@@ -1170,6 +1838,7 @@ export default function ChatsPage() {
                   type="submit"
                   disabled={
                     uploading
+                    || voiceRecording
                     || (codeMode
                       ? !input.trim() || !codeLanguage || !codeFileName.trim()
                       : !input.trim() && pendingAttachments.length === 0)
@@ -1179,6 +1848,7 @@ export default function ChatsPage() {
                 </button>
               </div>
             </form>
+            </>
           </>
         ) : (
           <div className="chat-empty">
@@ -1186,14 +1856,36 @@ export default function ChatsPage() {
           </div>
         )}
       </main>
-      {detailsPanelOpen && selectedChat && (
-        <ChatDetailsPanel
-          partner={selectedChat.partner}
-          isOnline={isOnline(selectedChat.partner?.id, selectedChat.partner?.is_online)}
-          onClose={() => setDetailsPanelOpen(false)}
+      {callScreenVisible ? (
+        <CallScreen
+          partner={callController.partner}
+          status={callController.status}
+          elapsedSeconds={callController.elapsedSeconds}
+          muted={callController.muted}
+          speakerMuted={callController.speakerMuted}
+          error={callController.error}
+          remoteAudioRef={callController.remoteAudioRef}
+          onToggleMute={callController.toggleMute}
+          onToggleSpeakerMute={callController.toggleSpeakerMute}
+          onEnd={
+            callController.status === 'outgoing'
+              ? callController.cancelCall
+              : callController.hangup
+          }
           specialMode={isSpecialFavoritesOpen}
-          backMode={isBackModeOpen}
         />
+      ) : (
+        detailsPanelOpen && selectedChat && (
+          <ChatDetailsPanel
+            chatId={selectedChat.id}
+            partner={selectedChat.partner}
+            isOnline={isOnline(selectedChat.partner?.id, selectedChat.partner?.is_online)}
+            onClose={() => setDetailsPanelOpen(false)}
+            specialMode={isSpecialFavoritesOpen}
+            backMode={isBackModeOpen}
+            onJumpToMessage={jumpToMessage}
+          />
+        )
       )}
       {privateSessionId && (
         <PrivatePanel
@@ -1204,6 +1896,8 @@ export default function ChatsPage() {
             setInvitePending(false);
           }}
         />
+      )}
+        </>
       )}
       </div>
     </div>

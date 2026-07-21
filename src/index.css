@@ -343,7 +343,7 @@ select:autofill {
 }
 
 .message {
-  max-width: 70%;
+  max-width: min(420px, 58%);
   padding: 10px 14px;
   border-radius: 12px;
   position: relative;
@@ -366,7 +366,77 @@ select:autofill {
 }
 
 .message-content {
+  font-size: 13px;
+  line-height: 1.35;
   word-break: break-word;
+}
+
+.message-caption {
+  margin-top: 6px;
+}
+
+.message-edited {
+  margin-left: 4px;
+  font-size: 0.85em;
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.message-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 180px;
+}
+
+.message-edit-input {
+  width: 100%;
+  min-height: 56px;
+  resize: vertical;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+  color: inherit;
+  background: rgba(0, 0, 0, 0.18);
+  box-sizing: border-box;
+}
+
+.message.other .message-edit-input {
+  border-color: rgba(0, 0, 0, 0.15);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.message-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.message-edit-cancel,
+.message-edit-save {
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.message-edit-cancel {
+  background: transparent;
+  color: inherit;
+  opacity: 0.8;
+}
+
+.message-edit-save {
+  background: rgba(255, 255, 255, 0.2);
+  color: inherit;
+}
+
+.message-edit-save:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .message-time {
@@ -401,11 +471,18 @@ select:autofill {
 
 .message-status-read {
   opacity: 0.95;
-  color: #b7f0c4;
+  color: #73b7ff;
 }
 
 .message.own .message-status-read {
-  color: #d4ffe0;
+  color: #8ac5ff;
+}
+
+.message-status-checks {
+  display: block;
+  width: 14px;
+  height: 9px;
+  flex-shrink: 0;
 }
 
 .message-status-label {
@@ -433,21 +510,48 @@ select:autofill {
 
 .message-actions {
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
 }
 
-.message-menu-btn {
+.message-wrapper:hover .message-actions,
+.message-actions.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.message-action-btn {
   border: none;
   background: transparent;
   color: inherit;
-  opacity: 0.6;
+  opacity: 0.7;
   cursor: pointer;
-  padding: 0 4px;
+  padding: 2px 4px;
   font-size: 16px;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
 }
 
-.message-menu-btn:hover {
+.message-action-btn:hover {
   opacity: 1;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.message-edit-btn {
+  width: 24px;
+  height: 24px;
+}
+
+.message-menu-btn {
+  min-width: 24px;
+  height: 24px;
 }
 
 .message-menu {
@@ -488,6 +592,11 @@ select:autofill {
   object-fit: cover;
 }
 
+/* Fallback if chats.css not loaded for older layouts */
+.message-bubble .photo-gallery {
+  margin-top: 2px;
+}
+
 .message-file {
   display: flex;
   align-items: center;
@@ -510,6 +619,78 @@ select:autofill {
 .message-file-name {
   word-break: break-all;
   font-size: 14px;
+}
+
+.voice-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(320px, 55vw);
+  min-width: 220px;
+}
+
+.voice-message audio {
+  display: none;
+}
+
+.voice-message-toggle {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.2);
+  color: inherit;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.message.own .voice-message-toggle {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.voice-message-toggle:disabled,
+.voice-message-waveform:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.voice-message-waveform {
+  height: 30px;
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.voice-message-waveform span {
+  min-width: 1px;
+  max-width: 3px;
+  flex: 1;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.3;
+}
+
+.voice-message-waveform span.active {
+  opacity: 0.95;
+}
+
+.voice-message-duration,
+.voice-message-error {
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0.8;
 }
 
 .message-code-wrap {
@@ -938,10 +1119,24 @@ select:autofill {
   font-size: 18px;
   line-height: 1;
   border-radius: 8px;
+  color: #8492ad;
 }
 
 .notif-bell-btn:hover {
   background: #2d3140;
+  color: #aebbd3;
+}
+
+.notif-bell-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notif-bell-icon svg {
+  display: block;
+  width: 21px;
+  height: 21px;
 }
 
 .notif-badge {

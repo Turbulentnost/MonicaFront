@@ -15,7 +15,14 @@ function RailIcon({ children, active, label, onClick, as: Tag = 'button' }) {
   );
 }
 
-export function ChatIconRail({ user, onLogout, specialMode = false, backMode = false }) {
+export function ChatIconRail({
+  user,
+  onLogout,
+  onOpenSettings,
+  settingsActive = false,
+  specialMode = false,
+  backMode = false,
+}) {
   const railClass = [
     'chat-rail',
     specialMode ? 'chat-rail--special' : '',
@@ -30,17 +37,17 @@ export function ChatIconRail({ user, onLogout, specialMode = false, backMode = f
         className="chat-rail__logo"
         aria-label={backMode ? 'BACK mode' : specialMode ? 'FRONT mode' : 'Monica'}
       >
-        <span
-          className={[
-            'chat-rail__logo-mark',
-            specialMode ? 'chat-rail__logo-mark--dev' : '',
-            backMode ? 'chat-rail__logo-mark--back' : '',
-          ]
-            .filter(Boolean)
-            .join(' ')}
-        >
-          {backMode ? '∴' : specialMode ? '</>' : 'M'}
-        </span>
+        {backMode ? (
+          <span className="chat-rail__logo-mark chat-rail__logo-mark--back">∴</span>
+        ) : specialMode ? (
+          <span className="chat-rail__logo-mark chat-rail__logo-mark--dev">{'</>'}</span>
+        ) : (
+          <img
+            className="chat-rail__logo-image"
+            src="/monica-logo.png"
+            alt="Monica"
+          />
+        )}
       </div>
 
       <div className="chat-rail__nav">
@@ -69,7 +76,7 @@ export function ChatIconRail({ user, onLogout, specialMode = false, backMode = f
             <path d="M13.7 21a2 2 0 0 1-3.4 0" strokeLinecap="round" />
           </svg>
         </RailIcon>
-        <RailIcon label={backMode ? 'Конец' : 'Настройки'}>
+        <RailIcon label={backMode ? 'Конец' : 'Настройки'} active={settingsActive} onClick={onOpenSettings}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
             <circle cx="12" cy="12" r="3" />
             <path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4" strokeLinecap="round" />
@@ -90,9 +97,15 @@ export function ChatIconRail({ user, onLogout, specialMode = false, backMode = f
             <path d="M16 17l5-5-5-5M21 12H9" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
-        <div className="chat-rail__avatar">
+        <button
+          type="button"
+          className={`chat-rail__avatar${settingsActive ? ' is-active' : ''}`}
+          onClick={onOpenSettings}
+          aria-label="Настройки аккаунта"
+          title="Настройки аккаунта"
+        >
           <UserAvatar user={user} size={36} showOnline={!backMode} isOnline={!backMode} />
-        </div>
+        </button>
       </div>
     </nav>
   );

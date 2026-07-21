@@ -1,9 +1,18 @@
 import { UserAvatar } from './UserAvatar';
 import { formatChatListTime } from '../../utils/formatChatDate';
+import { getPhotoCaption } from '../../utils/messageText';
 
 function formatPreview(lastMessage) {
   if (!lastMessage) return 'Нет сообщений';
-  if (lastMessage.message_type === 'photo') return 'Фото';
+  if (lastMessage.message_type === 'photo') {
+    const caption = getPhotoCaption(lastMessage);
+    if (caption) return caption;
+    const count = Array.isArray(lastMessage.attachments) && lastMessage.attachments.length > 1
+      ? lastMessage.attachments.length
+      : 1;
+    return count > 1 ? `${count} фото` : 'Фото';
+  }
+  if (lastMessage.message_type === 'voice') return 'Голосовое сообщение';
   if (lastMessage.message_type === 'file') {
     const name = (lastMessage.file_name || '').toLowerCase();
     if (name.endsWith('.py')) return `Python: ${lastMessage.file_name}`;
@@ -13,7 +22,7 @@ function formatPreview(lastMessage) {
   return lastMessage.content || 'Нет сообщений';
 }
 
-export function ChatListItem({ chat, active, onSelect, isOnline }) {
+export function ChatListItem({ chat, active, onSelect, isOnline, ringing = false }) {
   const partner = chat.partner;
   const preview = formatPreview(chat.last_message);
   const timeLabel = formatChatListTime(
@@ -21,7 +30,7 @@ export function ChatListItem({ chat, active, onSelect, isOnline }) {
   );
 
   return (
-    <li className={active ? 'active' : ''}>
+    <li className={[active ? 'active' : '', ringing ? 'ringing' : ''].filter(Boolean).join(' ')}>
       <button type="button" className="chat-item-btn" onClick={() => onSelect(chat)}>
         <UserAvatar user={partner} size={44} showOnline isOnline={isOnline} />
         <span className="chat-item-text">
@@ -29,7 +38,10 @@ export function ChatListItem({ chat, active, onSelect, isOnline }) {
             <span className="chat-item-name">@{partner?.nickname || '—'}</span>
             {timeLabel && <span className="chat-item-time">{timeLabel}</span>}
           </span>
-          <span className="chat-item-preview">{preview}</span>
+          <span className="chat-item-preview">
+            {ringing && <span className="chat-ringing-dot" aria-hidden="true" />}
+            {ringing ? 'Входящий звонок…' : preview}
+          </span>
         </span>
       </button>
     </li>

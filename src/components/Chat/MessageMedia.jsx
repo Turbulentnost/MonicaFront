@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import javascriptLang from 'react-syntax-highlighter/dist/esm/languages/prism/javascript';
 import pythonLang from 'react-syntax-highlighter/dist/esm/languages/prism/python';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { chatsApi } from '../../api/client';
 import { getCachedMediaSrc, warmMediaCache } from '../../utils/mediaCache';
+import { PhotoGallery } from './PhotoGallery';
 
 SyntaxHighlighter.registerLanguage('python', pythonLang);
 SyntaxHighlighter.registerLanguage('javascript', javascriptLang);
@@ -127,17 +128,28 @@ export function MessageMedia({ message, chatId }) {
     }
   };
 
+  const galleryItems = useMemo(() => {
+    if (message.message_type !== 'photo') return [];
+    if (Array.isArray(message.attachments) && message.attachments.length) {
+      return message.attachments;
+    }
+    if (message.content || message.content_url) {
+      return [{
+        path: message.content,
+        content_url: message.content_url,
+        file_name: message.file_name,
+        mime_type: message.mime_type,
+        file_size: message.file_size,
+      }];
+    }
+    return [];
+  }, [message]);
+
   if (message.message_type === 'photo') {
-    if (!src) return <span className="message-content">Фото</span>;
-    return (
-      <img
-        src={src}
-        alt={message.file_name || 'Фото'}
-        className="message-image"
-        loading="lazy"
-        decoding="async"
-      />
-    );
+    if (!galleryItems.length) {
+      return <span className="message-content">Фото</span>;
+    }
+    return <PhotoGallery items={galleryItems} />;
   }
 
   if (codeLang) {

@@ -55,10 +55,19 @@ export const authApi = {
     api.post('/auth/register/complete/', { registration_token: registrationToken }),
   login: (email, password) => api.post('/auth/login/', { email, password }),
   me: () => api.get('/auth/me/'),
+  updateProfile: (data) => api.patch('/auth/me/', data),
+  updateAvatar: (photo) => {
+    const form = new FormData();
+    form.append('photo', photo);
+    return api.post('/auth/me/avatar/', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
 };
 
 export const chatsApi = {
   list: () => api.get('/chats/'),
+  files: (chatId) => api.get(`/chats/${chatId}/files/`),
   messages: (chatId, params) => api.get(`/chats/${chatId}/messages/`, { params }),
   start: (recipientId) => api.post('/chats/start/', { recipient_id: recipientId }),
   searchUsers: (q) => api.get('/users/search/', { params: { q } }),
@@ -79,6 +88,16 @@ export const chatsApi = {
   declinePrivate: (sessionId) => api.post(`/private/${sessionId}/decline/`),
   closePrivate: (sessionId) => api.post(`/private/${sessionId}/close/`),
   leavePrivate: () => api.post('/private/leave/'),
+};
+
+export const callsApi = {
+  start: (chatId, data) => api.post(`/chats/${chatId}/calls/start/`, data),
+  accept: (callId, data) => api.post(`/calls/${callId}/accept/`, data),
+  reject: (callId, data) => api.post(`/calls/${callId}/reject/`, data),
+  cancel: (callId, data) => api.post(`/calls/${callId}/cancel/`, data),
+  hangup: (callId, data) => api.post(`/calls/${callId}/hangup/`, data),
+  active: () => api.get('/calls/active/'),
+  iceConfig: () => api.get('/calls/ice-config/'),
 };
 
 export const notificationsApi = {

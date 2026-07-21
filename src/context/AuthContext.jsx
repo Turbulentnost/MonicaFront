@@ -30,6 +30,10 @@ export function AuthProvider({ children }) {
     setUser(data.user);
   }, []);
 
+  const updateUser = useCallback((nextUser) => {
+    setUser(nextUser);
+  }, []);
+
   useEffect(() => {
     const token = localStorage.getItem('access_token');
     if (!token) {
@@ -44,8 +48,16 @@ export function AuthProvider({ children }) {
   }, [logout]);
 
   const value = useMemo(
-    () => ({ user, loading, login, logout, completeAuth, isAuthenticated: !!user }),
-    [user, loading, login, logout, completeAuth]
+    () => ({
+      user,
+      loading,
+      login,
+      logout,
+      completeAuth,
+      updateUser,
+      isAuthenticated: !!user,
+    }),
+    [user, loading, login, logout, completeAuth, updateUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

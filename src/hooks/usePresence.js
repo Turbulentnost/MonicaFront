@@ -3,7 +3,7 @@ import { notificationsApi } from '../api/client';
 import { WS_URL } from '../config';
 
 /** Presence + realtime in-app notifications on the same WS. */
-export function usePresence(enabled, { onNotification, onChatPreview } = {}) {
+export function usePresence(enabled, { onNotification, onChatPreview, onCallEvent } = {}) {
   const wsRef = useRef(null);
   const [onlineIds, setOnlineIds] = useState(() => new Set());
   const [lastSeenByUser, setLastSeenByUser] = useState(() => ({}));
@@ -14,6 +14,8 @@ export function usePresence(enabled, { onNotification, onChatPreview } = {}) {
   onNotificationRef.current = onNotification;
   const onChatPreviewRef = useRef(onChatPreview);
   onChatPreviewRef.current = onChatPreview;
+  const onCallEventRef = useRef(onCallEvent);
+  onCallEventRef.current = onCallEvent;
 
   useEffect(() => {
     if (!enabled) {
@@ -63,6 +65,9 @@ export function usePresence(enabled, { onNotification, onChatPreview } = {}) {
 
         if (data.action === 'chat.preview' && data.message && onChatPreviewRef.current) {
           onChatPreviewRef.current(data.message);
+        }
+        if (data.action?.startsWith('call.') && onCallEventRef.current) {
+          onCallEventRef.current(data);
         }
       };
 
