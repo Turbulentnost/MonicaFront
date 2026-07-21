@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useNavigate } from 'react-router-dom';
 import { chatsApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -11,6 +18,7 @@ import { ChatIconRail } from '../components/Chat/ChatIconRail';
 import { ChatFilters } from '../components/Chat/ChatFilters';
 import { ChatDetailsPanel } from '../components/Chat/ChatDetailsPanel';
 import { ChatDevStatusBar } from '../components/Chat/ChatDevStatusBar';
+import { AccountSettings } from '../components/AccountSettings';
 import { MessageBubble } from '../components/Chat/MessageBubble';
 import { NotificationBell } from '../components/Chat/NotificationBell';
 import { CodeEditorInput } from '../components/Chat/CodeEditorInput';
@@ -47,11 +55,13 @@ function leavePrivateSessionsBestEffort() {
 }
 
 export default function ChatsPage() {
-  const { user, logout } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const navigate = useNavigate();
   const [chats, setChats] = useState([]);
   const [selectedChat, setSelectedChat] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [input, setInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -69,14 +79,19 @@ export default function ChatsPage() {
   const [chatFilter, setChatFilter] = useState('all');
   const [isSpecialFavoritesOpen, setIsSpecialFavoritesOpen] = useState(false);
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(true);
+  const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [messageReactions, setMessageReactions] = useState({});
   const messagesEndRef = useRef(null);
+  const messagesAreaRef = useRef(null);
+  const loadingOlderRef = useRef(false);
+  const prependScrollRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const lastTypingSentRef = useRef(false);
   const searchDebounceRef = useRef(null);
   const fileInputRef = useRef(null);
   const messageInputRef = useRef(null);
   const markReadRef = useRef(null);
+  const lastImagePasteAtRef = useRef(0);
   const emojiHideTimeoutRef = useRef(null);
   const voiceRecorderRef = useRef(null);
   const [emojiPickerVisible, setEmojiPickerVisible] = useState(false);
@@ -96,8 +111,12 @@ export default function ChatsPage() {
   }, [loadChats]);
 
   const loadMessages = useCallback(async (chatId) => {
-    const { data } = await chatsApi.messages(chatId);
+    const { data } = await chatsApi.messages(chatId, { limit: 100 });
     setMessages(data);
+    setHasMoreMessages(data.length === 100);
+    loadingOlderRef.current = false;
+    setLoadingOlderMessages(false);
+    prependScrollRef.current = null;
     data.forEach((msg) => {
       if (msg.message_type !== 'photo') return;
       const items = Array.isArray(msg.attachments) && msg.attachments.length
@@ -108,6 +127,70 @@ export default function ChatsPage() {
       });
     });
   }, []);
+
+  const loadOlderMessages = useCallback(async () => {
+    if (
+      loadingOlderRef.current
+      || !hasMoreMessages
+      || !selectedChat?.id
+      || messages.length === 0
+    ) {
+      return;
+    }
+
+    const oldestMessage = messages.find((message) => !String(message.id).startsWith('temp-'));
+    if (!oldestMessage) return;
+
+    const container = messagesAreaRef.current;
+    loadingOlderRef.current = true;
+    setLoadingOlderMessages(true);
+    try {
+      const { data } = await chatsApi.messages(selectedChat.id, {
+        limit: 100,
+        before: oldestMessage.id,
+      });
+
+      if (!data.length) {
+        setHasMoreMessages(false);
+        return;
+      }
+
+      if (container) {
+        prependScrollRef.current = {
+          scrollHeight: container.scrollHeight,
+          scrollTop: container.scrollTop,
+        };
+      }
+      setMessages((current) => {
+        const knownIds = new Set(current.map((message) => String(message.id)));
+        const older = data.filter((message) => !knownIds.has(String(message.id)));
+        return older.length ? [...older, ...current] : current;
+      });
+      setHasMoreMessages(data.length === 100);
+      data.forEach((message) => {
+        if (message.message_type !== 'photo') return;
+        const items = Array.isArray(message.attachments) && message.attachments.length
+          ? message.attachments
+          : [{ path: message.content, content_url: message.content_url }];
+        items.forEach((item) => {
+          if (item.path && item.content_url) warmMediaCache(item.path, item.content_url);
+        });
+      });
+    } catch {
+      setAttachError('Не удалось загрузить более старые сообщения');
+    } finally {
+      loadingOlderRef.current = false;
+      setLoadingOlderMessages(false);
+    }
+  }, [hasMoreMessages, messages, selectedChat?.id]);
+
+  const handleMessagesScroll = useCallback((event) => {
+    const container = event.currentTarget;
+    const maxScroll = container.scrollHeight - container.clientHeight;
+    if (maxScroll > 0 && container.scrollTop <= maxScroll * 0.8) {
+      loadOlderMessages();
+    }
+  }, [loadOlderMessages]);
 
   const clearPendingAttachments = useCallback(() => {
     setPendingAttachments((prev) => {
@@ -131,6 +214,7 @@ export default function ChatsPage() {
 
   const handleSelectChat = async (chat) => {
     clearPendingAttachments();
+    setAccountSettingsOpen(false);
     setSelectedChat(chat);
     setPartnerTyping(false);
     setInput('');
@@ -179,8 +263,13 @@ export default function ChatsPage() {
     (messageId) => {
       setMessages((prev) => {
         const removed = prev.find((m) => m.id === messageId);
-        if (removed?.message_type === 'photo' && removed.content) {
-          invalidateMediaCache(removed.content);
+        if (removed?.message_type === 'photo') {
+          const items = Array.isArray(removed.attachments) && removed.attachments.length
+            ? removed.attachments
+            : [{ path: removed.content }];
+          items.forEach((item) => {
+            if (item?.path) invalidateMediaCache(item.path);
+          });
         }
         return prev.filter((m) => m.id !== messageId);
       });
@@ -189,15 +278,35 @@ export default function ChatsPage() {
     [loadChats]
   );
 
+  const handleMessageEdited = useCallback((message) => {
+    if (!message?.id) return;
+    setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, ...message } : m)));
+    const chatId = message?.chat ? String(message.chat) : null;
+    if (!chatId) return;
+    setChats((prev) => {
+      const idx = prev.findIndex((c) => String(c.id) === chatId);
+      if (idx < 0) return prev;
+      const current = prev[idx];
+      if (String(current.last_message?.id) !== String(message.id)) return prev;
+      const next = [...prev];
+      next[idx] = {
+        ...current,
+        last_message: { ...current.last_message, ...message },
+      };
+      return next;
+    });
+  }, []);
+
   const handleTyping = useCallback((data) => {
     if (data.user_id === user?.id) return;
     setPartnerTyping(Boolean(data.is_typing));
   }, [user?.id]);
 
-  const { connected, sendMessage, sendTyping, markRead: markMessagesRead } = useWebSocket(selectedChat?.id, {
+  const { connected, sendMessage, editMessage, sendTyping, markRead: markMessagesRead } = useWebSocket(selectedChat?.id, {
     onMessage: handleNewMessage,
     onTyping: handleTyping,
     onDeleted: handleMessageDeleted,
+    onEdited: handleMessageEdited,
     onRead: handleMessagesRead,
   });
   markReadRef.current = markMessagesRead;
@@ -417,7 +526,15 @@ export default function ChatsPage() {
     lastTypingSentRef.current = false;
   }, [selectedChat?.id]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const container = messagesAreaRef.current;
+    const previous = prependScrollRef.current;
+    if (container && previous) {
+      container.scrollTop =
+        container.scrollHeight - previous.scrollHeight + previous.scrollTop;
+      prependScrollRef.current = null;
+      return;
+    }
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, partnerTyping]);
 
@@ -478,9 +595,11 @@ export default function ChatsPage() {
         mime_type: metadata.mime_type || '',
         file_size: metadata.file_size ?? null,
         attachments,
+        caption: metadata.caption || '',
         waveform: Array.isArray(metadata.waveform) ? metadata.waveform : [],
         voice_duration_ms: metadata.voice_duration_ms ?? null,
         sent_at: new Date().toISOString(),
+        edited_at: null,
         read_at: null,
       };
       setMessages((prev) => [...prev, optimistic]);
@@ -493,7 +612,11 @@ export default function ChatsPage() {
     [selectedChat?.id, sendMessage, user]
   );
 
-  const uploadAndSendFiles = async (files, voiceMeta = null) => {
+  const uploadAndSendFiles = async (files, extra = {}) => {
+    const caption = (extra.caption || '').trim();
+    const voiceMeta = extra.waveform || extra.voiceDurationMs != null
+      ? { waveform: extra.waveform, voiceDurationMs: extra.voiceDurationMs }
+      : null;
     const { data } = await chatsApi.uploadMessageFiles(selectedChat.id, files);
     const uploaded = data.files || [];
     let allSent = true;
@@ -515,12 +638,14 @@ export default function ChatsPage() {
         content_url: item.content_url,
       }));
       const first = attachments[0];
-      const ok = enqueueOptimistic(first.path, 'photo', {
+      const content = caption || first.path;
+      const ok = enqueueOptimistic(content, 'photo', {
         file_name: first.file_name,
         mime_type: first.mime_type,
         file_size: first.file_size,
         content_url: first.content_url,
         attachments,
+        caption: caption || '',
       });
       if (!ok) allSent = false;
     }
@@ -738,20 +863,31 @@ export default function ChatsPage() {
     stopTyping();
     setAttachError('');
 
-    if (text) {
+    if (!hasFiles) {
       const ok = enqueueOptimistic(text, 'text');
       if (!ok) {
         setAttachError('Не удалось отправить сообщение');
         return;
       }
       setInput('');
+      return;
     }
 
-    if (!hasFiles) return;
-
+    const hasPhotos = pendingAttachments.some((item) => item.file?.type?.startsWith('image/'));
     setUploading(true);
     try {
-      await uploadAndSendFiles(pendingAttachments.map((item) => item.file));
+      await uploadAndSendFiles(
+        pendingAttachments.map((item) => item.file),
+        { caption: hasPhotos ? text : '' }
+      );
+      // Text without photos stays a separate message.
+      if (text && !hasPhotos) {
+        const ok = enqueueOptimistic(text, 'text');
+        if (!ok) {
+          setAttachError('Файлы отправлены, но текст не удалось отправить');
+        }
+      }
+      setInput('');
       clearPendingAttachments();
     } catch (err) {
       setAttachError(err.response?.data?.detail || err.message || 'Не удалось загрузить файлы');
@@ -760,8 +896,20 @@ export default function ChatsPage() {
     }
   };
 
-  const handleFileChange = (e) => {
-    const picked = Array.from(e.target.files || []);
+  const handleEditMessage = useCallback((messageId, content) => {
+    if (!connected) {
+      setAttachError('Нет соединения с чатом — подождите и попробуйте снова');
+      return false;
+    }
+    const ok = editMessage(messageId, content);
+    if (!ok) {
+      setAttachError('Не удалось отредактировать сообщение');
+    }
+    return ok;
+  }, [connected, editMessage]);
+
+  const addPendingFiles = useCallback((fileList) => {
+    const picked = Array.from(fileList || []).filter(Boolean);
     if (!picked.length) return;
 
     setPendingAttachments((prev) => {
@@ -779,21 +927,73 @@ export default function ChatsPage() {
           break;
         }
         if (file.size > MAX_FILE_SIZE_BYTES) {
-          error = `«${file.name}» больше 300 МБ`;
+          error = `«${file.name || 'файл'}» больше 300 МБ`;
           continue;
         }
         accepted.push({
-          id: `${file.name}-${file.size}-${file.lastModified}-${Math.random()}`,
+          id: `${file.name || 'paste'}-${file.size}-${file.lastModified || Date.now()}-${Math.random()}`,
           file,
           previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
         });
       }
       setAttachError(error);
-      return [...prev, ...accepted];
+      return accepted.length ? [...prev, ...accepted] : prev;
     });
+  }, []);
 
+  const handleFileChange = (e) => {
+    addPendingFiles(e.target.files);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
+
+  const handlePasteFiles = useCallback(
+    (event) => {
+      if (!selectedChat || codeMode || voiceRecording || uploading) return;
+      if (
+        event.currentTarget !== messageInputRef.current
+        || document.activeElement !== messageInputRef.current
+      ) {
+        return;
+      }
+
+      const clipboard = event.clipboardData;
+      if (!clipboard) return;
+
+      const imageItems = Array.from(clipboard.items || []).filter(
+        (item) => item.kind === 'file' && item.type.startsWith('image/')
+      );
+      const clipboardFiles = Array.from(clipboard.files || []).filter((file) =>
+        file.type?.startsWith('image/')
+      );
+
+      // A screenshot may be exposed in several formats; one Ctrl+V adds one image.
+      const sourceFile = imageItems[0]?.getAsFile() || clipboardFiles[0];
+      if (!sourceFile) return;
+      event.preventDefault();
+      event.stopPropagation();
+
+      // Some Windows screenshot tools dispatch two paste events for one Ctrl+V.
+      const now = Date.now();
+      if (now - lastImagePasteAtRef.current < 2000) return;
+      lastImagePasteAtRef.current = now;
+
+      const rawExt = (sourceFile.type.split('/')[1] || 'png').toLowerCase();
+      const ext = rawExt === 'jpeg' ? 'jpg' : rawExt;
+      const hasName = Boolean(
+        sourceFile.name
+        && sourceFile.name.trim()
+        && sourceFile.name !== 'image.png'
+      );
+      const image = hasName
+        ? sourceFile
+        : new File([sourceFile], `paste-${now}.${ext}`, {
+            type: sourceFile.type || `image/${ext === 'jpg' ? 'jpeg' : ext}`,
+            lastModified: now,
+          });
+      addPendingFiles([image]);
+    },
+    [addPendingFiles, codeMode, selectedChat, uploading, voiceRecording]
+  );
 
   const handleToggleReaction = useCallback((messageId, emoji) => {
     setMessageReactions((prev) => {
@@ -832,8 +1032,13 @@ export default function ChatsPage() {
     try {
       await chatsApi.deleteMessage(selectedChat.id, messageId, scope);
       const removed = messages.find((m) => m.id === messageId);
-      if (scope === 'everyone' && removed?.message_type === 'photo' && removed.content) {
-        invalidateMediaCache(removed.content);
+      if (scope === 'everyone' && removed?.message_type === 'photo') {
+        const items = Array.isArray(removed.attachments) && removed.attachments.length
+          ? removed.attachments
+          : [{ path: removed.content }];
+        items.forEach((item) => {
+          if (item?.path) invalidateMediaCache(item.path);
+        });
       }
       setMessages((prev) => prev.filter((m) => m.id !== messageId));
       setMessageReactions((prev) => {
@@ -1013,7 +1218,24 @@ export default function ChatsPage() {
       {isSpecialFavoritesOpen && <ChatDevStatusBar />}
       {isSpecialFavoritesOpen && <div className="chat-dev-grid" aria-hidden="true" />}
       <div className="chats-page__body">
-      <ChatIconRail user={user} onLogout={handleLogout} specialMode={isSpecialFavoritesOpen} />
+      <ChatIconRail
+        user={user}
+        onLogout={handleLogout}
+        onOpenSettings={() => {
+          setAccountSettingsOpen(true);
+          setIsSpecialFavoritesOpen(false);
+        }}
+        settingsActive={accountSettingsOpen}
+        specialMode={isSpecialFavoritesOpen}
+      />
+      {accountSettingsOpen ? (
+        <AccountSettings
+          user={user}
+          onUserUpdated={updateUser}
+          onClose={() => setAccountSettingsOpen(false)}
+        />
+      ) : (
+        <>
       <aside className="chat-sidebar">
         <div className="sidebar-header">
           <h2>{isSpecialFavoritesOpen ? 'Chats' : 'Чаты'}</h2>
@@ -1096,7 +1318,14 @@ export default function ChatsPage() {
                 </button>
               </div>
             )}
-            <div className="messages-area">
+            <div
+              ref={messagesAreaRef}
+              className="messages-area"
+              onScroll={handleMessagesScroll}
+            >
+              {loadingOlderMessages && (
+                <div className="messages-history-loading">Загрузка истории…</div>
+              )}
               {groupMessagesByDay(messages).map((group) => (
                 <div key={group.key} className="message-day-group">
                   <div className="message-day-separator">
@@ -1108,6 +1337,7 @@ export default function ChatsPage() {
                       message={msg}
                       isOwn={msg.sender?.id === user?.id}
                       onDelete={handleDeleteMessage}
+                      onEdit={handleEditMessage}
                       chatId={selectedChat.id}
                       specialMode={isSpecialFavoritesOpen}
                       reactions={messageReactions[msg.id] || []}
@@ -1339,6 +1569,7 @@ export default function ChatsPage() {
                       rows={1}
                       value={input}
                       onChange={(e) => handleInputChange(e.target.value)}
+                      onPaste={handlePasteFiles}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault();
@@ -1378,6 +1609,7 @@ export default function ChatsPage() {
       </main>
       {detailsPanelOpen && selectedChat && (
         <ChatDetailsPanel
+          chatId={selectedChat.id}
           partner={selectedChat.partner}
           isOnline={isOnline(selectedChat.partner?.id, selectedChat.partner?.is_online)}
           onClose={() => setDetailsPanelOpen(false)}
@@ -1393,6 +1625,8 @@ export default function ChatsPage() {
             setInvitePending(false);
           }}
         />
+      )}
+        </>
       )}
       </div>
     </div>

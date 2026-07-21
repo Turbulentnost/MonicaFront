@@ -32,7 +32,14 @@ export function NotificationBell({
     <div className="notif-bell-wrap">
       <button type="button" className="notif-bell-btn" onClick={onToggle} title="Уведомления">
         <span className="notif-bell-icon" aria-hidden>
-          🔔
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+            <path
+              d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path d="M13.7 21a2 2 0 0 1-3.4 0" strokeLinecap="round" />
+          </svg>
         </span>
         {unreadCount > 0 && <span className="notif-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>}
       </button>

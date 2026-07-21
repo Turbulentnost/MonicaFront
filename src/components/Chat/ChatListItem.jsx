@@ -1,9 +1,12 @@
 import { UserAvatar } from './UserAvatar';
 import { formatChatListTime } from '../../utils/formatChatDate';
+import { getPhotoCaption } from '../../utils/messageText';
 
 function formatPreview(lastMessage) {
   if (!lastMessage) return 'Нет сообщений';
   if (lastMessage.message_type === 'photo') {
+    const caption = getPhotoCaption(lastMessage);
+    if (caption) return caption;
     const count = Array.isArray(lastMessage.attachments) && lastMessage.attachments.length > 1
       ? lastMessage.attachments.length
       : 1;

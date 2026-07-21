@@ -55,10 +55,19 @@ export const authApi = {
     api.post('/auth/register/complete/', { registration_token: registrationToken }),
   login: (email, password) => api.post('/auth/login/', { email, password }),
   me: () => api.get('/auth/me/'),
+  updateProfile: (data) => api.patch('/auth/me/', data),
+  updateAvatar: (photo) => {
+    const form = new FormData();
+    form.append('photo', photo);
+    return api.post('/auth/me/avatar/', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
 };
 
 export const chatsApi = {
   list: () => api.get('/chats/'),
+  files: (chatId) => api.get(`/chats/${chatId}/files/`),
   messages: (chatId, params) => api.get(`/chats/${chatId}/messages/`, { params }),
   start: (recipientId) => api.post('/chats/start/', { recipient_id: recipientId }),
   searchUsers: (q) => api.get('/users/search/', { params: { q } }),

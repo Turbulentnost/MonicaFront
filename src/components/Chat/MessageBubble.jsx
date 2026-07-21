@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { MessageMedia } from './MessageMedia';
 import { VoiceMessagePlayer } from './VoiceMessagePlayer';
 import { EmojiPicker } from './EmojiPicker';
+import { getEditableMessageText, getPhotoCaption } from '../../utils/messageText';
 
 const DELETE_FOR_ALL_MS = 48 * 60 * 60 * 1000;
+const EDIT_FOR_MS = 7 * 24 * 60 * 60 * 1000;
 const HOVER_HIDE_DELAY_MS = 280;
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '🔥', '😮', '😢'];
@@ -21,10 +23,36 @@ function PlusIcon() {
   );
 }
 
+function PencilIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path
+        d="M8.6 2.85a1.2 1.2 0 0 1 1.7 0l.85.85a1.2 1.2 0 0 1 0 1.7L5.2 11.35 2.5 12l.65-2.7L8.6 2.85Z"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M7.7 3.75 10.25 6.3"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function canDeleteForEveryone(message, isOwn) {
   if (!isOwn || !message?.sent_at) return false;
   if (String(message.id).startsWith('temp-')) return false;
   return Date.now() - new Date(message.sent_at).getTime() < DELETE_FOR_ALL_MS;
+}
+
+function canEditMessage(message, isOwn) {
+  if (!isOwn || !message?.sent_at) return false;
+  if (String(message.id).startsWith('temp-')) return false;
+  if (message.message_type !== 'text' && message.message_type !== 'photo') return false;
+  return Date.now() - new Date(message.sent_at).getTime() < EDIT_FOR_MS;
 }
 
 function getDeliveryStatus(message, isOwn) {
@@ -38,10 +66,54 @@ function getDeliveryStatus(message, isOwn) {
   return { key: 'sent', label: 'отправлено' };
 }
 
+function DeliveryIcon({ status }) {
+  if (status === 'sending') return <span aria-hidden="true">⏳</span>;
+
+  return (
+    <svg
+      className="message-status-checks"
+      viewBox="0 0 18 12"
+      fill="none"
+      stroke="currentColor"
+      aria-hidden="true"
+    >
+      {status === 'sent' ? (
+        <path
+          d="M3 6.5 6 9.5 14.5 1.5"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ) : (
+        <>
+          <path
+            d="M1 6.5 4 9.5 12.5 1.5"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M7 8.5 8 9.5 16.5 1.5"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </>
+      )}
+    </svg>
+  );
+}
+
+function EditedMark({ show }) {
+  if (!show) return null;
+  return <span className="message-edited">(ред.)</span>;
+}
+
 export function MessageBubble({
   message,
   isOwn,
   onDelete,
+  onEdit,
   chatId,
   specialMode = false,
   reactions = [],
@@ -50,12 +122,18 @@ export function MessageBubble({
   const [menuOpen, setMenuOpen] = useState(false);
   const [barVisible, setBarVisible] = useState(false);
   const [pickerExpanded, setPickerExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState('');
   const hideTimeoutRef = useRef(null);
+  const editInputRef = useRef(null);
 
   const showDeleteForAll = canDeleteForEveryone(message, isOwn);
+  const showEdit = canEditMessage(message, isOwn);
   const delivery = getDeliveryStatus(message, isOwn);
   const isPending = delivery?.key === 'sending';
-  const showReactionUi = !isPending;
+  const showReactionUi = !isPending && !editing;
+  const isEdited = Boolean(message.edited_at);
+  const photoCaption = getPhotoCaption(message);
 
   const clearHideTimeout = useCallback(() => {
     if (hideTimeoutRef.current) {
@@ -85,9 +163,46 @@ export function MessageBubble({
 
   useEffect(() => () => clearHideTimeout(), [clearHideTimeout]);
 
+  useEffect(() => {
+    if (!editing) return undefined;
+    editInputRef.current?.focus();
+    const el = editInputRef.current;
+    if (el) {
+      const len = el.value.length;
+      el.setSelectionRange(len, len);
+    }
+    return undefined;
+  }, [editing]);
+
   const handleDelete = (scope) => {
     setMenuOpen(false);
     onDelete?.(message.id, scope);
+  };
+
+  const startEdit = () => {
+    setMenuOpen(false);
+    setEditText(getEditableMessageText(message));
+    setEditing(true);
+    setBarVisible(false);
+    setPickerExpanded(false);
+  };
+
+  const cancelEdit = () => {
+    setEditing(false);
+    setEditText('');
+  };
+
+  const saveEdit = () => {
+    const next = editText.trim();
+    if (message.message_type === 'text' && !next) return;
+    if (next === getEditableMessageText(message).trim()) {
+      cancelEdit();
+      return;
+    }
+    const ok = onEdit?.(message.id, next);
+    if (ok !== false) {
+      cancelEdit();
+    }
   };
 
   const handleReactionClick = (emoji) => {
@@ -102,10 +217,65 @@ export function MessageBubble({
   };
 
   const renderContent = () => {
-    if (message.message_type === 'text') {
-      return <div className="message-content">{message.content}</div>;
+    if (editing) {
+      return (
+        <div className="message-edit">
+          <textarea
+            ref={editInputRef}
+            className="message-edit-input"
+            value={editText}
+            onChange={(e) => setEditText(e.target.value)}
+            rows={Math.min(6, Math.max(2, editText.split('\n').length))}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelEdit();
+              }
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                saveEdit();
+              }
+            }}
+          />
+          <div className="message-edit-actions">
+            <button type="button" className="message-edit-cancel" onClick={cancelEdit}>
+              Отмена
+            </button>
+            <button
+              type="button"
+              className="message-edit-save"
+              onClick={saveEdit}
+              disabled={message.message_type === 'text' && !editText.trim()}
+            >
+              Сохранить
+            </button>
+          </div>
+        </div>
+      );
     }
-    if (message.message_type === 'photo' || message.message_type === 'file') {
+
+    if (message.message_type === 'text') {
+      return (
+        <div className="message-content">
+          {message.content}
+          <EditedMark show={isEdited} />
+        </div>
+      );
+    }
+    if (message.message_type === 'photo') {
+      return (
+        <>
+          <MessageMedia message={message} chatId={chatId} />
+          {photoCaption ? (
+            <div className="message-content message-caption">
+              {photoCaption}
+              <EditedMark show={isEdited} />
+            </div>
+          ) : null}
+        </>
+      );
+    }
+    if (message.message_type === 'file') {
       return <MessageMedia message={message} chatId={chatId} />;
     }
     if (message.message_type === 'voice') {
@@ -145,13 +315,25 @@ export function MessageBubble({
       <div className={`message ${isOwn ? 'own' : 'other'}${isPending ? ' pending' : ''}`}>
         <div className="message-header">
           <div className="message-meta">{message.sender?.nickname}</div>
-          {!isPending && (
-            <div className="message-actions">
+          {!isPending && !editing && (
+            <div className={`message-actions${menuOpen ? ' is-open' : ''}`}>
+              {showEdit && (
+                <button
+                  type="button"
+                  className="message-action-btn message-edit-btn"
+                  onClick={startEdit}
+                  aria-label="Редактировать"
+                  title="Редактировать"
+                >
+                  <PencilIcon />
+                </button>
+              )}
               <button
                 type="button"
-                className="message-menu-btn"
+                className="message-action-btn message-menu-btn"
                 onClick={() => setMenuOpen((v) => !v)}
-                aria-label="Действия с сообщением"
+                aria-label="Удалить сообщение"
+                title="Удалить"
               >
                 ⋯
               </button>
@@ -179,11 +361,12 @@ export function MessageBubble({
             })}
           </span>
           {delivery && (
-            <span className={`message-status message-status-${delivery.key}`} title={delivery.label}>
-              {delivery.key === 'sending' && '⏳'}
-              {delivery.key === 'sent' && '✓'}
-              {delivery.key === 'read' && '✓✓'}
-              <span className="message-status-label">{delivery.label}</span>
+            <span
+              className={`message-status message-status-${delivery.key}`}
+              title={delivery.label}
+              aria-label={delivery.label}
+            >
+              <DeliveryIcon status={delivery.key} />
             </span>
           )}
         </div>
