@@ -85,6 +85,17 @@ export function useWebSocket(chatId, { onMessage, onTyping, onDeleted, onRead } 
 
   const sendMessage = useCallback((content, messageType = 'text', metadata = {}) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
+      const attachments = Array.isArray(metadata.attachments)
+        ? metadata.attachments
+            .filter((item) => item?.path)
+            .slice(0, 10)
+            .map((item) => ({
+              path: item.path,
+              file_name: item.file_name || '',
+              mime_type: item.mime_type || '',
+              file_size: item.file_size ?? null,
+            }))
+        : undefined;
       wsRef.current.send(
         JSON.stringify({
           action: 'message.send',
@@ -94,6 +105,7 @@ export function useWebSocket(chatId, { onMessage, onTyping, onDeleted, onRead } 
           file_name: metadata.file_name || '',
           mime_type: metadata.mime_type || '',
           file_size: metadata.file_size ?? null,
+          attachments,
           waveform: Array.isArray(metadata.waveform) ? metadata.waveform : undefined,
           voice_duration_ms: metadata.voice_duration_ms ?? undefined,
         })

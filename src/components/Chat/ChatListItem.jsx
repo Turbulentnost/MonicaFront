@@ -3,7 +3,12 @@ import { formatChatListTime } from '../../utils/formatChatDate';
 
 function formatPreview(lastMessage) {
   if (!lastMessage) return 'Нет сообщений';
-  if (lastMessage.message_type === 'photo') return 'Фото';
+  if (lastMessage.message_type === 'photo') {
+    const count = Array.isArray(lastMessage.attachments) && lastMessage.attachments.length > 1
+      ? lastMessage.attachments.length
+      : 1;
+    return count > 1 ? `${count} фото` : 'Фото';
+  }
   if (lastMessage.message_type === 'voice') return 'Голосовое сообщение';
   if (lastMessage.message_type === 'file') {
     const name = (lastMessage.file_name || '').toLowerCase();

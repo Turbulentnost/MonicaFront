@@ -488,6 +488,11 @@ select:autofill {
   object-fit: cover;
 }
 
+/* Fallback if chats.css not loaded for older layouts */
+.message-bubble .photo-gallery {
+  margin-top: 2px;
+}
+
 .message-file {
   display: flex;
   align-items: center;

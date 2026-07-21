@@ -99,9 +99,13 @@ export default function ChatsPage() {
     const { data } = await chatsApi.messages(chatId);
     setMessages(data);
     data.forEach((msg) => {
-      if (msg.message_type === 'photo' && msg.content && msg.content_url) {
-        warmMediaCache(msg.content, msg.content_url);
-      }
+      if (msg.message_type !== 'photo') return;
+      const items = Array.isArray(msg.attachments) && msg.attachments.length
+        ? msg.attachments
+        : [{ path: msg.content, content_url: msg.content_url }];
+      items.forEach((item) => {
+        if (item.path && item.content_url) warmMediaCache(item.path, item.content_url);
+      });
     });
   }, []);
 
@@ -145,8 +149,13 @@ export default function ChatsPage() {
         if (withoutTemp.some((m) => m.id === message.id)) return withoutTemp;
         return [...withoutTemp, message];
       });
-      if (message.message_type === 'photo' && message.content && message.content_url) {
-        warmMediaCache(message.content, message.content_url);
+      if (message.message_type === 'photo') {
+        const items = Array.isArray(message.attachments) && message.attachments.length
+          ? message.attachments
+          : [{ path: message.content, content_url: message.content_url }];
+        items.forEach((item) => {
+          if (item.path && item.content_url) warmMediaCache(item.path, item.content_url);
+        });
       }
       // Чужое сообщение в открытом чате — сразу прочитано
       if (message.sender?.id && message.sender.id !== user?.id && !message.read_at) {
@@ -449,6 +458,9 @@ export default function ChatsPage() {
         typeof crypto !== 'undefined' && crypto.randomUUID
           ? crypto.randomUUID()
           : `c-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const attachments = Array.isArray(metadata.attachments)
+        ? metadata.attachments.slice(0, 10)
+        : undefined;
       const optimistic = {
         id: `temp-${clientId}`,
         client_id: clientId,
@@ -465,6 +477,7 @@ export default function ChatsPage() {
         file_name: metadata.file_name || '',
         mime_type: metadata.mime_type || '',
         file_size: metadata.file_size ?? null,
+        attachments,
         waveform: Array.isArray(metadata.waveform) ? metadata.waveform : [],
         voice_duration_ms: metadata.voice_duration_ms ?? null,
         sent_at: new Date().toISOString(),
@@ -484,7 +497,35 @@ export default function ChatsPage() {
     const { data } = await chatsApi.uploadMessageFiles(selectedChat.id, files);
     const uploaded = data.files || [];
     let allSent = true;
-    uploaded.forEach((item) => {
+
+    const photos = uploaded.filter((item) => item.message_type === 'photo');
+    const others = uploaded.filter((item) => item.message_type !== 'photo');
+
+    if (photos.length) {
+      photos.forEach((item) => {
+        if (item.path && item.content_url) {
+          warmMediaCache(item.path, item.content_url);
+        }
+      });
+      const attachments = photos.map((item) => ({
+        path: item.path,
+        file_name: item.file_name,
+        mime_type: item.mime_type,
+        file_size: item.file_size,
+        content_url: item.content_url,
+      }));
+      const first = attachments[0];
+      const ok = enqueueOptimistic(first.path, 'photo', {
+        file_name: first.file_name,
+        mime_type: first.mime_type,
+        file_size: first.file_size,
+        content_url: first.content_url,
+        attachments,
+      });
+      if (!ok) allSent = false;
+    }
+
+    others.forEach((item) => {
       const isVoice = item.message_type === 'voice' || Boolean(voiceMeta);
       const ok = enqueueOptimistic(item.path, isVoice ? 'voice' : item.message_type, {
         file_name: item.file_name,
@@ -495,10 +536,8 @@ export default function ChatsPage() {
         voice_duration_ms: voiceMeta?.voiceDurationMs ?? null,
       });
       if (!ok) allSent = false;
-      if (item.message_type === 'photo' && item.path && item.content_url) {
-        warmMediaCache(item.path, item.content_url);
-      }
     });
+
     if (!allSent) {
       throw new Error('Файл загружен, но WebSocket отключился — обновите страницу');
     }
