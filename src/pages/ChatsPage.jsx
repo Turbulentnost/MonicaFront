@@ -21,6 +21,7 @@ import { warmAvatarCache } from '../utils/avatarCache';
 import { groupMessagesByDay } from '../utils/formatChatDate';
 import { invalidateMediaCache, warmMediaCache } from '../utils/mediaCache';
 import { API_URL } from '../config';
+import { VoiceRecorder, canUseMicrophone } from '../utils/voiceRecorder';
 
 const MAX_ATTACHMENTS = 10;
 const MAX_FILE_SIZE_BYTES = 300 * 1024 * 1024;
@@ -74,9 +75,16 @@ export default function ChatsPage() {
   const lastTypingSentRef = useRef(false);
   const searchDebounceRef = useRef(null);
   const fileInputRef = useRef(null);
+  const messageInputRef = useRef(null);
   const markReadRef = useRef(null);
   const emojiHideTimeoutRef = useRef(null);
+  const voiceRecorderRef = useRef(null);
   const [emojiPickerVisible, setEmojiPickerVisible] = useState(false);
+  const [micAvailable, setMicAvailable] = useState(false);
+  const [voiceRecording, setVoiceRecording] = useState(false);
+  const [voiceElapsedMs, setVoiceElapsedMs] = useState(0);
+  const [voiceLiveWaveform, setVoiceLiveWaveform] = useState([]);
+  const [voiceBusy, setVoiceBusy] = useState(false);
 
   const loadChats = useCallback(async () => {
     const { data } = await chatsApi.list();
@@ -457,6 +465,8 @@ export default function ChatsPage() {
         file_name: metadata.file_name || '',
         mime_type: metadata.mime_type || '',
         file_size: metadata.file_size ?? null,
+        waveform: Array.isArray(metadata.waveform) ? metadata.waveform : [],
+        voice_duration_ms: metadata.voice_duration_ms ?? null,
         sent_at: new Date().toISOString(),
         read_at: null,
       };
@@ -470,16 +480,19 @@ export default function ChatsPage() {
     [selectedChat?.id, sendMessage, user]
   );
 
-  const uploadAndSendFiles = async (files) => {
+  const uploadAndSendFiles = async (files, voiceMeta = null) => {
     const { data } = await chatsApi.uploadMessageFiles(selectedChat.id, files);
     const uploaded = data.files || [];
     let allSent = true;
     uploaded.forEach((item) => {
-      const ok = enqueueOptimistic(item.path, item.message_type, {
+      const isVoice = item.message_type === 'voice' || Boolean(voiceMeta);
+      const ok = enqueueOptimistic(item.path, isVoice ? 'voice' : item.message_type, {
         file_name: item.file_name,
         mime_type: item.mime_type,
         file_size: item.file_size,
         content_url: item.content_url,
+        waveform: voiceMeta?.waveform || [],
+        voice_duration_ms: voiceMeta?.voiceDurationMs ?? null,
       });
       if (!ok) allSent = false;
       if (item.message_type === 'photo' && item.path && item.content_url) {
@@ -488,6 +501,137 @@ export default function ChatsPage() {
     });
     if (!allSent) {
       throw new Error('Файл загружен, но WebSocket отключился — обновите страницу');
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const detectMic = async () => {
+      if (!canUseMicrophone()) {
+        if (!cancelled) setMicAvailable(false);
+        return;
+      }
+      try {
+        if (navigator.mediaDevices.enumerateDevices) {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const hasInput = devices.some((device) => device.kind === 'audioinput');
+          if (!cancelled) setMicAvailable(hasInput || devices.length === 0);
+          return;
+        }
+      } catch {
+        // fallback below
+      }
+      if (!cancelled) setMicAvailable(true);
+    };
+    detectMic();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => () => {
+    voiceRecorderRef.current?.cancel?.();
+    voiceRecorderRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (!voiceRecorderRef.current) return;
+      voiceRecorderRef.current.cancel?.();
+      voiceRecorderRef.current = null;
+      setVoiceRecording(false);
+      setVoiceElapsedMs(0);
+      setVoiceLiveWaveform([]);
+    };
+  }, [selectedChat?.id]);
+
+  const formatVoiceClock = (milliseconds) => {
+    const seconds = Math.max(0, Math.floor((milliseconds || 0) / 1000));
+    return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+  };
+
+  const startVoiceRecording = async (event) => {
+    event.preventDefault();
+    if (
+      !selectedChat
+      || !micAvailable
+      || voiceRecording
+      || voiceBusy
+      || uploading
+      || codeMode
+    ) {
+      return;
+    }
+    if (!connected) {
+      setAttachError('Нет соединения с чатом — подождите и попробуйте снова');
+      return;
+    }
+
+    stopTyping();
+    setAttachError('');
+    const recorder = new VoiceRecorder();
+    voiceRecorderRef.current = recorder;
+    try {
+      await recorder.start(({ elapsedMs, waveform }) => {
+        setVoiceElapsedMs(elapsedMs);
+        setVoiceLiveWaveform(waveform.slice(-28));
+      });
+      setVoiceRecording(true);
+      setVoiceElapsedMs(0);
+      setVoiceLiveWaveform([]);
+    } catch (err) {
+      voiceRecorderRef.current = null;
+      setVoiceRecording(false);
+      setMicAvailable(false);
+      setAttachError(err.message || 'Не удалось получить доступ к микрофону');
+    }
+  };
+
+  const cancelVoiceRecording = async () => {
+    const recorder = voiceRecorderRef.current;
+    voiceRecorderRef.current = null;
+    setVoiceRecording(false);
+    setVoiceElapsedMs(0);
+    setVoiceLiveWaveform([]);
+    if (recorder) {
+      await recorder.cancel();
+    }
+  };
+
+  const sendVoiceRecording = async () => {
+    if (!selectedChat || voiceBusy) return;
+    const recorder = voiceRecorderRef.current;
+    if (!recorder) return;
+
+    setVoiceBusy(true);
+    setAttachError('');
+    try {
+      const result = await recorder.stop(true);
+      voiceRecorderRef.current = null;
+      setVoiceRecording(false);
+      setVoiceElapsedMs(0);
+      setVoiceLiveWaveform([]);
+
+      if (!result) {
+        setAttachError('Запись слишком короткая');
+        return;
+      }
+      if (!connected) {
+        setAttachError('Нет соединения с чатом — подождите и попробуйте снова');
+        return;
+      }
+
+      setUploading(true);
+      await uploadAndSendFiles([result.file], {
+        waveform: result.waveform,
+        voiceDurationMs: result.voiceDurationMs,
+      });
+    } catch (err) {
+      setAttachError(err.response?.data?.detail || err.message || 'Не удалось отправить голосовое');
+      await cancelVoiceRecording();
+    } finally {
+      setUploading(false);
+      setVoiceBusy(false);
     }
   };
 
@@ -665,6 +809,20 @@ export default function ChatsPage() {
     }
   };
 
+  const resizeMessageInput = useCallback(() => {
+    const el = messageInputRef.current;
+    if (!el) return;
+    el.style.height = '0px';
+    const styles = window.getComputedStyle(el);
+    const lineHeight = Number.parseFloat(styles.lineHeight) || 24;
+    const paddingY =
+      (Number.parseFloat(styles.paddingTop) || 0) + (Number.parseFloat(styles.paddingBottom) || 0);
+    const minHeight = lineHeight + paddingY;
+    const maxHeight = lineHeight * 2 + paddingY;
+    const nextHeight = Math.min(Math.max(el.scrollHeight, minHeight), maxHeight);
+    el.style.height = `${nextHeight}px`;
+  }, []);
+
   const handleInputChange = (value) => {
     setInput(value);
     if (!selectedChat) return;
@@ -685,6 +843,11 @@ export default function ChatsPage() {
       lastTypingSentRef.current = false;
     }, 1500);
   };
+
+  useEffect(() => {
+    if (codeMode) return;
+    resizeMessageInput();
+  }, [input, codeMode, selectedChat?.id, resizeMessageInput]);
 
   const clearEmojiHideTimeout = useCallback(() => {
     if (emojiHideTimeoutRef.current) {
@@ -971,6 +1134,44 @@ export default function ChatsPage() {
                   <span className="message-input-formatbar__btn">≡</span>
                 </div>
               )}
+              {voiceRecording && (
+                <div className="voice-record-bar" role="status" aria-live="polite">
+                  <button
+                    type="button"
+                    className="voice-record-cancel"
+                    onClick={cancelVoiceRecording}
+                    title="Отменить запись"
+                    aria-label="Отменить запись"
+                    disabled={voiceBusy}
+                  >
+                    <span className="voice-record-cancel__square" />
+                  </button>
+                  <div className="voice-record-live">
+                    <span className="voice-record-dot" />
+                    <span className="voice-record-timer">{formatVoiceClock(voiceElapsedMs)}</span>
+                    <div className="voice-record-waveform" aria-hidden="true">
+                      {(voiceLiveWaveform.length ? voiceLiveWaveform : Array(16).fill(0.2)).map((level, index) => (
+                        <span
+                          key={`voice-bar-${index}`}
+                          style={{ height: `${18 + level * 18}px` }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="voice-record-send"
+                    onClick={sendVoiceRecording}
+                    title="Отправить голосовое"
+                    aria-label="Отправить голосовое"
+                    disabled={voiceBusy || voiceElapsedMs < 400}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+                      <path d="M5 12.5l4.5 4.5L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                </div>
+              )}
               <div className="message-input-row">
                 <div className="message-input-toolbar">
                   <button
@@ -979,7 +1180,7 @@ export default function ChatsPage() {
                     onClick={() => fileInputRef.current?.click()}
                     title="Прикрепить файлы (до 10, до 300 МБ)"
                     aria-label="Прикрепить файлы"
-                    disabled={codeMode || pendingAttachments.length >= MAX_ATTACHMENTS || uploading}
+                    disabled={codeMode || voiceRecording || pendingAttachments.length >= MAX_ATTACHMENTS || uploading}
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
                       <path
@@ -995,7 +1196,7 @@ export default function ChatsPage() {
                     onClick={toggleCodeMode}
                     title={codeMode ? 'Обычное сообщение' : 'Написать код'}
                     aria-label={codeMode ? 'Обычное сообщение' : 'Написать код'}
-                    disabled={uploading}
+                    disabled={uploading || voiceRecording}
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
                       <path d="M8 6L2 12l6 6M16 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
@@ -1012,7 +1213,7 @@ export default function ChatsPage() {
                         className="btn-emoji"
                         title="Эмодзи"
                         aria-label="Эмодзи"
-                        disabled={uploading}
+                        disabled={uploading || voiceRecording}
                       >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
                           <circle cx="12" cy="12" r="10" />
@@ -1027,6 +1228,24 @@ export default function ChatsPage() {
                         onSelect={handleEmojiSelect}
                       />
                     </div>
+                  )}
+                  {!codeMode && (
+                    <button
+                      type="button"
+                      className={`btn-voice ${voiceRecording ? 'active' : ''}`}
+                      title={micAvailable ? 'Зажмите, чтобы записать голосовое' : 'Микрофон недоступен'}
+                      aria-label={micAvailable ? 'Записать голосовое' : 'Микрофон недоступен'}
+                      disabled={!micAvailable || uploading || voiceBusy}
+                      onPointerDown={startVoiceRecording}
+                      onContextMenu={(event) => event.preventDefault()}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+                        <rect x="9" y="3" width="6" height="11" rx="3" />
+                        <path d="M6 11a6 6 0 0 0 12 0" strokeLinecap="round" />
+                        <line x1="12" y1="17" x2="12" y2="21" strokeLinecap="round" />
+                        <line x1="9" y1="21" x2="15" y2="21" strokeLinecap="round" />
+                      </svg>
+                    </button>
                   )}
                   <input
                     ref={fileInputRef}
@@ -1075,11 +1294,20 @@ export default function ChatsPage() {
                       </div>
                     </>
                   ) : (
-                    <input
-                      type="text"
+                    <textarea
+                      ref={messageInputRef}
+                      className="message-input-textarea"
+                      rows={1}
                       value={input}
                       onChange={(e) => handleInputChange(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          e.currentTarget.form?.requestSubmit();
+                        }
+                      }}
                       onBlur={stopTyping}
+                      disabled={voiceRecording}
                       placeholder={isSpecialFavoritesOpen ? "Let's ship this! 💪" : 'Сообщение...'}
                     />
                   )}
@@ -1088,6 +1316,7 @@ export default function ChatsPage() {
                   type="submit"
                   disabled={
                     uploading
+                    || voiceRecording
                     || (codeMode
                       ? !input.trim() || !codeLanguage || !codeFileName.trim()
                       : !input.trim() && pendingAttachments.length === 0)

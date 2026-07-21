@@ -16,15 +16,24 @@ export function useWebSocket(chatId, { onMessage, onTyping, onDeleted, onRead } 
   useEffect(() => {
     if (!chatId) return undefined;
 
-    const token = localStorage.getItem('access_token');
-    if (!token) return undefined;
-
     let cancelled = false;
     let retryTimer = null;
     let attempt = 0;
 
     const connect = () => {
       if (cancelled) return;
+      // Always read the latest access token — axios may refresh it while WS is down.
+      const token = localStorage.getItem('access_token');
+      if (!token) {
+        setConnected(false);
+        if (attempt < 12) {
+          const delay = Math.min(1000 * 2 ** attempt, 10000);
+          attempt += 1;
+          retryTimer = setTimeout(connect, delay);
+        }
+        return;
+      }
+
       const ws = new WebSocket(`${WS_URL}/ws/chat/${chatId}/?token=${token}`);
       wsRef.current = ws;
 
@@ -37,8 +46,8 @@ export function useWebSocket(chatId, { onMessage, onTyping, onDeleted, onRead } 
         if (cancelled) return;
         setConnected(false);
         wsRef.current = null;
-        if (attempt < 6) {
-          const delay = Math.min(1000 * 2 ** attempt, 8000);
+        if (attempt < 12) {
+          const delay = Math.min(1000 * 2 ** attempt, 10000);
           attempt += 1;
           retryTimer = setTimeout(connect, delay);
         }
@@ -85,6 +94,8 @@ export function useWebSocket(chatId, { onMessage, onTyping, onDeleted, onRead } 
           file_name: metadata.file_name || '',
           mime_type: metadata.mime_type || '',
           file_size: metadata.file_size ?? null,
+          waveform: Array.isArray(metadata.waveform) ? metadata.waveform : undefined,
+          voice_duration_ms: metadata.voice_duration_ms ?? undefined,
         })
       );
       return true;

@@ -8,8 +8,8 @@ RUN npm ci
 COPY . .
 
 # API_URL — хост без /api (client.js сам добавляет /api)
-ARG REACT_APP_API_URL=http://159.194.232.74
-ARG REACT_APP_WS_URL=ws://159.194.232.74
+ARG REACT_APP_API_URL=https://metamonica.ru
+ARG REACT_APP_WS_URL=wss://metamonica.ru
 ENV REACT_APP_API_URL=$REACT_APP_API_URL
 ENV REACT_APP_WS_URL=$REACT_APP_WS_URL
 
