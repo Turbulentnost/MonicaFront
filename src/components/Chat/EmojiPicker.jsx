@@ -4,6 +4,7 @@ import { EMOJI_CATEGORIES } from './emojiData';
 export function EmojiPicker({
   onSelect,
   specialMode = false,
+  backMode = false,
   visible = false,
   className = '',
 }) {
@@ -16,6 +17,7 @@ export function EmojiPicker({
         'emoji-picker',
         visible ? 'emoji-picker--visible emoji-picker--open' : 'emoji-picker--closing',
         specialMode ? 'emoji-picker--special' : '',
+        backMode ? 'emoji-picker--back' : '',
         className,
       ]
         .filter(Boolean)

@@ -1,9 +1,15 @@
 import { UserAvatar } from './UserAvatar';
 
-const TABS = [
+const TABS_DEFAULT = [
   { id: 'shared', label: 'Files' },
   { id: 'members', label: 'Members' },
   { id: 'pinned', label: 'Pinned' },
+];
+
+const TABS_BACK = [
+  { id: 'shared', label: 'Пепел' },
+  { id: 'members', label: 'Никого' },
+  { id: 'pinned', label: 'Пусто' },
 ];
 
 const DEV_FILES = [
@@ -12,10 +18,22 @@ const DEV_FILES = [
   { name: 'api-specs.yaml', meta: '24 KB · config', icon: 'yaml', color: '#a78bfa' },
 ];
 
+const BACK_FILES = [
+  { name: 'regret.txt', meta: '0 KB · пусто', icon: 'txt', color: '#888' },
+  { name: 'last-hope.png', meta: 'удалено', icon: 'img', color: '#666' },
+  { name: 'todo-never.yaml', meta: '∞ · не сделано', icon: 'yaml', color: '#555' },
+];
+
 const INTEGRATIONS = [
   { name: 'GitHub', status: 'Connected', color: '#e8eaed' },
   { name: 'Jira', status: 'Connected', color: '#3b82f6' },
   { name: 'Figma', status: 'Connected', color: '#f97316' },
+];
+
+const BACK_INTEGRATIONS = [
+  { name: 'GitHub', status: 'Abandoned', color: '#444' },
+  { name: 'Jira', status: 'Forgotten', color: '#333' },
+  { name: 'Figma', status: 'Deleted', color: '#2a2a2a' },
 ];
 
 function FileIcon({ color }) {
@@ -29,36 +47,61 @@ function FileIcon({ color }) {
   );
 }
 
-export function ChatDetailsPanel({ partner, isOnline, onClose, specialMode = false }) {
+export function ChatDetailsPanel({ partner, isOnline, onClose, specialMode = false, backMode = false }) {
   if (!partner) return null;
 
-  const files = specialMode
-    ? DEV_FILES
-    : [
-        { name: 'onboarding-flow.fig', meta: 'Figma · 2.4 MB', icon: 'figma', color: '#f97316' },
-        { name: 'specs-v2.pdf', meta: 'PDF · 1.1 MB', icon: 'pdf', color: '#ef4444' },
-        { name: 'assets-bundle.zip', meta: 'ZIP · 8.7 MB', icon: 'zip', color: '#eab308' },
-      ];
+  const tabs = backMode ? TABS_BACK : TABS_DEFAULT;
+
+  const files = backMode
+    ? BACK_FILES
+    : specialMode
+      ? DEV_FILES
+      : [
+          { name: 'onboarding-flow.fig', meta: 'Figma · 2.4 MB', icon: 'figma', color: '#f97316' },
+          { name: 'specs-v2.pdf', meta: 'PDF · 1.1 MB', icon: 'pdf', color: '#ef4444' },
+          { name: 'assets-bundle.zip', meta: 'ZIP · 8.7 MB', icon: 'zip', color: '#eab308' },
+        ];
+
+  const panelClass = [
+    'chat-details',
+    specialMode ? 'chat-details--special' : '',
+    backMode ? 'chat-details--back' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
-    <aside className={`chat-details ${specialMode ? 'chat-details--special' : ''}`} aria-label="Детали чата">
+    <aside className={panelClass} aria-label="Детали чата">
       <div className="chat-details__header">
-        <h2 className="chat-details__title">{specialMode ? 'workspace' : 'Детали'}</h2>
+        <h2 className="chat-details__title">
+          {backMode ? 'архив сожалений' : specialMode ? 'workspace' : 'Детали'}
+        </h2>
         <button type="button" className="chat-details__close" onClick={onClose} aria-label="Закрыть панель">
           ×
         </button>
       </div>
 
-      {specialMode && (
+      {specialMode && !backMode && (
         <div className="chat-details__dev-icon" aria-hidden="true">
           <span>{'</>'}</span>
         </div>
       )}
 
+      {backMode && (
+        <div className="chat-details__dev-icon chat-details__dev-icon--back" aria-hidden="true">
+          <span>∴</span>
+        </div>
+      )}
+
       <div className="chat-details__profile">
-        {!specialMode && <UserAvatar user={partner} size={56} showOnline isOnline={isOnline} />}
+        {!specialMode && !backMode && (
+          <UserAvatar user={partner} size={56} showOnline isOnline={isOnline} />
+        )}
+        {backMode && (
+          <UserAvatar user={partner} size={56} showOnline={false} isOnline={false} />
+        )}
         <h3 className="chat-details__name">
-          {specialMode ? (
+          {specialMode && !backMode ? (
             <>
               <span className="chat-details__hash">#</span>
               {partner.nickname}
@@ -68,15 +111,17 @@ export function ChatDetailsPanel({ partner, isOnline, onClose, specialMode = fal
           )}
         </h3>
         <p className="chat-details__sub">
-          {specialMode
-            ? `${partner.first_name} ${partner.last_name} · dev channel`
-            : `${partner.first_name} ${partner.last_name}`}
+          {backMode
+            ? `${partner.first_name} ${partner.last_name} · давно ушёл`
+            : specialMode
+              ? `${partner.first_name} ${partner.last_name} · dev channel`
+              : `${partner.first_name} ${partner.last_name}`}
         </p>
       </div>
 
-      {specialMode && (
+      {(specialMode || backMode) && (
         <div className="chat-details__quick-actions">
-          {['Mute', 'Pin', 'Members', 'More'].map((label) => (
+          {(backMode ? ['Mute', 'Gone', 'Alone', '…'] : ['Mute', 'Pin', 'Members', 'More']).map((label) => (
             <button key={label} type="button" className="chat-details__quick-btn" aria-label={label}>
               <span>{label[0]}</span>
             </button>
@@ -85,7 +130,7 @@ export function ChatDetailsPanel({ partner, isOnline, onClose, specialMode = fal
       )}
 
       <div className="chat-details__tabs" role="tablist">
-        {TABS.map((tab, i) => (
+        {tabs.map((tab, i) => (
           <button
             key={tab.id}
             type="button"
@@ -98,17 +143,28 @@ export function ChatDetailsPanel({ partner, isOnline, onClose, specialMode = fal
         ))}
       </div>
 
-      {specialMode && (
+      {specialMode && !backMode && (
         <div className="chat-details__about">
           <p>Frontend workspace для команды. Ship fast, break nothing.</p>
           <button type="button" className="chat-details__link">Edit description</button>
         </div>
       )}
 
+      {backMode && (
+        <div className="chat-details__about chat-details__about--back">
+          <p>Здесь когда-то был смысл. Теперь только эхо неотправленных коммитов.</p>
+          <button type="button" className="chat-details__link" disabled>
+            Слишком поздно редактировать
+          </button>
+        </div>
+      )}
+
       <div className="chat-details__section">
         <div className="chat-details__section-head">
-          <span>{specialMode ? 'Recent files' : 'Файлы'}</span>
-          <button type="button" className="chat-details__link">{specialMode ? 'See all' : 'Все файлы'}</button>
+          <span>{backMode ? 'Останки файлов' : specialMode ? 'Recent files' : 'Файлы'}</span>
+          <button type="button" className="chat-details__link">
+            {backMode ? 'Не смотрите' : specialMode ? 'See all' : 'Все файлы'}
+          </button>
         </div>
         <ul className="chat-details__files">
           {files.map((file) => (
@@ -126,19 +182,21 @@ export function ChatDetailsPanel({ partner, isOnline, onClose, specialMode = fal
             </li>
           ))}
         </ul>
-        {!specialMode && (
+        {!specialMode && !backMode && (
           <p className="chat-details__placeholder">Данные файлов появятся при поддержке бэкенда</p>
         )}
       </div>
 
-      {specialMode && (
+      {(specialMode || backMode) && (
         <div className="chat-details__section chat-details__section--integrations">
           <div className="chat-details__section-head">
-            <span>Integrations</span>
-            <button type="button" className="chat-details__link">See all</button>
+            <span>{backMode ? 'Бывшие связи' : 'Integrations'}</span>
+            <button type="button" className="chat-details__link">
+              {backMode ? 'Всё ушло' : 'See all'}
+            </button>
           </div>
           <ul className="chat-details__integrations">
-            {INTEGRATIONS.map((item) => (
+            {(backMode ? BACK_INTEGRATIONS : INTEGRATIONS).map((item) => (
               <li key={item.name} className="chat-details__integration">
                 <span className="chat-details__integration-dot" style={{ background: item.color }} />
                 <span className="chat-details__integration-name">{item.name}</span>

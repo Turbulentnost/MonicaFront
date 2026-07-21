@@ -1,4 +1,19 @@
-export function ChatDevStatusBar() {
+export function ChatDevStatusBar({ variant = 'front' }) {
+  if (variant === 'back') {
+    return (
+      <div className="chat-dev-statusbar chat-dev-statusbar--back" aria-hidden="true">
+        <span className="chat-dev-statusbar__branch">back/void</span>
+        <span className="chat-dev-statusbar__sep">|</span>
+        <span className="chat-dev-statusbar__item chat-dev-statusbar__item--dead">○ alone</span>
+        <span className="chat-dev-statusbar__sep">|</span>
+        <span className="chat-dev-statusbar__item">grayscale</span>
+        <span className="chat-dev-statusbar__sep">|</span>
+        <span className="chat-dev-statusbar__item">no hope</span>
+        <span className="chat-dev-statusbar__right">нам очень жаль…</span>
+      </div>
+    );
+  }
+
   return (
     <div className="chat-dev-statusbar" aria-hidden="true">
       <span className="chat-dev-statusbar__branch">front/redesign</span>

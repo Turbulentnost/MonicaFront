@@ -6,6 +6,7 @@ const DELETE_FOR_ALL_MS = 48 * 60 * 60 * 1000;
 const HOVER_HIDE_DELAY_MS = 280;
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '🔥', '😮', '😢'];
+const BACK_QUICK_REACTIONS = ['🥀', '💀', '😭', '🖤', '😞', '💔'];
 
 function PlusIcon() {
   return (
@@ -43,6 +44,7 @@ export function MessageBubble({
   onDelete,
   chatId,
   specialMode = false,
+  backMode = false,
   reactions = [],
   onToggleReaction,
 }) {
@@ -118,6 +120,7 @@ export function MessageBubble({
     'message-reaction-bar',
     isOwn ? 'message-reaction-bar--own' : 'message-reaction-bar--other',
     specialMode ? 'message-reaction-bar--special' : '',
+    backMode ? 'message-reaction-bar--back' : '',
     barVisible || pickerExpanded ? 'is-visible' : '',
     pickerExpanded ? 'is-expanded' : '',
   ]
@@ -128,6 +131,7 @@ export function MessageBubble({
     'message-reactions',
     isOwn ? 'message-reactions--own' : 'message-reactions--other',
     specialMode ? 'message-reactions--special' : '',
+    backMode ? 'message-reactions--back' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -194,7 +198,7 @@ export function MessageBubble({
           onMouseLeave={handleMouseLeave}
         >
           <div className="message-reaction-bar__row">
-            {QUICK_REACTIONS.map((emoji) => (
+            {(backMode ? BACK_QUICK_REACTIONS : QUICK_REACTIONS).map((emoji) => (
               <button
                 key={emoji}
                 type="button"
@@ -227,6 +231,7 @@ export function MessageBubble({
               <EmojiPicker
                 visible={pickerExpanded}
                 specialMode={specialMode}
+                backMode={backMode}
                 onSelect={handleReactionClick}
                 className="emoji-picker--reaction"
               />
