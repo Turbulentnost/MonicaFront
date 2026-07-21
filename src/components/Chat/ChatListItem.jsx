@@ -22,7 +22,7 @@ function formatPreview(lastMessage) {
   return lastMessage.content || 'Нет сообщений';
 }
 
-export function ChatListItem({ chat, active, onSelect, isOnline }) {
+export function ChatListItem({ chat, active, onSelect, isOnline, ringing = false }) {
   const partner = chat.partner;
   const preview = formatPreview(chat.last_message);
   const timeLabel = formatChatListTime(
@@ -30,7 +30,7 @@ export function ChatListItem({ chat, active, onSelect, isOnline }) {
   );
 
   return (
-    <li className={active ? 'active' : ''}>
+    <li className={[active ? 'active' : '', ringing ? 'ringing' : ''].filter(Boolean).join(' ')}>
       <button type="button" className="chat-item-btn" onClick={() => onSelect(chat)}>
         <UserAvatar user={partner} size={44} showOnline isOnline={isOnline} />
         <span className="chat-item-text">
@@ -38,7 +38,10 @@ export function ChatListItem({ chat, active, onSelect, isOnline }) {
             <span className="chat-item-name">@{partner?.nickname || '—'}</span>
             {timeLabel && <span className="chat-item-time">{timeLabel}</span>}
           </span>
-          <span className="chat-item-preview">{preview}</span>
+          <span className="chat-item-preview">
+            {ringing && <span className="chat-ringing-dot" aria-hidden="true" />}
+            {ringing ? 'Входящий звонок…' : preview}
+          </span>
         </span>
       </button>
     </li>

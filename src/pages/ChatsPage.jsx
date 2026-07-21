@@ -11,7 +11,9 @@ import { chatsApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useNotifications, usePresence } from '../hooks/usePresence';
+import { useCall } from '../hooks/useCall';
 import { useSecretFavoritesShortcut } from '../hooks/useSecretFavoritesShortcut';
+import { useUserIdle } from '../hooks/useUserIdle';
 import { ChatHeader } from '../components/Chat/ChatHeader';
 import { ChatListItem } from '../components/Chat/ChatListItem';
 import { ChatIconRail } from '../components/Chat/ChatIconRail';
@@ -25,6 +27,8 @@ import { CodeEditorInput } from '../components/Chat/CodeEditorInput';
 import { EmojiPicker } from '../components/Chat/EmojiPicker';
 import { PrivatePanel } from '../components/Chat/PrivatePanel';
 import { UserSearchResult } from '../components/Chat/UserSearchResult';
+import { IncomingCallOverlay } from '../components/Chat/IncomingCallOverlay';
+import { CallScreen } from '../components/Chat/CallScreen';
 import { warmAvatarCache } from '../utils/avatarCache';
 import { groupMessagesByDay } from '../utils/formatChatDate';
 import { invalidateMediaCache, warmMediaCache } from '../utils/mediaCache';
@@ -33,6 +37,8 @@ import { VoiceRecorder, canUseMicrophone } from '../utils/voiceRecorder';
 
 const MAX_ATTACHMENTS = 10;
 const MAX_FILE_SIZE_BYTES = 300 * 1024 * 1024;
+const CHAT_IDLE_MS = 60_000;
+const lastChatStorageKey = (userId) => (userId ? `monica_last_chat_id:${userId}` : null);
 
 function leavePrivateSessionsBestEffort() {
   const token = localStorage.getItem('access_token');
@@ -81,16 +87,22 @@ export default function ChatsPage() {
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(true);
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [messageReactions, setMessageReactions] = useState({});
+  const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const messagesEndRef = useRef(null);
   const messagesAreaRef = useRef(null);
   const loadingOlderRef = useRef(false);
   const prependScrollRef = useRef(null);
+  const shouldStickToBottomRef = useRef(true);
+  const suppressHistoryLoadRef = useRef(false);
+  const highlightTimeoutRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const lastTypingSentRef = useRef(false);
   const searchDebounceRef = useRef(null);
   const fileInputRef = useRef(null);
   const messageInputRef = useRef(null);
   const markReadRef = useRef(null);
+  const isIdleRef = useRef(false);
+  const didRestoreChatRef = useRef(false);
   const lastImagePasteAtRef = useRef(0);
   const emojiHideTimeoutRef = useRef(null);
   const voiceRecorderRef = useRef(null);
@@ -100,6 +112,21 @@ export default function ChatsPage() {
   const [voiceElapsedMs, setVoiceElapsedMs] = useState(0);
   const [voiceLiveWaveform, setVoiceLiveWaveform] = useState([]);
   const [voiceBusy, setVoiceBusy] = useState(false);
+  const callController = useCall(user);
+  const callChatId = callController.call?.chat_id
+    || (typeof callController.call?.chat === 'object'
+      ? callController.call.chat?.id
+      : callController.call?.chat);
+  const callScreenVisible = ['outgoing', 'connecting', 'active'].includes(callController.status);
+  const dispatchCallEvent = callController.onCallEvent;
+  const isIdle = useUserIdle(CHAT_IDLE_MS);
+  isIdleRef.current = isIdle;
+
+  const persistSelectedChat = useCallback((chat) => {
+    const key = lastChatStorageKey(user?.id);
+    if (!key || !chat?.id) return;
+    localStorage.setItem(key, String(chat.id));
+  }, [user?.id]);
 
   const loadChats = useCallback(async () => {
     const { data } = await chatsApi.list();
@@ -110,7 +137,19 @@ export default function ChatsPage() {
     loadChats();
   }, [loadChats]);
 
+  useEffect(() => {
+    if (!callScreenVisible || selectedChat || !callChatId) return;
+    const activeChat = chats.find((item) => String(item.id) === String(callChatId));
+    if (activeChat) {
+      setSelectedChat(activeChat);
+      persistSelectedChat(activeChat);
+    }
+  }, [callChatId, callScreenVisible, chats, selectedChat, persistSelectedChat]);
+
   const loadMessages = useCallback(async (chatId) => {
+    shouldStickToBottomRef.current = true;
+    suppressHistoryLoadRef.current = true;
+    setHighlightedMessageId(null);
     const { data } = await chatsApi.messages(chatId, { limit: 100 });
     setMessages(data);
     setHasMoreMessages(data.length === 100);
@@ -186,8 +225,10 @@ export default function ChatsPage() {
 
   const handleMessagesScroll = useCallback((event) => {
     const container = event.currentTarget;
-    const maxScroll = container.scrollHeight - container.clientHeight;
-    if (maxScroll > 0 && container.scrollTop <= maxScroll * 0.8) {
+    if (suppressHistoryLoadRef.current) return;
+    const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+    shouldStickToBottomRef.current = maxScroll - container.scrollTop < 96;
+    if (container.scrollTop <= 80) {
       loadOlderMessages();
     }
   }, [loadOlderMessages]);
@@ -216,12 +257,25 @@ export default function ChatsPage() {
     clearPendingAttachments();
     setAccountSettingsOpen(false);
     setSelectedChat(chat);
+    persistSelectedChat(chat);
     setPartnerTyping(false);
     setInput('');
     setCodeMode(false);
     setAttachError('');
     await loadMessages(chat.id);
   };
+
+  useEffect(() => {
+    if (!user?.id || !chats.length || selectedChat || didRestoreChatRef.current) return;
+    didRestoreChatRef.current = true;
+    const savedId = localStorage.getItem(lastChatStorageKey(user.id));
+    if (!savedId) return;
+    const chat = chats.find((item) => String(item.id) === String(savedId));
+    if (chat) {
+      handleSelectChat(chat);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- restore once after first chats load
+  }, [user?.id, chats, selectedChat]);
 
   const handleNewMessage = useCallback(
     (message) => {
@@ -241,8 +295,13 @@ export default function ChatsPage() {
           if (item.path && item.content_url) warmMediaCache(item.path, item.content_url);
         });
       }
-      // Чужое сообщение в открытом чате — сразу прочитано
-      if (message.sender?.id && message.sender.id !== user?.id && !message.read_at) {
+      // Mark read only while the user is actively using the page.
+      if (
+        !isIdleRef.current
+        && message.sender?.id
+        && message.sender.id !== user?.id
+        && !message.read_at
+      ) {
         markReadRef.current?.([message.id]);
       }
       loadChats();
@@ -311,6 +370,12 @@ export default function ChatsPage() {
   });
   markReadRef.current = markMessagesRead;
 
+  // When the open chat is connected and the user is active, mark backlog as read.
+  useEffect(() => {
+    if (!selectedChat?.id || !connected || isIdle) return;
+    markMessagesRead();
+  }, [selectedChat?.id, connected, isIdle, markMessagesRead]);
+
   const {
     items: notifications,
     open: notifOpen,
@@ -343,6 +408,7 @@ export default function ChatsPage() {
         if (chat && String(selectedChat?.id) !== String(chat.id)) {
           clearPendingAttachments();
           setSelectedChat(chat);
+          persistSelectedChat(chat);
           setPartnerTyping(false);
           setInput('');
           setCodeMode(false);
@@ -353,7 +419,7 @@ export default function ChatsPage() {
         // панель уже открыта
       }
     },
-    [chats, selectedChat?.id, loadMessages, clearPendingAttachments]
+    [chats, selectedChat?.id, loadMessages, clearPendingAttachments, persistSelectedChat]
   );
 
   const handleNotification = useCallback(
@@ -404,9 +470,27 @@ export default function ChatsPage() {
     });
   }, [loadChats]);
 
+  const handleCallEvent = useCallback((event) => {
+    dispatchCallEvent(event);
+    if (event.action !== 'call.incoming') return;
+    const eventCall = event.call || event;
+    const chatId = eventCall.chat_id
+      || (typeof eventCall.chat === 'object' ? eventCall.chat?.id : eventCall.chat);
+    if (!chatId) return;
+    setChats((prev) => {
+      const index = prev.findIndex((item) => String(item.id) === String(chatId));
+      if (index < 0) {
+        loadChats();
+        return prev;
+      }
+      return [prev[index], ...prev.filter((_, itemIndex) => itemIndex !== index)];
+    });
+  }, [dispatchCallEvent, loadChats]);
+
   const { isOnline, getLastSeen } = usePresence(Boolean(user), {
     onChatPreview: applyChatPreview,
     onNotification: handleNotification,
+    onCallEvent: handleCallEvent,
   });
 
   const handleInvitePrivate = async () => {
@@ -526,6 +610,10 @@ export default function ChatsPage() {
     lastTypingSentRef.current = false;
   }, [selectedChat?.id]);
 
+  useEffect(() => () => {
+    if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+  }, []);
+
   useLayoutEffect(() => {
     const container = messagesAreaRef.current;
     const previous = prependScrollRef.current;
@@ -535,8 +623,56 @@ export default function ChatsPage() {
       prependScrollRef.current = null;
       return;
     }
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!container || !shouldStickToBottomRef.current) return;
+    container.scrollTop = container.scrollHeight;
+    requestAnimationFrame(() => {
+      if (!messagesAreaRef.current || !shouldStickToBottomRef.current) return;
+      messagesAreaRef.current.scrollTop = messagesAreaRef.current.scrollHeight;
+      suppressHistoryLoadRef.current = false;
+    });
   }, [messages, partnerTyping]);
+
+  const jumpToMessage = useCallback(async (messageId) => {
+    if (!selectedChat?.id || !messageId) return;
+
+    if (highlightTimeoutRef.current) {
+      clearTimeout(highlightTimeoutRef.current);
+      highlightTimeoutRef.current = null;
+    }
+    setHighlightedMessageId(String(messageId));
+    shouldStickToBottomRef.current = false;
+
+    const scrollToTarget = () => {
+      const el = messagesAreaRef.current?.querySelector(
+        `[data-message-id="${CSS.escape(String(messageId))}"]`
+      );
+      if (!el) return false;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return true;
+    };
+
+    if (scrollToTarget()) {
+      highlightTimeoutRef.current = setTimeout(() => setHighlightedMessageId(null), 2200);
+      return;
+    }
+
+    suppressHistoryLoadRef.current = true;
+    try {
+      const { data } = await chatsApi.messages(selectedChat.id, {
+        around: messageId,
+        limit: 100,
+      });
+      setMessages(Array.isArray(data) ? data : []);
+      setHasMoreMessages(true);
+      requestAnimationFrame(() => {
+        scrollToTarget();
+        suppressHistoryLoadRef.current = false;
+      });
+    } catch {
+      suppressHistoryLoadRef.current = false;
+    }
+    highlightTimeoutRef.current = setTimeout(() => setHighlightedMessageId(null), 2200);
+  }, [selectedChat?.id]);
 
   const stopTyping = useCallback(() => {
     if (typingTimeoutRef.current) {
@@ -760,6 +896,23 @@ export default function ChatsPage() {
     if (recorder) {
       await recorder.cancel();
     }
+  };
+
+  const stopVoiceBeforeCall = async () => {
+    if (voiceRecorderRef.current) await cancelVoiceRecording();
+  };
+
+  const handleStartCall = async () => {
+    if (!selectedChat?.id) return;
+    await stopVoiceBeforeCall();
+    stopTyping();
+    callController.startCall(selectedChat.id);
+  };
+
+  const handleAcceptCall = async () => {
+    await stopVoiceBeforeCall();
+    stopTyping();
+    callController.acceptCall();
   };
 
   const sendVoiceRecording = async () => {
@@ -1211,12 +1364,26 @@ export default function ChatsPage() {
         privateSessionId ? 'with-private' : '',
         isSpecialFavoritesOpen ? 'chats-page--special' : '',
         selectedChat ? 'has-selected-chat' : '',
+        callScreenVisible ? 'chats-page--call-active' : '',
       ]
         .filter(Boolean)
         .join(' ')}
     >
+      {callController.status === 'incoming' && (
+        <IncomingCallOverlay
+          partner={callController.partner}
+          error={callController.error}
+          onAccept={handleAcceptCall}
+          onReject={callController.rejectCall}
+        />
+      )}
+      {callController.status === 'ended' && callController.error && (
+        <div className="call-error-toast" role="alert">{callController.error}</div>
+      )}
       {isSpecialFavoritesOpen && <ChatDevStatusBar />}
-      {isSpecialFavoritesOpen && <div className="chat-dev-grid" aria-hidden="true" />}
+      {isSpecialFavoritesOpen && (
+        <div className="chat-dev-grid" aria-hidden="true" />
+      )}
       <div className="chats-page__body">
       <ChatIconRail
         user={user}
@@ -1287,6 +1454,10 @@ export default function ChatsPage() {
               active={selectedChat?.id === chat.id}
               onSelect={handleSelectChat}
               isOnline={isOnline(chat.partner?.id, chat.partner?.is_online)}
+              ringing={
+                callController.status === 'incoming'
+                && String(callChatId) === String(chat.id)
+              }
             />
           ))}
         </ul>
@@ -1305,6 +1476,8 @@ export default function ChatsPage() {
               onInvitePrivate={handleInvitePrivate}
               privateBusy={privateBusy || invitePending || Boolean(privateSessionId)}
               onOpenDetails={() => setDetailsPanelOpen(true)}
+              onStartCall={handleStartCall}
+              callDisabled={!selectedChat?.partner || !['idle', 'ended'].includes(callController.status)}
             />
             {invitePending && !privateSessionId && (
               <div className="private-invite-banner">
@@ -1318,6 +1491,7 @@ export default function ChatsPage() {
                 </button>
               </div>
             )}
+            <>
             <div
               ref={messagesAreaRef}
               className="messages-area"
@@ -1342,6 +1516,7 @@ export default function ChatsPage() {
                       specialMode={isSpecialFavoritesOpen}
                       reactions={messageReactions[msg.id] || []}
                       onToggleReaction={handleToggleReaction}
+                      highlighted={String(highlightedMessageId) === String(msg.id)}
                     />
                   ))}
                 </div>
@@ -1596,6 +1771,7 @@ export default function ChatsPage() {
                 </button>
               </div>
             </form>
+            </>
           </>
         ) : (
           <div className="chat-empty">
@@ -1607,14 +1783,35 @@ export default function ChatsPage() {
           </div>
         )}
       </main>
-      {detailsPanelOpen && selectedChat && (
-        <ChatDetailsPanel
-          chatId={selectedChat.id}
-          partner={selectedChat.partner}
-          isOnline={isOnline(selectedChat.partner?.id, selectedChat.partner?.is_online)}
-          onClose={() => setDetailsPanelOpen(false)}
+      {callScreenVisible ? (
+        <CallScreen
+          partner={callController.partner}
+          status={callController.status}
+          elapsedSeconds={callController.elapsedSeconds}
+          muted={callController.muted}
+          speakerMuted={callController.speakerMuted}
+          error={callController.error}
+          remoteAudioRef={callController.remoteAudioRef}
+          onToggleMute={callController.toggleMute}
+          onToggleSpeakerMute={callController.toggleSpeakerMute}
+          onEnd={
+            callController.status === 'outgoing'
+              ? callController.cancelCall
+              : callController.hangup
+          }
           specialMode={isSpecialFavoritesOpen}
         />
+      ) : (
+        detailsPanelOpen && selectedChat && (
+          <ChatDetailsPanel
+            chatId={selectedChat.id}
+            partner={selectedChat.partner}
+            isOnline={isOnline(selectedChat.partner?.id, selectedChat.partner?.is_online)}
+            onClose={() => setDetailsPanelOpen(false)}
+            specialMode={isSpecialFavoritesOpen}
+            onJumpToMessage={jumpToMessage}
+          />
+        )
       )}
       {privateSessionId && (
         <PrivatePanel

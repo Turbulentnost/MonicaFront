@@ -72,29 +72,29 @@ function DeliveryIcon({ status }) {
   return (
     <svg
       className="message-status-checks"
-      viewBox="0 0 18 12"
+      viewBox="0 0 16 10"
       fill="none"
       stroke="currentColor"
       aria-hidden="true"
     >
       {status === 'sent' ? (
         <path
-          d="M3 6.5 6 9.5 14.5 1.5"
-          strokeWidth="1.6"
+          d="M1.5 5.2 4.2 7.6 11.5 2"
+          strokeWidth="1.4"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
       ) : (
         <>
           <path
-            d="M1 6.5 4 9.5 12.5 1.5"
-            strokeWidth="1.5"
+            d="M1 5.2 3.6 7.6 9.8 2"
+            strokeWidth="1.3"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
           <path
-            d="M7 8.5 8 9.5 16.5 1.5"
-            strokeWidth="1.5"
+            d="M5.8 5.2 8.2 7.6 14.5 2"
+            strokeWidth="1.3"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
@@ -118,6 +118,7 @@ export function MessageBubble({
   specialMode = false,
   reactions = [],
   onToggleReaction,
+  highlighted = false,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [barVisible, setBarVisible] = useState(false);
@@ -308,7 +309,13 @@ export function MessageBubble({
 
   return (
     <div
-      className={`message-wrapper ${isOwn ? 'own' : 'other'}${reactions.length ? ' has-reactions' : ''}`}
+      className={[
+        'message-wrapper',
+        isOwn ? 'own' : 'other',
+        reactions.length ? 'has-reactions' : '',
+        highlighted ? 'is-highlighted' : '',
+      ].filter(Boolean).join(' ')}
+      data-message-id={message.id}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >

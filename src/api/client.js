@@ -90,6 +90,16 @@ export const chatsApi = {
   leavePrivate: () => api.post('/private/leave/'),
 };
 
+export const callsApi = {
+  start: (chatId, data) => api.post(`/chats/${chatId}/calls/start/`, data),
+  accept: (callId, data) => api.post(`/calls/${callId}/accept/`, data),
+  reject: (callId, data) => api.post(`/calls/${callId}/reject/`, data),
+  cancel: (callId, data) => api.post(`/calls/${callId}/cancel/`, data),
+  hangup: (callId, data) => api.post(`/calls/${callId}/hangup/`, data),
+  active: () => api.get('/calls/active/'),
+  iceConfig: () => api.get('/calls/ice-config/'),
+};
+
 export const notificationsApi = {
   list: () => api.get('/notifications/'),
   markRead: (id) => api.post(`/notifications/${id}/read/`),

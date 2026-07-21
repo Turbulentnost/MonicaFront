@@ -343,7 +343,7 @@ select:autofill {
 }
 
 .message {
-  max-width: 70%;
+  max-width: min(420px, 58%);
   padding: 10px 14px;
   border-radius: 12px;
   position: relative;
@@ -366,6 +366,8 @@ select:autofill {
 }
 
 .message-content {
+  font-size: 13px;
+  line-height: 1.35;
   word-break: break-word;
 }
 
@@ -478,8 +480,9 @@ select:autofill {
 
 .message-status-checks {
   display: block;
-  width: 18px;
-  height: 12px;
+  width: 14px;
+  height: 9px;
+  flex-shrink: 0;
 }
 
 .message-status-label {

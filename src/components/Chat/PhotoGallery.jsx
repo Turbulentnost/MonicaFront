@@ -50,7 +50,7 @@ function GalleryThumb({ item, onOpen }) {
   );
 }
 
-function PhotoLightbox({ items, index, onClose, onChange }) {
+export function PhotoLightbox({ items, index, onClose, onChange }) {
   const current = items[index];
   const key = current?.path;
   const remote = current?.content_url;

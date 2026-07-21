@@ -9,6 +9,8 @@ export function ChatHeader({
   onInvitePrivate,
   privateBusy,
   onOpenDetails,
+  onStartCall,
+  callDisabled,
 }) {
   const [, setTick] = useState(0);
 
@@ -45,6 +47,18 @@ export function ChatHeader({
           </span>
         </div>
       </div>
+      <button
+        type="button"
+        className="btn-call"
+        onClick={onStartCall}
+        disabled={callDisabled}
+        title={callDisabled ? 'Звонок уже выполняется' : 'Аудиозвонок'}
+        aria-label="Начать аудиозвонок"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true">
+          <path d="M7 4.5 4.8 6.7c-.8.8.5 4.5 3.6 7.6s6.8 4.4 7.6 3.6l2.2-2.2-4-2-1.4 1.4c-1.7-.8-3.5-2.6-4.3-4.3l1.4-1.4-2.9-4.9Z" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
       <button
         type="button"
         className="btn-private"
