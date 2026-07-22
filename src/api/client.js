@@ -96,6 +96,7 @@ export const callsApi = {
   reject: (callId, data) => api.post(`/calls/${callId}/reject/`, data),
   cancel: (callId, data) => api.post(`/calls/${callId}/cancel/`, data),
   hangup: (callId, data) => api.post(`/calls/${callId}/hangup/`, data),
+  setMediaMode: (callId, data) => api.post(`/calls/${callId}/media-mode/`, data),
   active: () => api.get('/calls/active/'),
   iceConfig: () => api.get('/calls/ice-config/'),
 };

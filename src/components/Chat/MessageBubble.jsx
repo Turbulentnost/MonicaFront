@@ -109,7 +109,69 @@ function EditedMark({ show }) {
   return <span className="message-edited">(ред.)</span>;
 }
 
-export function MessageBubble({
+function CallHistoryIcon({ video = false }) {
+  if (video) {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+        <rect x="3" y="7" width="13" height="10" rx="2" />
+        <path d="M16 10l5-3v10l-5-3" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <path
+        d="M7 4.5 4.8 6.7c-.8.8.5 4.5 3.6 7.6s6.8 4.4 7.6 3.6l2.2-2.2-4-2-1.4 1.4c-1.7-.8-3.5-2.6-4.3-4.3l1.4-1.4-2.9-4.9Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function CallHistoryBubble({ message, highlighted = false }) {
+  const meta = Array.isArray(message.attachments) ? message.attachments[0] : null;
+  const isVideo = meta?.media_mode === 'video'
+    || /видео/i.test(message.content || '');
+  const status = meta?.status || message.mime_type || '';
+  return (
+    <div
+      className={[
+        'message-wrapper',
+        'message-wrapper--call',
+        highlighted ? 'is-highlighted' : '',
+      ].filter(Boolean).join(' ')}
+      data-message-id={message.id}
+    >
+      <div className={`message message--call message--call-${status || 'ended'}`}>
+        <span className="message-call-icon" aria-hidden="true">
+          <CallHistoryIcon video={isVideo} />
+        </span>
+        <span className="message-call-text">{message.content}</span>
+        <span className="message-call-time">
+          {new Date(message.sent_at).toLocaleTimeString('ru-RU', {
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+export function MessageBubble(props) {
+  if (props.message?.message_type === 'call') {
+    return (
+      <CallHistoryBubble
+        message={props.message}
+        highlighted={props.highlighted}
+      />
+    );
+  }
+  return <ChatMessageBubble {...props} />;
+}
+
+function ChatMessageBubble({
   message,
   isOwn,
   onDelete,

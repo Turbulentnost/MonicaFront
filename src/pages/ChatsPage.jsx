@@ -6,14 +6,15 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { chatsApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useWebSocket } from '../hooks/useWebSocket';
-import { useNotifications, usePresence } from '../hooks/usePresence';
-import { useCall } from '../hooks/useCall';
+import { useNotifications } from '../hooks/usePresence';
+import { useCallContext, usePresenceHandlers } from '../context/CallContext';
 import { useSecretFavoritesShortcut } from '../hooks/useSecretFavoritesShortcut';
 import { useUserIdle } from '../hooks/useUserIdle';
+import { MOBILE_CHAT_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { ChatHeader } from '../components/Chat/ChatHeader';
 import { ChatListItem } from '../components/Chat/ChatListItem';
 import { ChatIconRail } from '../components/Chat/ChatIconRail';
@@ -63,6 +64,8 @@ function leavePrivateSessionsBestEffort() {
 export default function ChatsPage() {
   const { user, logout, updateUser } = useAuth();
   const navigate = useNavigate();
+  const { chatId: routeChatId } = useParams();
+  const isMobileViewport = useMediaQuery(MOBILE_CHAT_QUERY);
   const [chats, setChats] = useState([]);
   const [selectedChat, setSelectedChat] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -86,6 +89,8 @@ export default function ChatsPage() {
   const [isSpecialFavoritesOpen, setIsSpecialFavoritesOpen] = useState(false);
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(true);
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
+  const [isFileDragOver, setIsFileDragOver] = useState(false);
+  const fileDragDepthRef = useRef(0);
   const [messageReactions, setMessageReactions] = useState({});
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const messagesEndRef = useRef(null);
@@ -103,6 +108,8 @@ export default function ChatsPage() {
   const markReadRef = useRef(null);
   const isIdleRef = useRef(false);
   const didRestoreChatRef = useRef(false);
+  const messagesRequestSeqRef = useRef(0);
+  const activeMessagesChatIdRef = useRef(null);
   const lastImagePasteAtRef = useRef(0);
   const emojiHideTimeoutRef = useRef(null);
   const voiceRecorderRef = useRef(null);
@@ -112,13 +119,13 @@ export default function ChatsPage() {
   const [voiceElapsedMs, setVoiceElapsedMs] = useState(0);
   const [voiceLiveWaveform, setVoiceLiveWaveform] = useState([]);
   const [voiceBusy, setVoiceBusy] = useState(false);
-  const callController = useCall(user);
+  const callController = useCallContext();
+  const { isOnline, getLastSeen } = callController;
   const callChatId = callController.call?.chat_id
     || (typeof callController.call?.chat === 'object'
       ? callController.call.chat?.id
       : callController.call?.chat);
   const callScreenVisible = ['outgoing', 'connecting', 'active'].includes(callController.status);
-  const dispatchCallEvent = callController.onCallEvent;
   const isIdle = useUserIdle(CHAT_IDLE_MS);
   isIdleRef.current = isIdle;
 
@@ -138,40 +145,60 @@ export default function ChatsPage() {
   }, [loadChats]);
 
   useEffect(() => {
-    if (!callScreenVisible || selectedChat || !callChatId) return;
-    const activeChat = chats.find((item) => String(item.id) === String(callChatId));
-    if (activeChat) {
-      setSelectedChat(activeChat);
-      persistSelectedChat(activeChat);
-    }
-  }, [callChatId, callScreenVisible, chats, selectedChat, persistSelectedChat]);
+    if (!callScreenVisible || !isMobileViewport) return undefined;
+    navigate('/call');
+    return undefined;
+  }, [callScreenVisible, isMobileViewport, navigate]);
 
   const loadMessages = useCallback(async (chatId) => {
+    if (!chatId) return;
+    const requestSeq = ++messagesRequestSeqRef.current;
+    activeMessagesChatIdRef.current = String(chatId);
     shouldStickToBottomRef.current = true;
     suppressHistoryLoadRef.current = true;
     setHighlightedMessageId(null);
-    const { data } = await chatsApi.messages(chatId, { limit: 100 });
-    setMessages(data);
-    setHasMoreMessages(data.length === 100);
+    setMessages([]);
+    setHasMoreMessages(false);
     loadingOlderRef.current = false;
     setLoadingOlderMessages(false);
     prependScrollRef.current = null;
-    data.forEach((msg) => {
-      if (msg.message_type !== 'photo') return;
-      const items = Array.isArray(msg.attachments) && msg.attachments.length
-        ? msg.attachments
-        : [{ path: msg.content, content_url: msg.content_url }];
-      items.forEach((item) => {
-        if (item.path && item.content_url) warmMediaCache(item.path, item.content_url);
+    try {
+      const { data } = await chatsApi.messages(chatId, { limit: 100 });
+      // Ignore stale responses when the user already switched chats.
+      if (
+        requestSeq !== messagesRequestSeqRef.current
+        || String(activeMessagesChatIdRef.current) !== String(chatId)
+      ) {
+        return;
+      }
+      setMessages(Array.isArray(data) ? data : []);
+      setHasMoreMessages(Array.isArray(data) && data.length === 100);
+      (Array.isArray(data) ? data : []).forEach((msg) => {
+        if (msg.message_type !== 'photo') return;
+        const items = Array.isArray(msg.attachments) && msg.attachments.length
+          ? msg.attachments
+          : [{ path: msg.content, content_url: msg.content_url }];
+        items.forEach((item) => {
+          if (item.path && item.content_url) warmMediaCache(item.path, item.content_url);
+        });
       });
-    });
+    } catch {
+      if (
+        requestSeq === messagesRequestSeqRef.current
+        && String(activeMessagesChatIdRef.current) === String(chatId)
+      ) {
+        setMessages([]);
+        setAttachError('Не удалось загрузить сообщения');
+      }
+    }
   }, []);
 
   const loadOlderMessages = useCallback(async () => {
+    const chatId = selectedChat?.id;
     if (
       loadingOlderRef.current
       || !hasMoreMessages
-      || !selectedChat?.id
+      || !chatId
       || messages.length === 0
     ) {
       return;
@@ -181,13 +208,18 @@ export default function ChatsPage() {
     if (!oldestMessage) return;
 
     const container = messagesAreaRef.current;
+    const requestChatId = String(chatId);
     loadingOlderRef.current = true;
     setLoadingOlderMessages(true);
     try {
-      const { data } = await chatsApi.messages(selectedChat.id, {
+      const { data } = await chatsApi.messages(chatId, {
         limit: 100,
         before: oldestMessage.id,
       });
+
+      if (String(activeMessagesChatIdRef.current) !== requestChatId) {
+        return;
+      }
 
       if (!data.length) {
         setHasMoreMessages(false);
@@ -201,6 +233,7 @@ export default function ChatsPage() {
         };
       }
       setMessages((current) => {
+        if (String(activeMessagesChatIdRef.current) !== requestChatId) return current;
         const knownIds = new Set(current.map((message) => String(message.id)));
         const older = data.filter((message) => !knownIds.has(String(message.id)));
         return older.length ? [...older, ...current] : current;
@@ -216,7 +249,9 @@ export default function ChatsPage() {
         });
       });
     } catch {
-      setAttachError('Не удалось загрузить более старые сообщения');
+      if (String(activeMessagesChatIdRef.current) === requestChatId) {
+        setAttachError('Не удалось загрузить более старые сообщения');
+      }
     } finally {
       loadingOlderRef.current = false;
       setLoadingOlderMessages(false);
@@ -253,34 +288,126 @@ export default function ChatsPage() {
     setAttachError('');
   };
 
-  const handleSelectChat = async (chat) => {
+  const applySelectedChat = useCallback(async (chat) => {
+    if (!chat?.id) return;
+    // Same chat already loaded — skip reload (avoids flicker / races).
+    if (
+      String(activeMessagesChatIdRef.current) === String(chat.id)
+      && String(selectedChat?.id) === String(chat.id)
+    ) {
+      persistSelectedChat(chat);
+      return;
+    }
     clearPendingAttachments();
     setAccountSettingsOpen(false);
+    if (typeof window !== 'undefined' && window.matchMedia(MOBILE_CHAT_QUERY).matches) {
+      setDetailsPanelOpen(false);
+    }
     setSelectedChat(chat);
     persistSelectedChat(chat);
     setPartnerTyping(false);
     setInput('');
     setCodeMode(false);
     setAttachError('');
+    setMessageReactions({});
     await loadMessages(chat.id);
+  }, [clearPendingAttachments, loadMessages, persistSelectedChat, selectedChat?.id]);
+
+  const handleSelectChat = async (chat) => {
+    if (!chat?.id) return;
+    if (String(routeChatId) !== String(chat.id)) {
+      navigate(`/chats/${chat.id}`);
+    }
+    if (String(selectedChat?.id) !== String(chat.id)) {
+      await applySelectedChat(chat);
+    } else {
+      persistSelectedChat(chat);
+    }
   };
 
+  const handleBackToChatList = useCallback(() => {
+    messagesRequestSeqRef.current += 1;
+    activeMessagesChatIdRef.current = null;
+    setSelectedChat(null);
+    setMessages([]);
+    setHasMoreMessages(false);
+    setPartnerTyping(false);
+    clearPendingAttachments();
+    setDetailsPanelOpen(false);
+    navigate('/chats');
+  }, [clearPendingAttachments, navigate]);
+
+  // Mobile: /chats = list, /chats/:id = conversation. Desktop keeps split view.
   useEffect(() => {
-    if (!user?.id || !chats.length || selectedChat || didRestoreChatRef.current) return;
+    if (!routeChatId) {
+      if (isMobileViewport && selectedChat) {
+        messagesRequestSeqRef.current += 1;
+        activeMessagesChatIdRef.current = null;
+        setSelectedChat(null);
+        setMessages([]);
+        setPartnerTyping(false);
+      }
+      return;
+    }
+    if (String(selectedChat?.id) === String(routeChatId)) return;
+    const chat = chats.find((item) => String(item.id) === String(routeChatId));
+    if (chat) {
+      applySelectedChat(chat);
+    }
+  }, [routeChatId, chats, isMobileViewport, selectedChat?.id, applySelectedChat]);
+
+  useEffect(() => {
+    if (!callScreenVisible || !callChatId) return;
+    const activeChat = chats.find((item) => String(item.id) === String(callChatId));
+    if (!activeChat) return;
+    if (String(selectedChat?.id) === String(activeChat.id)) return;
+    if (String(routeChatId) !== String(activeChat.id)) {
+      navigate(`/chats/${activeChat.id}`);
+    }
+    applySelectedChat(activeChat);
+  }, [
+    applySelectedChat,
+    callChatId,
+    callScreenVisible,
+    chats,
+    navigate,
+    routeChatId,
+    selectedChat?.id,
+  ]);
+
+  useEffect(() => {
+    if (!user?.id || !chats.length || didRestoreChatRef.current) return;
     didRestoreChatRef.current = true;
+    if (routeChatId) return;
+    // On mobile stay on the chat list; desktop restores last open chat.
+    if (isMobileViewport) return;
     const savedId = localStorage.getItem(lastChatStorageKey(user.id));
     if (!savedId) return;
     const chat = chats.find((item) => String(item.id) === String(savedId));
     if (chat) {
-      handleSelectChat(chat);
+      navigate(`/chats/${chat.id}`, { replace: true });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- restore once after first chats load
-  }, [user?.id, chats, selectedChat]);
+  }, [user?.id, chats, routeChatId, isMobileViewport, navigate]);
 
   const handleNewMessage = useCallback(
     (message) => {
+      const messageChatId = message?.chat_id
+        || (typeof message?.chat === 'object' ? message?.chat?.id : message?.chat);
+      if (
+        messageChatId
+        && String(messageChatId) !== String(activeMessagesChatIdRef.current)
+      ) {
+        loadChats();
+        return;
+      }
       setPartnerTyping(false);
       setMessages((prev) => {
+        if (
+          messageChatId
+          && String(messageChatId) !== String(activeMessagesChatIdRef.current)
+        ) {
+          return prev;
+        }
         const withoutTemp = message.client_id
           ? prev.filter((m) => m.client_id !== message.client_id && m.id !== `temp-${message.client_id}`)
           : prev;
@@ -301,22 +428,43 @@ export default function ChatsPage() {
         && message.sender?.id
         && message.sender.id !== user?.id
         && !message.read_at
+        && String(activeMessagesChatIdRef.current) === String(selectedChat?.id || messageChatId || '')
       ) {
         markReadRef.current?.([message.id]);
       }
       loadChats();
     },
-    [loadChats, user?.id]
+    [loadChats, selectedChat?.id, user?.id]
   );
 
   const handleMessagesRead = useCallback((data) => {
     const ids = new Set((data.message_ids || []).map(String));
     if (!ids.size) return;
     const readAt = data.read_at || new Date().toISOString();
-    setMessages((prev) =>
-      prev.map((m) => (ids.has(String(m.id)) ? { ...m, read_at: readAt } : m))
-    );
-  }, []);
+    setMessages((prev) => {
+      let latestReadSentAt = null;
+      prev.forEach((m) => {
+        if (!ids.has(String(m.id)) || !m.sent_at) return;
+        if (!latestReadSentAt || new Date(m.sent_at) > new Date(latestReadSentAt)) {
+          latestReadSentAt = m.sent_at;
+        }
+      });
+      return prev.map((m) => {
+        if (m.read_at) return m;
+        if (ids.has(String(m.id))) return { ...m, read_at: readAt };
+        // Own earlier messages also become read when a later one is acknowledged.
+        if (
+          latestReadSentAt
+          && m.sender?.id === user?.id
+          && m.sent_at
+          && new Date(m.sent_at) <= new Date(latestReadSentAt)
+        ) {
+          return { ...m, read_at: readAt };
+        }
+        return m;
+      });
+    });
+  }, [user?.id]);
 
   const handleMessageDeleted = useCallback(
     (messageId) => {
@@ -414,12 +562,23 @@ export default function ChatsPage() {
           setCodeMode(false);
           setAttachError('');
           await loadMessages(chat.id);
+          if (String(routeChatId) !== String(chat.id)) {
+            navigate(`/chats/${chat.id}`);
+          }
         }
       } catch {
         // панель уже открыта
       }
     },
-    [chats, selectedChat?.id, loadMessages, clearPendingAttachments, persistSelectedChat]
+    [
+      chats,
+      selectedChat?.id,
+      loadMessages,
+      clearPendingAttachments,
+      persistSelectedChat,
+      routeChatId,
+      navigate,
+    ]
   );
 
   const handleNotification = useCallback(
@@ -470,9 +629,8 @@ export default function ChatsPage() {
     });
   }, [loadChats]);
 
-  const handleCallEvent = useCallback((event) => {
-    dispatchCallEvent(event);
-    if (event.action !== 'call.incoming') return;
+  const handleIncomingCallPreview = useCallback((event) => {
+    if (event?.action !== 'call.incoming') return;
     const eventCall = event.call || event;
     const chatId = eventCall.chat_id
       || (typeof eventCall.chat === 'object' ? eventCall.chat?.id : eventCall.chat);
@@ -485,13 +643,21 @@ export default function ChatsPage() {
       }
       return [prev[index], ...prev.filter((_, itemIndex) => itemIndex !== index)];
     });
-  }, [dispatchCallEvent, loadChats]);
+  }, [loadChats]);
 
-  const { isOnline, getLastSeen } = usePresence(Boolean(user), {
+  usePresenceHandlers({
     onChatPreview: applyChatPreview,
     onNotification: handleNotification,
-    onCallEvent: handleCallEvent,
   });
+
+  useEffect(() => {
+    if (callController.status !== 'incoming' || !callChatId) return;
+    handleIncomingCallPreview({
+      action: 'call.incoming',
+      call: callController.call,
+      chat_id: callChatId,
+    });
+  }, [callController.status, callChatId, callController.call, handleIncomingCallPreview]);
 
   const handleInvitePrivate = async () => {
     if (!selectedChat || privateBusy || privateSessionId) return;
@@ -657,11 +823,19 @@ export default function ChatsPage() {
     }
 
     suppressHistoryLoadRef.current = true;
+    const requestChatId = String(selectedChat.id);
+    const requestSeq = ++messagesRequestSeqRef.current;
     try {
       const { data } = await chatsApi.messages(selectedChat.id, {
         around: messageId,
         limit: 100,
       });
+      if (
+        requestSeq !== messagesRequestSeqRef.current
+        || String(activeMessagesChatIdRef.current) !== requestChatId
+      ) {
+        return;
+      }
       setMessages(Array.isArray(data) ? data : []);
       setHasMoreMessages(true);
       requestAnimationFrame(() => {
@@ -906,13 +1080,21 @@ export default function ChatsPage() {
     if (!selectedChat?.id) return;
     await stopVoiceBeforeCall();
     stopTyping();
-    callController.startCall(selectedChat.id);
+    callController.startCall(selectedChat.id, 'audio');
+  };
+
+  const handleStartVideoCall = async () => {
+    if (!selectedChat?.id) return;
+    await stopVoiceBeforeCall();
+    stopTyping();
+    callController.startCall(selectedChat.id, 'video');
   };
 
   const handleAcceptCall = async () => {
     await stopVoiceBeforeCall();
     stopTyping();
-    callController.acceptCall();
+    const accepted = await callController.acceptCall();
+    if (accepted && isMobileViewport) navigate('/call');
   };
 
   const sendVoiceRecording = async () => {
@@ -1098,6 +1280,52 @@ export default function ChatsPage() {
     addPendingFiles(e.target.files);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
+
+  const resetFileDragState = useCallback(() => {
+    fileDragDepthRef.current = 0;
+    setIsFileDragOver(false);
+  }, []);
+
+  const handleChatDragEnter = useCallback((event) => {
+    if (!selectedChat || codeMode || voiceRecording || uploading) return;
+    if (![...event.dataTransfer.types].includes('Files')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    fileDragDepthRef.current += 1;
+    setIsFileDragOver(true);
+  }, [codeMode, selectedChat, uploading, voiceRecording]);
+
+  const handleChatDragLeave = useCallback((event) => {
+    if (!selectedChat) return;
+    event.preventDefault();
+    event.stopPropagation();
+    fileDragDepthRef.current = Math.max(0, fileDragDepthRef.current - 1);
+    if (fileDragDepthRef.current === 0) setIsFileDragOver(false);
+  }, [selectedChat]);
+
+  const handleChatDragOver = useCallback((event) => {
+    if (!selectedChat || codeMode || voiceRecording || uploading) return;
+    if (![...event.dataTransfer.types].includes('Files')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = 'copy';
+  }, [codeMode, selectedChat, uploading, voiceRecording]);
+
+  const handleChatDrop = useCallback((event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    resetFileDragState();
+    if (!selectedChat || codeMode || voiceRecording || uploading) return;
+    const files = event.dataTransfer?.files;
+    if (files?.length) addPendingFiles(files);
+  }, [
+    addPendingFiles,
+    codeMode,
+    resetFileDragState,
+    selectedChat,
+    uploading,
+    voiceRecording,
+  ]);
 
   const handlePasteFiles = useCallback(
     (event) => {
@@ -1338,11 +1566,23 @@ export default function ChatsPage() {
   );
 
   const filteredChats = useMemo(() => {
-    if (isSpecialFavoritesOpen) return chats;
-    if (chatFilter === 'unread') return chats.filter(isChatUnread);
-    if (chatFilter === 'mentions') return [];
-    return chats;
-  }, [chats, chatFilter, isSpecialFavoritesOpen, isChatUnread]);
+    let list;
+    if (isSpecialFavoritesOpen) list = chats;
+    else if (chatFilter === 'unread') list = chats.filter(isChatUnread);
+    else if (chatFilter === 'mentions') list = [];
+    else list = chats;
+
+    // Keep the ringing chat visible even under filters.
+    if (
+      callController.status === 'incoming'
+      && callChatId
+      && !list.some((chat) => String(chat.id) === String(callChatId))
+    ) {
+      const ringingChat = chats.find((chat) => String(chat.id) === String(callChatId));
+      if (ringingChat) list = [ringingChat, ...list];
+    }
+    return list;
+  }, [chats, chatFilter, isSpecialFavoritesOpen, isChatUnread, callController.status, callChatId]);
 
   useSecretFavoritesShortcut(() => setIsSpecialFavoritesOpen(true));
 
@@ -1363,8 +1603,11 @@ export default function ChatsPage() {
         'chats-page',
         privateSessionId ? 'with-private' : '',
         isSpecialFavoritesOpen ? 'chats-page--special' : '',
-        selectedChat ? 'has-selected-chat' : '',
+        selectedChat || routeChatId ? 'has-selected-chat' : '',
+        isMobileViewport && !routeChatId ? 'chats-page--mobile-list' : '',
+        isMobileViewport && routeChatId ? 'chats-page--mobile-chat' : '',
         callScreenVisible ? 'chats-page--call-active' : '',
+        !callScreenVisible && detailsPanelOpen && selectedChat ? 'chats-page--details-open' : '',
       ]
         .filter(Boolean)
         .join(' ')}
@@ -1373,6 +1616,7 @@ export default function ChatsPage() {
         <IncomingCallOverlay
           partner={callController.partner}
           error={callController.error}
+          mediaMode={callController.mediaMode}
           onAccept={handleAcceptCall}
           onReject={callController.rejectCall}
         />
@@ -1458,14 +1702,28 @@ export default function ChatsPage() {
                 callController.status === 'incoming'
                 && String(callChatId) === String(chat.id)
               }
+              ringingMediaMode={callController.mediaMode}
+              onAcceptCall={handleAcceptCall}
+              onRejectCall={callController.rejectCall}
             />
           ))}
         </ul>
       </aside>
 
-      <main className="chat-main">
+      <main
+        className={['chat-main', isFileDragOver ? 'chat-main--drag-over' : ''].filter(Boolean).join(' ')}
+        onDragEnter={handleChatDragEnter}
+        onDragLeave={handleChatDragLeave}
+        onDragOver={handleChatDragOver}
+        onDrop={handleChatDrop}
+      >
         {selectedChat ? (
           <>
+            {isFileDragOver && (
+              <div className="chat-drop-overlay" aria-hidden="true">
+                <span>Отпустите файлы, чтобы прикрепить</span>
+              </div>
+            )}
             <ChatHeader
               partner={selectedChat.partner}
               isOnline={isOnline(selectedChat.partner?.id, selectedChat.partner?.is_online)}
@@ -1475,9 +1733,11 @@ export default function ChatsPage() {
               )}
               onInvitePrivate={handleInvitePrivate}
               privateBusy={privateBusy || invitePending || Boolean(privateSessionId)}
-              onOpenDetails={() => setDetailsPanelOpen(true)}
+              onOpenDetails={() => setDetailsPanelOpen((open) => !open)}
               onStartCall={handleStartCall}
+              onStartVideoCall={handleStartVideoCall}
               callDisabled={!selectedChat?.partner || !['idle', 'ended'].includes(callController.status)}
+              onBack={isMobileViewport ? handleBackToChatList : undefined}
             />
             {invitePending && !privateSessionId && (
               <div className="private-invite-banner">
@@ -1695,7 +1955,6 @@ export default function ChatsPage() {
                     ref={fileInputRef}
                     type="file"
                     className="hidden-file-input"
-                    accept="image/*,.pdf,.doc,.docx,.txt,.py,.js"
                     multiple
                     onChange={handleFileChange}
                   />
@@ -1776,24 +2035,35 @@ export default function ChatsPage() {
         ) : (
           <div className="chat-empty">
             <p>
-              {isSpecialFavoritesOpen
-                ? 'Select a channel from the sidebar'
-                : 'Выберите чат или найдите пользователя для начала диалога'}
+              {routeChatId
+                ? 'Загрузка чата…'
+                : isSpecialFavoritesOpen
+                  ? 'Select a channel from the sidebar'
+                  : 'Выберите чат или найдите пользователя для начала диалога'}
             </p>
           </div>
         )}
       </main>
-      {callScreenVisible ? (
+      {callScreenVisible && !isMobileViewport ? (
         <CallScreen
           partner={callController.partner}
           status={callController.status}
           elapsedSeconds={callController.elapsedSeconds}
           muted={callController.muted}
-          speakerMuted={callController.speakerMuted}
+          cameraEnabled={callController.cameraEnabled}
+          mediaMode={callController.mediaMode}
+          audioOutputMode={callController.audioOutputMode}
+          bluetoothAvailable={callController.bluetoothAvailable}
+          outputSupported={callController.outputSupported}
           error={callController.error}
           remoteAudioRef={callController.remoteAudioRef}
+          remoteVideoRef={callController.remoteVideoRef}
+          localVideoRef={callController.localVideoRef}
           onToggleMute={callController.toggleMute}
-          onToggleSpeakerMute={callController.toggleSpeakerMute}
+          onToggleCamera={callController.toggleCamera}
+          onUpgradeToVideo={callController.upgradeToVideo}
+          onSetOutputMode={callController.setOutputMode}
+          onReattachMedia={callController.reattachMedia}
           onEnd={
             callController.status === 'outgoing'
               ? callController.cancelCall
@@ -1802,15 +2072,23 @@ export default function ChatsPage() {
           specialMode={isSpecialFavoritesOpen}
         />
       ) : (
-        detailsPanelOpen && selectedChat && (
-          <ChatDetailsPanel
-            chatId={selectedChat.id}
-            partner={selectedChat.partner}
-            isOnline={isOnline(selectedChat.partner?.id, selectedChat.partner?.is_online)}
-            onClose={() => setDetailsPanelOpen(false)}
-            specialMode={isSpecialFavoritesOpen}
-            onJumpToMessage={jumpToMessage}
-          />
+        !callScreenVisible && detailsPanelOpen && selectedChat && (
+          <>
+            <button
+              type="button"
+              className="chat-details-backdrop"
+              aria-label="Закрыть детали"
+              onClick={() => setDetailsPanelOpen(false)}
+            />
+            <ChatDetailsPanel
+              chatId={selectedChat.id}
+              partner={selectedChat.partner}
+              isOnline={isOnline(selectedChat.partner?.id, selectedChat.partner?.is_online)}
+              onClose={() => setDetailsPanelOpen(false)}
+              specialMode={isSpecialFavoritesOpen}
+              onJumpToMessage={jumpToMessage}
+            />
+          </>
         )
       )}
       {privateSessionId && (

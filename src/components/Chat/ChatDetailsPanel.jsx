@@ -168,6 +168,7 @@ function getSearchPreview(message) {
     return message.file_name || 'Файл';
   }
   if (message.message_type === 'voice') return 'Голосовое сообщение';
+  if (message.message_type === 'call') return message.content || 'Звонок';
   if (message.message_type === 'code') {
     return message.file_name || 'Код';
   }
