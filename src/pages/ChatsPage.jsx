@@ -12,7 +12,7 @@ import { useAuth } from '../context/AuthContext';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useNotifications } from '../hooks/usePresence';
 import { useCallContext, usePresenceHandlers } from '../context/CallContext';
-import { useSecretFavoritesShortcut } from '../hooks/useSecretFavoritesShortcut';
+import { useSecretSequenceShortcut, FRONT_SEQUENCE, BACK_SEQUENCE } from '../hooks/useSecretFavoritesShortcut';
 import { useUserIdle } from '../hooks/useUserIdle';
 import { MOBILE_CHAT_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { ChatHeader } from '../components/Chat/ChatHeader';
@@ -90,6 +90,7 @@ export default function ChatsPage() {
   const [pendingInviteSessionId, setPendingInviteSessionId] = useState(null);
   const [chatFilter, setChatFilter] = useState('all');
   const [isSpecialFavoritesOpen, setIsSpecialFavoritesOpen] = useState(false);
+  const [isBackModeOpen, setIsBackModeOpen] = useState(false);
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(true);
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [isFileDragOver, setIsFileDragOver] = useState(false);
@@ -1615,7 +1616,7 @@ export default function ChatsPage() {
 
   const filteredChats = useMemo(() => {
     let list;
-    if (isSpecialFavoritesOpen) list = chats;
+    if (isSpecialFavoritesOpen || isBackModeOpen) list = chats;
     else if (chatFilter === 'unread') list = chats.filter(isChatUnread);
     else if (chatFilter === 'mentions') list = [];
     else list = chats;
@@ -1630,7 +1631,7 @@ export default function ChatsPage() {
       if (ringingChat) list = [ringingChat, ...list];
     }
     return list;
-  }, [chats, chatFilter, isSpecialFavoritesOpen, isChatUnread, callController.status, callChatId]);
+  }, [chats, chatFilter, isSpecialFavoritesOpen, isBackModeOpen, isChatUnread, callController.status, callChatId]);
 
   const selectedMessages = useMemo(() => {
     const byId = new Map(messages.map((message) => [String(message.id), message]));
@@ -1737,18 +1738,38 @@ export default function ChatsPage() {
     jumpToMessage(messageId);
   }, [jumpToMessage, pendingOriginalJump, selectedChat?.id]);
 
-  useSecretFavoritesShortcut(() => setIsSpecialFavoritesOpen(true));
+  const unlockFront = useCallback(() => {
+    setIsBackModeOpen(false);
+    setIsSpecialFavoritesOpen(true);
+  }, []);
+  const unlockBack = useCallback(() => {
+    setIsSpecialFavoritesOpen(false);
+    setIsBackModeOpen(true);
+  }, []);
+  useSecretSequenceShortcut(FRONT_SEQUENCE, unlockFront);
+  useSecretSequenceShortcut(BACK_SEQUENCE, unlockBack);
 
   useEffect(() => {
-    if (!isSpecialFavoritesOpen) return undefined;
+    if (!isSpecialFavoritesOpen && !isBackModeOpen) return undefined;
     function onKeyDown(e) {
       if (e.key === 'Escape') {
         setIsSpecialFavoritesOpen(false);
+        setIsBackModeOpen(false);
       }
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isSpecialFavoritesOpen]);
+  }, [isSpecialFavoritesOpen, isBackModeOpen]);
+
+  useEffect(() => {
+    const prevTitle = document.title;
+    if (isBackModeOpen) {
+      document.title = 'нам очень жаль что вы приняли эту сторону...';
+      return () => { document.title = prevTitle || 'Monica'; };
+    }
+    if (!isSpecialFavoritesOpen) document.title = 'Monica';
+    return undefined;
+  }, [isBackModeOpen, isSpecialFavoritesOpen]);
 
   return (
     <div
@@ -1756,6 +1777,7 @@ export default function ChatsPage() {
         'chats-page',
         privateSessionId ? 'with-private' : '',
         isSpecialFavoritesOpen ? 'chats-page--special' : '',
+        isBackModeOpen ? 'chats-page--back' : '',
         selectedChat || routeChatId ? 'has-selected-chat' : '',
         isMobileViewport && !routeChatId ? 'chats-page--mobile-list' : '',
         isMobileViewport && routeChatId ? 'chats-page--mobile-chat' : '',
@@ -1777,9 +1799,16 @@ export default function ChatsPage() {
       {callController.status === 'ended' && callController.error && (
         <div className="call-error-toast" role="alert">{callController.error}</div>
       )}
-      {isSpecialFavoritesOpen && <ChatDevStatusBar />}
+      {isSpecialFavoritesOpen && <ChatDevStatusBar variant="front" />}
+      {isBackModeOpen && <ChatDevStatusBar variant="back" />}
       {isSpecialFavoritesOpen && (
         <div className="chat-dev-grid" aria-hidden="true" />
+      )}
+      {isBackModeOpen && <div className="chat-back-rain" aria-hidden="true" />}
+      {isBackModeOpen && (
+        <div className="chat-back-banner" aria-hidden="true">
+          вы могли выбрать FRONT. вы выбрали это.
+        </div>
       )}
       <div className="chats-page__body">
       <ChatIconRail
@@ -1788,9 +1817,11 @@ export default function ChatsPage() {
         onOpenSettings={() => {
           setAccountSettingsOpen(true);
           setIsSpecialFavoritesOpen(false);
+          setIsBackModeOpen(false);
         }}
         settingsActive={accountSettingsOpen}
         specialMode={isSpecialFavoritesOpen}
+        backMode={isBackModeOpen}
       />
       {accountSettingsOpen ? (
         <AccountSettings
@@ -1802,7 +1833,7 @@ export default function ChatsPage() {
         <>
       <aside className="chat-sidebar">
         <div className="sidebar-header">
-          <h2>{isSpecialFavoritesOpen ? 'Chats' : 'Чаты'}</h2>
+          <h2>{isBackModeOpen ? 'Пустота' : isSpecialFavoritesOpen ? 'Chats' : 'Чаты'}</h2>
           <div className="sidebar-header-actions">
             <NotificationBell
               open={notifOpen}
@@ -1822,11 +1853,18 @@ export default function ChatsPage() {
           onChange={setChatFilter}
           unreadCount={unreadChatCount}
           specialMode={isSpecialFavoritesOpen}
+          backMode={isBackModeOpen}
         />
         <div className="search-box">
           <input
             type="text"
-            placeholder={isSpecialFavoritesOpen ? 'Search chats…  ⌘K' : 'Имя, фамилия, email или ник...'}
+            placeholder={
+              isBackModeOpen
+                ? 'Искать… зачем?'
+                : isSpecialFavoritesOpen
+                  ? 'Search chats…  ⌘K'
+                  : 'Имя, фамилия, email или ник...'
+            }
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
           />
@@ -1927,6 +1965,7 @@ export default function ChatsPage() {
                       onEdit={handleEditMessage}
                       chatId={selectedChat.id}
                       specialMode={isSpecialFavoritesOpen}
+                      backMode={isBackModeOpen}
                       reactions={messageReactions[msg.id] || []}
                       onToggleReaction={handleToggleReaction}
                       highlighted={String(highlightedMessageId) === String(msg.id)}
@@ -1990,6 +2029,7 @@ export default function ChatsPage() {
                 'message-input',
                 codeMode ? 'code-mode' : '',
                 isSpecialFavoritesOpen ? 'message-input--special' : '',
+                isBackModeOpen ? 'message-input--back' : '',
               ]
                 .filter(Boolean)
                 .join(' ')}
@@ -2013,6 +2053,14 @@ export default function ChatsPage() {
                   <span className="message-input-formatbar__btn message-input-formatbar__code">{'</>'}</span>
                   <span className="message-input-formatbar__btn">🔗</span>
                   <span className="message-input-formatbar__btn">≡</span>
+                </div>
+              )}
+              {isBackModeOpen && !codeMode && (
+                <div className="message-input-formatbar message-input-formatbar--back" aria-hidden="true">
+                  <span className="message-input-formatbar__btn">…</span>
+                  <span className="message-input-formatbar__btn">†</span>
+                  <span className="message-input-formatbar__btn">∴</span>
+                  <span className="message-input-formatbar__btn">ø</span>
                 </div>
               )}
               {voiceRecording && (
@@ -2106,6 +2154,7 @@ export default function ChatsPage() {
                       <EmojiPicker
                         visible={emojiPickerVisible}
                         specialMode={isSpecialFavoritesOpen}
+                        backMode={isBackModeOpen}
                         onSelect={handleEmojiSelect}
                       />
                     </div>
@@ -2189,7 +2238,17 @@ export default function ChatsPage() {
                       }}
                       onBlur={stopTyping}
                       disabled={voiceRecording}
-                      placeholder={pendingForward ? 'Добавить комментарий…' : replyTo ? 'Напишите ответ…' : isSpecialFavoritesOpen ? "Let's ship this! 💪" : 'Сообщение...'}
+                      placeholder={
+                        pendingForward
+                          ? 'Добавить комментарий…'
+                          : replyTo
+                            ? 'Напишите ответ…'
+                            : isBackModeOpen
+                              ? 'Напишите что-нибудь… это никого не спасёт'
+                              : isSpecialFavoritesOpen
+                                ? "Let's ship this! 💪"
+                                : 'Сообщение...'
+                      }
                     />
                   )}
                 </div>
@@ -2205,7 +2264,15 @@ export default function ChatsPage() {
                       : !pendingForward && !input.trim() && pendingAttachments.length === 0)
                   }
                 >
-                  {uploading || forwardBusy ? '...' : pendingForward ? 'Переслать' : isSpecialFavoritesOpen ? 'Send ▷' : 'Отправить'}
+                  {uploading || forwardBusy
+                    ? '...'
+                    : pendingForward
+                      ? 'Переслать'
+                      : isBackModeOpen
+                        ? 'Отправить…'
+                        : isSpecialFavoritesOpen
+                          ? 'Send ▷'
+                          : 'Отправить'}
                 </button>
               </div>
             </form>
@@ -2217,9 +2284,11 @@ export default function ChatsPage() {
             <p>
               {routeChatId
                 ? 'Загрузка чата…'
-                : isSpecialFavoritesOpen
-                  ? 'Select a channel from the sidebar'
-                  : 'Выберите чат или найдите пользователя для начала диалога'}
+                : isBackModeOpen
+                  ? 'Здесь никого нет. Как и смысла.'
+                  : isSpecialFavoritesOpen
+                    ? 'Select a channel from the sidebar'
+                    : 'Выберите чат или найдите пользователя для начала диалога'}
             </p>
           </div>
         )}
@@ -2266,6 +2335,7 @@ export default function ChatsPage() {
               isOnline={isOnline(selectedChat.partner?.id, selectedChat.partner?.is_online)}
               onClose={() => setDetailsPanelOpen(false)}
               specialMode={isSpecialFavoritesOpen}
+              backMode={isBackModeOpen}
               onJumpToMessage={jumpToMessage}
             />
           </>

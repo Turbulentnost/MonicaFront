@@ -42,8 +42,14 @@ export default function LoginPage() {
         localStorage.removeItem('monica_remember_email');
       }
       navigate('/chats');
-    } catch {
-      setError('Неверный email или пароль');
+    } catch (err) {
+      if (!err.response) {
+        setError('Сервер недоступен (127.0.0.1:8000). Проверьте, что бэкенд запущен.');
+      } else if (err.response.status === 401 || err.response.status === 400) {
+        setError('Неверный email или пароль');
+      } else {
+        setError(`Ошибка входа (${err.response.status}). Попробуйте позже.`);
+      }
     } finally {
       setLoading(false);
     }
