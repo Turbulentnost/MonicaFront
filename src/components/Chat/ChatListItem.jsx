@@ -13,6 +13,9 @@ function formatPreview(lastMessage) {
     return count > 1 ? `${count} фото` : 'Фото';
   }
   if (lastMessage.message_type === 'voice') return 'Голосовое сообщение';
+  if (lastMessage.message_type === 'forward') {
+    return lastMessage.content || 'Пересланные сообщения';
+  }
   if (lastMessage.message_type === 'call') {
     return lastMessage.content || 'Звонок';
   }

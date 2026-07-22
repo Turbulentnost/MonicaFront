@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { MessageMedia } from './MessageMedia';
 import { VoiceMessagePlayer } from './VoiceMessagePlayer';
 import { EmojiPicker } from './EmojiPicker';
+import { ForwardedBundle } from './ForwardedBundle';
 import { getEditableMessageText, getPhotoCaption } from '../../utils/messageText';
 
 const DELETE_FOR_ALL_MS = 48 * 60 * 60 * 1000;
@@ -181,6 +182,12 @@ function ChatMessageBubble({
   reactions = [],
   onToggleReaction,
   highlighted = false,
+  selected = false,
+  selectionMode = false,
+  onToggleSelect,
+  onQuickForward,
+  onJumpToReply,
+  onOpenOriginal,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [barVisible, setBarVisible] = useState(false);
@@ -194,9 +201,10 @@ function ChatMessageBubble({
   const showEdit = canEditMessage(message, isOwn);
   const delivery = getDeliveryStatus(message, isOwn);
   const isPending = delivery?.key === 'sending';
-  const showReactionUi = !isPending && !editing;
+  const showReactionUi = !isPending && !editing && !selectionMode;
   const isEdited = Boolean(message.edited_at);
   const photoCaption = getPhotoCaption(message);
+  const selectable = !isPending;
 
   const clearHideTimeout = useCallback(() => {
     if (hideTimeoutRef.current) {
@@ -344,6 +352,15 @@ function ChatMessageBubble({
     if (message.message_type === 'voice') {
       return <VoiceMessagePlayer message={message} />;
     }
+    if (message.message_type === 'forward') {
+      return (
+        <ForwardedBundle
+          bundle={Array.isArray(message.forward_bundle) ? message.forward_bundle : []}
+          comment={message.content}
+          onOpenOriginal={onOpenOriginal}
+        />
+      );
+    }
     return (
       <div className="message-content">
         [{message.message_type}] {message.content}
@@ -376,15 +393,44 @@ function ChatMessageBubble({
         isOwn ? 'own' : 'other',
         reactions.length ? 'has-reactions' : '',
         highlighted ? 'is-highlighted' : '',
+        selected ? 'is-selected' : '',
+        selectionMode ? 'is-selection-mode' : '',
       ].filter(Boolean).join(' ')}
       data-message-id={message.id}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
+      onClick={selectionMode && selectable ? () => onToggleSelect?.(message) : undefined}
     >
+      {selectable && (
+        <button
+          type="button"
+          className="message-select-control"
+          aria-label={selected ? 'Снять выделение' : 'Выбрать сообщение'}
+          aria-pressed={selected}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleSelect?.(message);
+          }}
+        >
+          {selected ? '✓' : ''}
+        </button>
+      )}
+      {!isOwn && selectable && !selectionMode && (
+        <button
+          type="button"
+          className="message-quick-forward"
+          title="Переслать"
+          aria-label="Переслать сообщение"
+          onClick={(event) => {
+            event.stopPropagation();
+            onQuickForward?.(message);
+          }}
+        >➤</button>
+      )}
       <div className={`message ${isOwn ? 'own' : 'other'}${isPending ? ' pending' : ''}`}>
         <div className="message-header">
           <div className="message-meta">{message.sender?.nickname}</div>
-          {!isPending && !editing && (
+          {!selectionMode && !isPending && !editing && (
             <div className={`message-actions${menuOpen ? ' is-open' : ''}`}>
               {showEdit && (
                 <button
@@ -421,6 +467,19 @@ function ChatMessageBubble({
             </div>
           )}
         </div>
+        {message.reply_to_summary && (
+          <button
+            type="button"
+            className="message-reply-quote"
+            onClick={(event) => {
+              event.stopPropagation();
+              onJumpToReply?.(message.reply_to_summary.id);
+            }}
+          >
+            <strong>@{message.reply_to_summary.sender?.nickname || 'user'}</strong>
+            <span>{message.reply_to_summary.preview || 'Сообщение'}</span>
+          </button>
+        )}
         {renderContent()}
         <div className="message-footer">
           <span className="message-time">

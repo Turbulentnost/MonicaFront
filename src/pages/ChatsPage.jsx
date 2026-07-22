@@ -30,6 +30,9 @@ import { PrivatePanel } from '../components/Chat/PrivatePanel';
 import { UserSearchResult } from '../components/Chat/UserSearchResult';
 import { IncomingCallOverlay } from '../components/Chat/IncomingCallOverlay';
 import { CallScreen } from '../components/Chat/CallScreen';
+import { SelectionToolbar } from '../components/Chat/SelectionToolbar';
+import { ForwardPickerModal } from '../components/Chat/ForwardPickerModal';
+import { QuoteComposerBar } from '../components/Chat/QuoteComposerBar';
 import { warmAvatarCache } from '../utils/avatarCache';
 import { groupMessagesByDay } from '../utils/formatChatDate';
 import { invalidateMediaCache, warmMediaCache } from '../utils/mediaCache';
@@ -93,6 +96,12 @@ export default function ChatsPage() {
   const fileDragDepthRef = useRef(0);
   const [messageReactions, setMessageReactions] = useState({});
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
+  const [selectedMessageIds, setSelectedMessageIds] = useState([]);
+  const [forwardPickerOpen, setForwardPickerOpen] = useState(false);
+  const [pendingForward, setPendingForward] = useState(null);
+  const [replyTo, setReplyTo] = useState(null);
+  const [forwardBusy, setForwardBusy] = useState(false);
+  const [pendingOriginalJump, setPendingOriginalJump] = useState(null);
   const messagesEndRef = useRef(null);
   const messagesAreaRef = useRef(null);
   const loadingOlderRef = useRef(false);
@@ -306,10 +315,17 @@ export default function ChatsPage() {
     setSelectedChat(chat);
     persistSelectedChat(chat);
     setPartnerTyping(false);
+    setSelectedMessageIds([]);
+    setForwardPickerOpen(false);
+    setPendingForward(null);
+    setReplyTo(null);
     setInput('');
     setCodeMode(false);
     setAttachError('');
     setMessageReactions({});
+    setSelectedMessageIds([]);
+    setReplyTo(null);
+    setPendingForward(null);
     await loadMessages(chat.id);
   }, [clearPendingAttachments, loadMessages, persistSelectedChat, selectedChat?.id]);
 
@@ -908,6 +924,7 @@ export default function ChatsPage() {
         caption: metadata.caption || '',
         waveform: Array.isArray(metadata.waveform) ? metadata.waveform : [],
         voice_duration_ms: metadata.voice_duration_ms ?? null,
+        reply_to_summary: metadata.reply_to_summary || null,
         sent_at: new Date().toISOString(),
         edited_at: null,
         read_at: null,
@@ -1179,7 +1196,28 @@ export default function ChatsPage() {
 
   const handleSend = async (e) => {
     e.preventDefault();
-    if (!selectedChat || uploading) return;
+    if (!selectedChat || uploading || forwardBusy) return;
+
+    if (pendingForward) {
+      setForwardBusy(true);
+      setAttachError('');
+      try {
+        await chatsApi.forwardMessages(
+          selectedChat.id,
+          pendingForward.sourceChatId,
+          pendingForward.messageIds,
+          input.trim()
+        );
+        setPendingForward(null);
+        setInput('');
+        await Promise.all([loadMessages(selectedChat.id), loadChats()]);
+      } catch (err) {
+        setAttachError(err.response?.data?.detail || 'Не удалось переслать сообщения');
+      } finally {
+        setForwardBusy(false);
+      }
+      return;
+    }
 
     if (codeMode) {
       await handleSendCode();
@@ -1187,7 +1225,7 @@ export default function ChatsPage() {
     }
 
     const text = input.trim();
-    const hasFiles = pendingAttachments.length > 0;
+    const hasFiles = !replyTo && pendingAttachments.length > 0;
     if (!text && !hasFiles) return;
 
     if (!connected) {
@@ -1199,12 +1237,22 @@ export default function ChatsPage() {
     setAttachError('');
 
     if (!hasFiles) {
-      const ok = enqueueOptimistic(text, 'text');
+      const ok = enqueueOptimistic(text, 'text', replyTo ? {
+        reply_to: replyTo.id,
+        reply_to_summary: {
+          id: replyTo.id,
+          chat: selectedChat.id,
+          sender: replyTo.sender,
+          preview: replyTo.content || replyTo.caption || replyTo.file_name || 'Сообщение',
+          message_type: replyTo.message_type,
+        },
+      } : {});
       if (!ok) {
         setAttachError('Не удалось отправить сообщение');
         return;
       }
       setInput('');
+      setReplyTo(null);
       return;
     }
 
@@ -1584,6 +1632,111 @@ export default function ChatsPage() {
     return list;
   }, [chats, chatFilter, isSpecialFavoritesOpen, isChatUnread, callController.status, callChatId]);
 
+  const selectedMessages = useMemo(() => {
+    const byId = new Map(messages.map((message) => [String(message.id), message]));
+    return selectedMessageIds.map((id) => byId.get(String(id))).filter(Boolean);
+  }, [messages, selectedMessageIds]);
+  const selectionMode = selectedMessageIds.length > 0;
+
+  const clearMessageSelection = useCallback(() => {
+    setSelectedMessageIds([]);
+    setForwardPickerOpen(false);
+  }, []);
+
+  const toggleMessageSelection = useCallback((message) => {
+    if (!message || message.message_type === 'call' || String(message.id).startsWith('temp-')) return;
+    const id = String(message.id);
+    setSelectedMessageIds((current) => (
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
+    ));
+  }, []);
+
+  const beginQuickForward = useCallback((message) => {
+    if (!message || String(message.id).startsWith('temp-')) return;
+    setSelectedMessageIds([String(message.id)]);
+    setForwardPickerOpen(true);
+  }, []);
+
+  const beginReply = () => {
+    if (selectedMessages.length !== 1) return;
+    clearPendingAttachments();
+    setPendingForward(null);
+    setReplyTo(selectedMessages[0]);
+    setSelectedMessageIds([]);
+    requestAnimationFrame(() => messageInputRef.current?.focus());
+  };
+
+  const chooseForwardTarget = async (chat, person) => {
+    if (!selectedMessages.length || forwardBusy) return;
+    const sourceChatId = selectedChat?.id;
+    const messageIds = selectedMessages.map((message) => message.id);
+    const preview = selectedMessages[0];
+    setForwardBusy(true);
+    setAttachError('');
+    try {
+      let target = chat;
+      if (!target && person) {
+        const { data } = await chatsApi.start(person.id);
+        target = {
+          ...data,
+          partner: data.partner || person,
+          last_message: data.last_message || null,
+          updated_at: data.updated_at || new Date().toISOString(),
+        };
+        await loadChats();
+      }
+      if (!target?.id) throw new Error('target');
+      setForwardPickerOpen(false);
+      if (messageIds.length > 1) {
+        await chatsApi.forwardMessages(target.id, sourceChatId, messageIds, '');
+      }
+      setSelectedMessageIds([]);
+      await handleSelectChat(target);
+      if (messageIds.length === 1) {
+        setPendingForward({ sourceChatId, messageIds, preview });
+        setInput('');
+        requestAnimationFrame(() => messageInputRef.current?.focus());
+      }
+      if (messageIds.length > 1) {
+        await Promise.all([loadMessages(target.id), loadChats()]);
+      }
+    } catch (err) {
+      setAttachError(err.response?.data?.detail || 'Не удалось подготовить пересылку');
+    } finally {
+      setForwardBusy(false);
+    }
+  };
+
+  const handleOpenOriginal = async (chatId, messageId) => {
+    if (!chatId || !messageId) return;
+    try {
+      let target = chats.find((chat) => String(chat.id) === String(chatId));
+      if (!target) {
+        const { data } = await chatsApi.list();
+        setChats(Array.isArray(data) ? data : []);
+        target = (Array.isArray(data) ? data : []).find((chat) => String(chat.id) === String(chatId));
+      }
+      if (!target) {
+        setAttachError('Оригинал сообщения недоступен');
+        return;
+      }
+      setPendingOriginalJump({ chatId: String(chatId), messageId });
+      await handleSelectChat(target);
+    } catch {
+      setAttachError('Оригинал сообщения недоступен');
+    }
+  };
+
+  useEffect(() => {
+    if (
+      !pendingOriginalJump
+      || String(selectedChat?.id) !== pendingOriginalJump.chatId
+    ) return;
+    const messageId = pendingOriginalJump.messageId;
+    setPendingOriginalJump(null);
+    jumpToMessage(messageId);
+  }, [jumpToMessage, pendingOriginalJump, selectedChat?.id]);
+
   useSecretFavoritesShortcut(() => setIsSpecialFavoritesOpen(true));
 
   useEffect(() => {
@@ -1777,6 +1930,12 @@ export default function ChatsPage() {
                       reactions={messageReactions[msg.id] || []}
                       onToggleReaction={handleToggleReaction}
                       highlighted={String(highlightedMessageId) === String(msg.id)}
+                      selected={selectedMessageIds.includes(String(msg.id))}
+                      selectionMode={selectionMode}
+                      onToggleSelect={toggleMessageSelection}
+                      onQuickForward={beginQuickForward}
+                      onJumpToReply={jumpToMessage}
+                      onOpenOriginal={handleOpenOriginal}
                     />
                   ))}
                 </div>
@@ -1788,7 +1947,7 @@ export default function ChatsPage() {
               )}
               <div ref={messagesEndRef} />
             </div>
-            {pendingAttachments.length > 0 && !codeMode && (
+            {pendingAttachments.length > 0 && !codeMode && !selectionMode && (
               <div className="attachment-preview-list">
                 {pendingAttachments.map((item) => (
                   <div key={item.id} className="attachment-preview-item">
@@ -1818,6 +1977,14 @@ export default function ChatsPage() {
               </div>
             )}
             {attachError && <div className="attachment-error">{attachError}</div>}
+            {selectionMode ? (
+              <SelectionToolbar
+                count={selectedMessageIds.length}
+                onClose={clearMessageSelection}
+                onReply={beginReply}
+                onForward={() => setForwardPickerOpen(true)}
+              />
+            ) : (
             <form
               className={[
                 'message-input',
@@ -1828,6 +1995,16 @@ export default function ChatsPage() {
                 .join(' ')}
               onSubmit={handleSend}
             >
+              {(replyTo || pendingForward) && (
+                <QuoteComposerBar
+                  mode={pendingForward ? 'forward' : 'reply'}
+                  message={pendingForward?.preview || replyTo}
+                  onClose={() => {
+                    if (pendingForward) setPendingForward(null);
+                    else setReplyTo(null);
+                  }}
+                />
+              )}
               {isSpecialFavoritesOpen && !codeMode && (
                 <div className="message-input-formatbar" aria-hidden="true">
                   <span className="message-input-formatbar__btn">B</span>
@@ -1884,7 +2061,7 @@ export default function ChatsPage() {
                     onClick={() => fileInputRef.current?.click()}
                     title="Прикрепить файлы (до 10, до 300 МБ)"
                     aria-label="Прикрепить файлы"
-                    disabled={codeMode || voiceRecording || pendingAttachments.length >= MAX_ATTACHMENTS || uploading}
+                    disabled={Boolean(replyTo || pendingForward) || codeMode || voiceRecording || pendingAttachments.length >= MAX_ATTACHMENTS || uploading}
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
                       <path
@@ -1900,7 +2077,7 @@ export default function ChatsPage() {
                     onClick={toggleCodeMode}
                     title={codeMode ? 'Обычное сообщение' : 'Написать код'}
                     aria-label={codeMode ? 'Обычное сообщение' : 'Написать код'}
-                    disabled={uploading || voiceRecording}
+                    disabled={Boolean(replyTo || pendingForward) || uploading || voiceRecording}
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
                       <path d="M8 6L2 12l6 6M16 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
@@ -1917,7 +2094,7 @@ export default function ChatsPage() {
                         className="btn-emoji"
                         title="Эмодзи"
                         aria-label="Эмодзи"
-                        disabled={uploading || voiceRecording}
+                      disabled={Boolean(replyTo || pendingForward) || uploading || voiceRecording}
                       >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
                           <circle cx="12" cy="12" r="10" />
@@ -1939,7 +2116,7 @@ export default function ChatsPage() {
                       className={`btn-voice ${voiceRecording ? 'active' : ''}`}
                       title={micAvailable ? 'Зажмите, чтобы записать голосовое' : 'Микрофон недоступен'}
                       aria-label={micAvailable ? 'Записать голосовое' : 'Микрофон недоступен'}
-                      disabled={!micAvailable || uploading || voiceBusy}
+                      disabled={Boolean(replyTo || pendingForward) || !micAvailable || uploading || voiceBusy}
                       onPointerDown={startVoiceRecording}
                       onContextMenu={(event) => event.preventDefault()}
                     >
@@ -2012,7 +2189,7 @@ export default function ChatsPage() {
                       }}
                       onBlur={stopTyping}
                       disabled={voiceRecording}
-                      placeholder={isSpecialFavoritesOpen ? "Let's ship this! 💪" : 'Сообщение...'}
+                      placeholder={pendingForward ? 'Добавить комментарий…' : replyTo ? 'Напишите ответ…' : isSpecialFavoritesOpen ? "Let's ship this! 💪" : 'Сообщение...'}
                     />
                   )}
                 </div>
@@ -2020,16 +2197,19 @@ export default function ChatsPage() {
                   type="submit"
                   disabled={
                     uploading
+                    || forwardBusy
                     || voiceRecording
+                    || (pendingForward ? false : replyTo ? !input.trim() : false)
                     || (codeMode
                       ? !input.trim() || !codeLanguage || !codeFileName.trim()
-                      : !input.trim() && pendingAttachments.length === 0)
+                      : !pendingForward && !input.trim() && pendingAttachments.length === 0)
                   }
                 >
-                  {uploading ? '...' : isSpecialFavoritesOpen ? 'Send ▷' : 'Отправить'}
+                  {uploading || forwardBusy ? '...' : pendingForward ? 'Переслать' : isSpecialFavoritesOpen ? 'Send ▷' : 'Отправить'}
                 </button>
               </div>
             </form>
+            )}
             </>
           </>
         ) : (
@@ -2090,6 +2270,14 @@ export default function ChatsPage() {
             />
           </>
         )
+      )}
+      {forwardPickerOpen && (
+        <ForwardPickerModal
+          chats={chats}
+          currentUserId={user?.id}
+          onSelect={chooseForwardTarget}
+          onClose={() => setForwardPickerOpen(false)}
+        />
       )}
       {privateSessionId && (
         <PrivatePanel

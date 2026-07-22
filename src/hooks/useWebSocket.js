@@ -113,6 +113,7 @@ export function useWebSocket(chatId, { onMessage, onTyping, onDeleted, onEdited,
           attachments,
           waveform: Array.isArray(metadata.waveform) ? metadata.waveform : undefined,
           voice_duration_ms: metadata.voice_duration_ms ?? undefined,
+          reply_to: metadata.reply_to ?? undefined,
         })
       );
       return true;
