@@ -1,13 +1,21 @@
 import { UserAvatar } from './UserAvatar';
 
-export function IncomingCallOverlay({ partner, onAccept, onReject, error }) {
+export function IncomingCallOverlay({ partner, onAccept, onReject, error, mediaMode = 'audio' }) {
+  const isVideo = mediaMode === 'video';
   return (
-    <div className="incoming-call-overlay" role="dialog" aria-modal="true" aria-label="Входящий звонок">
+    <div
+      className="incoming-call-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label={isVideo ? 'Входящий видеозвонок' : 'Входящий звонок'}
+    >
       <div className="incoming-call-card">
         <div className="incoming-call-pulse">
           <UserAvatar user={partner} size={92} />
         </div>
-        <span className="incoming-call-label">Входящий аудиозвонок</span>
+        <span className="incoming-call-label">
+          {isVideo ? 'Входящий видеозвонок' : 'Входящий аудиозвонок'}
+        </span>
         <h2>@{partner?.nickname || 'Пользователь'}</h2>
         <p>{[partner?.first_name, partner?.last_name].filter(Boolean).join(' ') || 'звонит вам'}</p>
         {error && <div className="call-error" role="alert">{error}</div>}

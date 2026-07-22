@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { MessageMedia } from './MessageMedia';
 import { VoiceMessagePlayer } from './VoiceMessagePlayer';
 import { EmojiPicker } from './EmojiPicker';
+import { ForwardedBundle } from './ForwardedBundle';
 import { getEditableMessageText, getPhotoCaption } from '../../utils/messageText';
 
 const DELETE_FOR_ALL_MS = 48 * 60 * 60 * 1000;
@@ -110,7 +111,69 @@ function EditedMark({ show }) {
   return <span className="message-edited">(ред.)</span>;
 }
 
-export function MessageBubble({
+function CallHistoryIcon({ video = false }) {
+  if (video) {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+        <rect x="3" y="7" width="13" height="10" rx="2" />
+        <path d="M16 10l5-3v10l-5-3" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <path
+        d="M7 4.5 4.8 6.7c-.8.8.5 4.5 3.6 7.6s6.8 4.4 7.6 3.6l2.2-2.2-4-2-1.4 1.4c-1.7-.8-3.5-2.6-4.3-4.3l1.4-1.4-2.9-4.9Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function CallHistoryBubble({ message, highlighted = false }) {
+  const meta = Array.isArray(message.attachments) ? message.attachments[0] : null;
+  const isVideo = meta?.media_mode === 'video'
+    || /видео/i.test(message.content || '');
+  const status = meta?.status || message.mime_type || '';
+  return (
+    <div
+      className={[
+        'message-wrapper',
+        'message-wrapper--call',
+        highlighted ? 'is-highlighted' : '',
+      ].filter(Boolean).join(' ')}
+      data-message-id={message.id}
+    >
+      <div className={`message message--call message--call-${status || 'ended'}`}>
+        <span className="message-call-icon" aria-hidden="true">
+          <CallHistoryIcon video={isVideo} />
+        </span>
+        <span className="message-call-text">{message.content}</span>
+        <span className="message-call-time">
+          {new Date(message.sent_at).toLocaleTimeString('ru-RU', {
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+export function MessageBubble(props) {
+  if (props.message?.message_type === 'call') {
+    return (
+      <CallHistoryBubble
+        message={props.message}
+        highlighted={props.highlighted}
+      />
+    );
+  }
+  return <ChatMessageBubble {...props} />;
+}
+
+function ChatMessageBubble({
   message,
   isOwn,
   onDelete,
@@ -121,6 +184,12 @@ export function MessageBubble({
   reactions = [],
   onToggleReaction,
   highlighted = false,
+  selected = false,
+  selectionMode = false,
+  onToggleSelect,
+  onQuickForward,
+  onJumpToReply,
+  onOpenOriginal,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [barVisible, setBarVisible] = useState(false);
@@ -134,9 +203,10 @@ export function MessageBubble({
   const showEdit = canEditMessage(message, isOwn);
   const delivery = getDeliveryStatus(message, isOwn);
   const isPending = delivery?.key === 'sending';
-  const showReactionUi = !isPending && !editing;
+  const showReactionUi = !isPending && !editing && !selectionMode;
   const isEdited = Boolean(message.edited_at);
   const photoCaption = getPhotoCaption(message);
+  const selectable = !isPending;
 
   const clearHideTimeout = useCallback(() => {
     if (hideTimeoutRef.current) {
@@ -284,6 +354,15 @@ export function MessageBubble({
     if (message.message_type === 'voice') {
       return <VoiceMessagePlayer message={message} />;
     }
+    if (message.message_type === 'forward') {
+      return (
+        <ForwardedBundle
+          bundle={Array.isArray(message.forward_bundle) ? message.forward_bundle : []}
+          comment={message.content}
+          onOpenOriginal={onOpenOriginal}
+        />
+      );
+    }
     return (
       <div className="message-content">
         [{message.message_type}] {message.content}
@@ -318,15 +397,44 @@ export function MessageBubble({
         isOwn ? 'own' : 'other',
         reactions.length ? 'has-reactions' : '',
         highlighted ? 'is-highlighted' : '',
+        selected ? 'is-selected' : '',
+        selectionMode ? 'is-selection-mode' : '',
       ].filter(Boolean).join(' ')}
       data-message-id={message.id}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
+      onClick={selectionMode && selectable ? () => onToggleSelect?.(message) : undefined}
     >
+      {selectable && (
+        <button
+          type="button"
+          className="message-select-control"
+          aria-label={selected ? 'Снять выделение' : 'Выбрать сообщение'}
+          aria-pressed={selected}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleSelect?.(message);
+          }}
+        >
+          {selected ? '✓' : ''}
+        </button>
+      )}
+      {!isOwn && selectable && !selectionMode && (
+        <button
+          type="button"
+          className="message-quick-forward"
+          title="Переслать"
+          aria-label="Переслать сообщение"
+          onClick={(event) => {
+            event.stopPropagation();
+            onQuickForward?.(message);
+          }}
+        >➤</button>
+      )}
       <div className={`message ${isOwn ? 'own' : 'other'}${isPending ? ' pending' : ''}`}>
         <div className="message-header">
           <div className="message-meta">{message.sender?.nickname}</div>
-          {!isPending && !editing && (
+          {!selectionMode && !isPending && !editing && (
             <div className={`message-actions${menuOpen ? ' is-open' : ''}`}>
               {showEdit && (
                 <button
@@ -363,6 +471,19 @@ export function MessageBubble({
             </div>
           )}
         </div>
+        {message.reply_to_summary && (
+          <button
+            type="button"
+            className="message-reply-quote"
+            onClick={(event) => {
+              event.stopPropagation();
+              onJumpToReply?.(message.reply_to_summary.id);
+            }}
+          >
+            <strong>@{message.reply_to_summary.sender?.nickname || 'user'}</strong>
+            <span>{message.reply_to_summary.preview || 'Сообщение'}</span>
+          </button>
+        )}
         {renderContent()}
         <div className="message-footer">
           <span className="message-time">

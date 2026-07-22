@@ -1,3 +1,4 @@
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { UserAvatar } from './UserAvatar';
 
 function formatDuration(totalSeconds) {
@@ -8,49 +9,139 @@ function formatDuration(totalSeconds) {
 const STATUS_TEXT = {
   outgoing: 'Вызов…',
   connecting: 'Соединение…',
-  active: 'Идёт аудиозвонок',
+  active: 'Идёт звонок',
 };
+
+function hasLiveVideo(stream) {
+  return Boolean(stream?.getVideoTracks?.().some((track) => track.readyState === 'live' && track.enabled));
+}
 
 export function CallScreen({
   partner,
   status,
   elapsedSeconds,
   muted,
-  speakerMuted,
+  cameraEnabled,
+  mediaMode,
+  audioOutputMode,
+  bluetoothAvailable,
+  outputSupported,
   error,
   remoteAudioRef,
+  remoteVideoRef,
+  localVideoRef,
   onToggleMute,
-  onToggleSpeakerMute,
+  onToggleCamera,
+  onUpgradeToVideo,
+  onSetOutputMode,
+  onReattachMedia,
   onEnd,
   specialMode = false,
+  fullscreen = false,
 }) {
   const callAccepted = status === 'connecting' || status === 'active';
+  const isVideo = mediaMode === 'video';
+  const [remoteHasVideo, setRemoteHasVideo] = useState(false);
+  const reattachRef = useRef(onReattachMedia);
+  reattachRef.current = onReattachMedia;
+
+  useLayoutEffect(() => {
+    reattachRef.current?.();
+  }, [isVideo, status]);
+
+  useEffect(() => {
+    if (!isVideo) {
+      setRemoteHasVideo(false);
+      return undefined;
+    }
+    const el = remoteVideoRef?.current;
+    const sync = () => {
+      setRemoteHasVideo(hasLiveVideo(el?.srcObject));
+    };
+    sync();
+    const timer = setInterval(sync, 700);
+    el?.addEventListener?.('loadedmetadata', sync);
+    el?.addEventListener?.('playing', sync);
+    return () => {
+      clearInterval(timer);
+      el?.removeEventListener?.('loadedmetadata', sync);
+      el?.removeEventListener?.('playing', sync);
+    };
+  }, [isVideo, remoteVideoRef, status]);
 
   return (
     <aside
-      className={`call-screen ${specialMode ? 'call-screen--special' : ''}`}
-      aria-label="Аудиозвонок"
+      className={[
+        'call-screen',
+        specialMode ? 'call-screen--special' : '',
+        fullscreen ? 'call-screen--fullscreen' : '',
+        isVideo ? 'call-screen--video' : '',
+      ].filter(Boolean).join(' ')}
+      aria-label={isVideo ? 'Видеозвонок' : 'Аудиозвонок'}
     >
-      <audio ref={remoteAudioRef} autoPlay playsInline className="call-remote-audio" muted={speakerMuted}>
+      <audio ref={remoteAudioRef} autoPlay playsInline className="call-remote-audio">
         <track kind="captions" />
       </audio>
 
       <div className="call-screen__header">
-        <h2 className="call-screen__title">{specialMode ? 'call' : 'Звонок'}</h2>
+        <h2 className="call-screen__title">
+          {specialMode ? 'call' : (isVideo ? 'Видеозвонок' : 'Звонок')}
+        </h2>
+        {callAccepted && status === 'active' && (
+          <span className="call-screen__timer">{formatDuration(elapsedSeconds)}</span>
+        )}
       </div>
 
       <div className="call-screen__body">
-        <div className="call-screen-glow" aria-hidden="true" />
-        <div className={`call-avatar ${status !== 'active' ? 'is-calling' : ''}`}>
-          <UserAvatar user={partner} size={96} />
-        </div>
-        <h3 className="call-screen__nickname">@{partner?.nickname || 'Пользователь'}</h3>
-        <p className="call-partner-name">
-          {[partner?.first_name, partner?.last_name].filter(Boolean).join(' ')}
-        </p>
-        <div className="call-status" aria-live="polite">
-          {status === 'active' ? formatDuration(elapsedSeconds) : STATUS_TEXT[status]}
-        </div>
+        {isVideo ? (
+          <div className="call-video-stage">
+            <video
+              ref={remoteVideoRef}
+              className={`call-video call-video--remote ${remoteHasVideo ? 'is-visible' : ''}`}
+              autoPlay
+              playsInline
+            />
+            {!remoteHasVideo && (
+              <div className="call-video-fallback">
+                <UserAvatar user={partner} size={fullscreen ? 120 : 88} />
+                <p>У пользователя отключена камера</p>
+              </div>
+            )}
+            <div className="call-video-pip">
+              <video
+                ref={localVideoRef}
+                className="call-video call-video--local"
+                autoPlay
+                playsInline
+                muted
+              />
+              {!cameraEnabled && <span className="call-video-pip-label">Камера выкл.</span>}
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="call-screen-glow" aria-hidden="true" />
+            <div className={`call-avatar ${status !== 'active' ? 'is-calling' : ''}`}>
+              <UserAvatar user={partner} size={fullscreen ? 120 : 96} />
+            </div>
+            <h3 className="call-screen__nickname">@{partner?.nickname || 'Пользователь'}</h3>
+            <p className="call-partner-name">
+              {[partner?.first_name, partner?.last_name].filter(Boolean).join(' ')}
+            </p>
+            <div className="call-status" aria-live="polite">
+              {status === 'active' ? formatDuration(elapsedSeconds) : STATUS_TEXT[status]}
+            </div>
+          </>
+        )}
+
+        {isVideo && (
+          <div className="call-status call-status--overlay" aria-live="polite">
+            @{partner?.nickname || 'Пользователь'}
+            {' · '}
+            {status === 'active' ? formatDuration(elapsedSeconds) : STATUS_TEXT[status]}
+          </div>
+        )}
+
         {error && <div className="call-error" role="alert">{error}</div>}
 
         <div className={`call-controls ${callAccepted ? '' : 'call-controls--ringing'}`.trim()}>
@@ -70,23 +161,67 @@ export function CallScreen({
                 </svg>
                 <span>{muted ? 'Микрофон выкл.' : 'Микрофон'}</span>
               </button>
+
               <button
                 type="button"
-                className={`call-control ${speakerMuted ? 'is-active' : ''}`}
-                onClick={onToggleSpeakerMute}
-                aria-pressed={speakerMuted}
-                title={speakerMuted ? 'Включить звук' : 'Выключить звук'}
+                className={`call-control ${cameraEnabled ? '' : 'is-active'}`}
+                onClick={onToggleCamera}
+                aria-pressed={!cameraEnabled}
+                title={cameraEnabled ? 'Выключить камеру' : 'Включить камеру'}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true">
-                  <path d="M5 9v6h4l5 4V5L9 9H5Z" strokeLinejoin="round" />
-                  {speakerMuted ? (
-                    <path d="M16 9.5l5 5M21 9.5l-5 5" strokeLinecap="round" />
-                  ) : (
-                    <path d="M17 9.2a4 4 0 0 1 0 5.6M19.5 6.5a8 8 0 0 1 0 11" strokeLinecap="round" />
-                  )}
+                  <rect x="3" y="7" width="13" height="10" rx="2" />
+                  <path d="M16 10l5-3v10l-5-3" strokeLinejoin="round" />
+                  {!cameraEnabled && <path d="M3 3l18 18" strokeLinecap="round" />}
                 </svg>
-                <span>{speakerMuted ? 'Звук выкл.' : 'Звук'}</span>
+                <span>{cameraEnabled ? 'Камера' : 'Камера выкл.'}</span>
               </button>
+
+              {!isVideo && (
+                <button
+                  type="button"
+                  className="call-control"
+                  onClick={onUpgradeToVideo}
+                  title="Включить видео"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true">
+                    <rect x="3" y="7" width="13" height="10" rx="2" />
+                    <path d="M16 10l5-3v10l-5-3" strokeLinejoin="round" />
+                  </svg>
+                  <span>Видео</span>
+                </button>
+              )}
+
+              {outputSupported && (
+                <div className="call-output-modes" role="group" aria-label="Вывод звука">
+                  <button
+                    type="button"
+                    className={`call-control call-control--compact ${audioOutputMode === 'earpiece' ? 'is-active' : ''}`}
+                    onClick={() => onSetOutputMode('earpiece')}
+                    title="На ухо"
+                  >
+                    <span>Ухо</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`call-control call-control--compact ${audioOutputMode === 'speaker' ? 'is-active' : ''}`}
+                    onClick={() => onSetOutputMode('speaker')}
+                    title="Динамик"
+                  >
+                    <span>Динамик</span>
+                  </button>
+                  {bluetoothAvailable && (
+                    <button
+                      type="button"
+                      className={`call-control call-control--compact ${audioOutputMode === 'bluetooth' ? 'is-active' : ''}`}
+                      onClick={() => onSetOutputMode('bluetooth')}
+                      title="Bluetooth"
+                    >
+                      <span>BT</span>
+                    </button>
+                  )}
+                </div>
+              )}
             </>
           )}
           <button type="button" className="call-control call-end" onClick={onEnd} title="Завершить звонок">

@@ -81,6 +81,12 @@ export const chatsApi = {
   },
   deleteMessage: (chatId, messageId, scope) =>
     api.delete(`/chats/${chatId}/messages/${messageId}/`, { data: { scope } }),
+  forwardMessages: (targetChatId, sourceChatId, messageIds, comment = '') =>
+    api.post(`/chats/${targetChatId}/messages/forward/`, {
+      source_chat_id: sourceChatId,
+      message_ids: messageIds,
+      comment,
+    }),
   runCode: (chatId, messageId) =>
     api.post(`/chats/${chatId}/messages/${messageId}/run/`, null, { timeout: 30000 }),
   invitePrivate: (chatId) => api.post(`/chats/${chatId}/private/invite/`),
@@ -96,6 +102,7 @@ export const callsApi = {
   reject: (callId, data) => api.post(`/calls/${callId}/reject/`, data),
   cancel: (callId, data) => api.post(`/calls/${callId}/cancel/`, data),
   hangup: (callId, data) => api.post(`/calls/${callId}/hangup/`, data),
+  setMediaMode: (callId, data) => api.post(`/calls/${callId}/media-mode/`, data),
   active: () => api.get('/calls/active/'),
   iceConfig: () => api.get('/calls/ice-config/'),
 };
