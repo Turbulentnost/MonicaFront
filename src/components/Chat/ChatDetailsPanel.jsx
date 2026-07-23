@@ -344,21 +344,23 @@ export function ChatDetailsPanel({
           />
         )}
         <h3 className="chat-details__name">
-          {specialMode && !backMode ? (
-            <>
-              <span className="chat-details__hash">#</span>
-              {partner.nickname}
-            </>
-          ) : (
-            `@${partner.nickname}`
-          )}
+          {backMode
+            ? `${partner.first_name} ${partner.last_name}`
+            : specialMode
+              ? (
+                <>
+                  <span className="chat-details__hash">#</span>
+                  {`${partner.first_name} ${partner.last_name}`.trim() || partner.nickname}
+                </>
+              )
+              : `${partner.first_name} ${partner.last_name}`}
         </h3>
         <p className="chat-details__sub">
           {backMode
-            ? `${partner.first_name} ${partner.last_name} · давно ушёл`
+            ? `@${partner.nickname} · давно ушёл`
             : specialMode
-              ? `${partner.first_name} ${partner.last_name} · dev channel`
-              : `${partner.first_name} ${partner.last_name}`}
+              ? `@${partner.nickname} · dev channel`
+              : `@${partner.nickname}`}
         </p>
       </div>
 

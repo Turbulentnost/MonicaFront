@@ -4,17 +4,21 @@ import { VoiceMessagePlayer } from './VoiceMessagePlayer';
 import { EmojiPicker } from './EmojiPicker';
 import { ForwardedBundle } from './ForwardedBundle';
 import { getEditableMessageText, getPhotoCaption } from '../../utils/messageText';
+import {
+  claimReactionBar,
+  releaseReactionBar,
+  subscribeReactionBar,
+} from '../../utils/reactionBarHover';
 
 const DELETE_FOR_ALL_MS = 48 * 60 * 60 * 1000;
 const EDIT_FOR_MS = 7 * 24 * 60 * 60 * 1000;
-const HOVER_HIDE_DELAY_MS = 280;
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '🔥', '😮', '😢'];
 const BACK_QUICK_REACTIONS = ['🥀', '💀', '😭', '🖤', '😞', '💔'];
 
 function PlusIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+    <svg width="12" height="12" viewBox="0 0 14 14" fill="none" aria-hidden="true">
       <path
         d="M7 2.5v9M2.5 7h9"
         stroke="currentColor"
@@ -25,20 +29,22 @@ function PlusIcon() {
   );
 }
 
-function PencilIcon() {
+function ReplyIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
       <path
-        d="M8.6 2.85a1.2 1.2 0 0 1 1.7 0l.85.85a1.2 1.2 0 0 1 0 1.7L5.2 11.35 2.5 12l.65-2.7L8.6 2.85Z"
+        d="M6.5 3.5 2.5 7l4 3.5"
         stroke="currentColor"
-        strokeWidth="1.3"
+        strokeWidth="1.5"
+        strokeLinecap="round"
         strokeLinejoin="round"
       />
       <path
-        d="M7.7 3.75 10.25 6.3"
+        d="M2.5 7h6.2c2.4 0 4.3 1.7 4.3 4v1"
         stroke="currentColor"
-        strokeWidth="1.3"
+        strokeWidth="1.5"
         strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </svg>
   );
@@ -188,15 +194,16 @@ function ChatMessageBubble({
   selectionMode = false,
   onToggleSelect,
   onQuickForward,
+  onReply,
   onJumpToReply,
   onOpenOriginal,
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [barVisible, setBarVisible] = useState(false);
+  const [contextMenu, setContextMenu] = useState(null);
+  const [barOpen, setBarOpen] = useState(false);
   const [pickerExpanded, setPickerExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState('');
-  const hideTimeoutRef = useRef(null);
+  const wrapperRef = useRef(null);
   const editInputRef = useRef(null);
 
   const showDeleteForAll = canDeleteForEveryone(message, isOwn);
@@ -204,37 +211,59 @@ function ChatMessageBubble({
   const delivery = getDeliveryStatus(message, isOwn);
   const isPending = delivery?.key === 'sending';
   const showReactionUi = !isPending && !editing && !selectionMode;
+  const canInteract = !isPending && !editing;
   const isEdited = Boolean(message.edited_at);
   const photoCaption = getPhotoCaption(message);
   const selectable = !isPending;
+  const showSelectControl = selectable && (selectionMode || selected);
 
-  const clearHideTimeout = useCallback(() => {
-    if (hideTimeoutRef.current) {
-      clearTimeout(hideTimeoutRef.current);
-      hideTimeoutRef.current = null;
-    }
+  const closeReactions = useCallback(() => {
+    releaseReactionBar(message.id);
+    setBarOpen(false);
+    setPickerExpanded(false);
+  }, [message.id]);
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(null);
   }, []);
 
-  const scheduleHide = useCallback(() => {
-    clearHideTimeout();
-    hideTimeoutRef.current = setTimeout(() => {
-      setBarVisible(false);
+  useEffect(() => () => {
+    releaseReactionBar(message.id);
+  }, [message.id]);
+
+  useEffect(() => {
+    return subscribeReactionBar((activeId) => {
+      if (activeId === message.id) {
+        setBarOpen(true);
+        return;
+      }
+      setBarOpen(false);
       setPickerExpanded(false);
-    }, HOVER_HIDE_DELAY_MS);
-  }, [clearHideTimeout]);
+    });
+  }, [message.id]);
 
-  const handleMouseEnter = () => {
-    if (!showReactionUi) return;
-    clearHideTimeout();
-    setBarVisible(true);
-  };
+  useEffect(() => {
+    if (!barOpen && !contextMenu) return undefined;
 
-  const handleMouseLeave = () => {
-    if (!showReactionUi) return;
-    scheduleHide();
-  };
+    const onPointerDown = (event) => {
+      if (wrapperRef.current?.contains(event.target)) return;
+      closeReactions();
+      closeContextMenu();
+    };
 
-  useEffect(() => () => clearHideTimeout(), [clearHideTimeout]);
+    const onKeyDown = (event) => {
+      if (event.key !== 'Escape') return;
+      closeReactions();
+      closeContextMenu();
+    };
+
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [barOpen, contextMenu, closeReactions, closeContextMenu]);
 
   useEffect(() => {
     if (!editing) return undefined;
@@ -248,16 +277,15 @@ function ChatMessageBubble({
   }, [editing]);
 
   const handleDelete = (scope) => {
-    setMenuOpen(false);
+    closeContextMenu();
     onDelete?.(message.id, scope);
   };
 
   const startEdit = () => {
-    setMenuOpen(false);
+    closeContextMenu();
     setEditText(getEditableMessageText(message));
     setEditing(true);
-    setBarVisible(false);
-    setPickerExpanded(false);
+    closeReactions();
   };
 
   const cancelEdit = () => {
@@ -278,15 +306,63 @@ function ChatMessageBubble({
     }
   };
 
-  const handleReactionClick = (emoji) => {
+  const handleReactionPick = (emoji) => {
+    onToggleReaction?.(message.id, emoji);
+    closeReactions();
+  };
+
+  const handleReactionChipClick = (emoji) => {
     onToggleReaction?.(message.id, emoji);
   };
 
-  const handleExpandClick = (e) => {
-    e.stopPropagation();
-    clearHideTimeout();
-    setPickerExpanded((v) => !v);
-    setBarVisible(true);
+  const openReactions = (event) => {
+    event.stopPropagation();
+    closeContextMenu();
+    if (barOpen) {
+      closeReactions();
+      return;
+    }
+    claimReactionBar(message.id);
+    setBarOpen(true);
+    setPickerExpanded(false);
+  };
+
+  const handleExpandClick = (event) => {
+    event.stopPropagation();
+    setPickerExpanded((value) => !value);
+    setBarOpen(true);
+    claimReactionBar(message.id);
+  };
+
+  const handleContextMenu = (event) => {
+    if (!canInteract || selectionMode) return;
+    event.preventDefault();
+    event.stopPropagation();
+    closeReactions();
+
+    const menuWidth = 188;
+    const menuHeight = 220;
+    const pad = 8;
+    const x = Math.min(event.clientX, window.innerWidth - menuWidth - pad);
+    const y = Math.min(event.clientY, window.innerHeight - menuHeight - pad);
+    setContextMenu({ x: Math.max(pad, x), y: Math.max(pad, y) });
+  };
+
+  const handleReply = (event) => {
+    event.stopPropagation();
+    closeContextMenu();
+    closeReactions();
+    onReply?.(message);
+  };
+
+  const handleSelectFromMenu = () => {
+    closeContextMenu();
+    onToggleSelect?.(message);
+  };
+
+  const handleForwardFromMenu = () => {
+    closeContextMenu();
+    onQuickForward?.(message);
   };
 
   const renderContent = () => {
@@ -372,10 +448,11 @@ function ChatMessageBubble({
 
   const reactionBarClass = [
     'message-reaction-bar',
+    'is-docked',
     isOwn ? 'message-reaction-bar--own' : 'message-reaction-bar--other',
     specialMode ? 'message-reaction-bar--special' : '',
     backMode ? 'message-reaction-bar--back' : '',
-    barVisible || pickerExpanded ? 'is-visible' : '',
+    barOpen ? 'is-visible' : '',
     pickerExpanded ? 'is-expanded' : '',
   ]
     .filter(Boolean)
@@ -392,6 +469,7 @@ function ChatMessageBubble({
 
   return (
     <div
+      ref={wrapperRef}
       className={[
         'message-wrapper',
         isOwn ? 'own' : 'other',
@@ -399,13 +477,13 @@ function ChatMessageBubble({
         highlighted ? 'is-highlighted' : '',
         selected ? 'is-selected' : '',
         selectionMode ? 'is-selection-mode' : '',
+        barOpen ? 'is-reacting' : '',
       ].filter(Boolean).join(' ')}
       data-message-id={message.id}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
       onClick={selectionMode && selectable ? () => onToggleSelect?.(message) : undefined}
+      onContextMenu={handleContextMenu}
     >
-      {selectable && (
+      {showSelectControl && (
         <button
           type="button"
           className="message-select-control"
@@ -419,57 +497,22 @@ function ChatMessageBubble({
           {selected ? '✓' : ''}
         </button>
       )}
-      {!isOwn && selectable && !selectionMode && (
+
+      {canInteract && !selectionMode && (
         <button
           type="button"
-          className="message-quick-forward"
-          title="Переслать"
-          aria-label="Переслать сообщение"
-          onClick={(event) => {
-            event.stopPropagation();
-            onQuickForward?.(message);
-          }}
-        >➤</button>
+          className="message-reply-action"
+          title="Ответить"
+          aria-label="Ответить на сообщение"
+          onClick={handleReply}
+        >
+          <ReplyIcon />
+        </button>
       )}
+
       <div className={`message ${isOwn ? 'own' : 'other'}${isPending ? ' pending' : ''}`}>
         <div className="message-header">
           <div className="message-meta">{message.sender?.nickname}</div>
-          {!selectionMode && !isPending && !editing && (
-            <div className={`message-actions${menuOpen ? ' is-open' : ''}`}>
-              {showEdit && (
-                <button
-                  type="button"
-                  className="message-action-btn message-edit-btn"
-                  onClick={startEdit}
-                  aria-label="Редактировать"
-                  title="Редактировать"
-                >
-                  <PencilIcon />
-                </button>
-              )}
-              <button
-                type="button"
-                className="message-action-btn message-menu-btn"
-                onClick={() => setMenuOpen((v) => !v)}
-                aria-label="Удалить сообщение"
-                title="Удалить"
-              >
-                ⋯
-              </button>
-              {menuOpen && (
-                <div className="message-menu">
-                  <button type="button" onClick={() => handleDelete('me')}>
-                    Удалить у себя
-                  </button>
-                  {showDeleteForAll && (
-                    <button type="button" onClick={() => handleDelete('everyone')}>
-                      Удалить у всех
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
         </div>
         {message.reply_to_summary && (
           <button
@@ -502,15 +545,29 @@ function ChatMessageBubble({
             </span>
           )}
         </div>
+
+        {showReactionUi && (
+          <button
+            type="button"
+            className={`message-react-trigger${barOpen ? ' is-open' : ''}`}
+            title="Реакция"
+            aria-label="Добавить реакцию"
+            aria-expanded={barOpen}
+            onClick={openReactions}
+          >
+            <span className="message-react-trigger__emoji" aria-hidden="true">😊</span>
+            <span className="message-react-trigger__plus" aria-hidden="true">
+              <PlusIcon />
+            </span>
+          </button>
+        )}
       </div>
 
-      {showReactionUi && (barVisible || pickerExpanded) && (
+      {showReactionUi && barOpen && (
         <div
           className={reactionBarClass}
           role="toolbar"
           aria-label="Реакции на сообщение"
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
         >
           <div className="message-reaction-bar__row">
             {(backMode ? BACK_QUICK_REACTIONS : QUICK_REACTIONS).map((emoji) => (
@@ -518,7 +575,7 @@ function ChatMessageBubble({
                 key={emoji}
                 type="button"
                 className="message-reaction-bar__emoji"
-                onClick={() => handleReactionClick(emoji)}
+                onClick={() => handleReactionPick(emoji)}
                 aria-label={`Реакция ${emoji}`}
               >
                 {emoji}
@@ -538,16 +595,12 @@ function ChatMessageBubble({
             </button>
           </div>
           {pickerExpanded && (
-            <div
-              className="message-reaction-bar__picker"
-              onMouseEnter={handleMouseEnter}
-              onMouseLeave={handleMouseLeave}
-            >
+            <div className="message-reaction-bar__picker">
               <EmojiPicker
                 visible={pickerExpanded}
                 specialMode={specialMode}
                 backMode={backMode}
-                onSelect={handleReactionClick}
+                onSelect={handleReactionPick}
                 className="emoji-picker--reaction"
               />
             </div>
@@ -562,7 +615,7 @@ function ChatMessageBubble({
               key={emoji}
               type="button"
               className={`message-reaction-chip${reactedByMe ? ' message-reaction-chip--mine' : ''}`}
-              onClick={() => handleReactionClick(emoji)}
+              onClick={() => handleReactionChipClick(emoji)}
               aria-label={`${emoji}, ${count}${reactedByMe ? ', ваша реакция' : ''}`}
               aria-pressed={reactedByMe}
             >
@@ -570,6 +623,38 @@ function ChatMessageBubble({
               {count > 1 && <span className="message-reaction-chip__count">{count}</span>}
             </button>
           ))}
+        </div>
+      )}
+
+      {contextMenu && (
+        <div
+          className="message-context-menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          role="menu"
+          onClick={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          {showEdit && (
+            <button type="button" role="menuitem" onClick={startEdit}>
+              Редактировать
+            </button>
+          )}
+          <button type="button" role="menuitem" onClick={handleSelectFromMenu}>
+            Выбрать
+          </button>
+          {onQuickForward && (
+            <button type="button" role="menuitem" onClick={handleForwardFromMenu}>
+              Переслать
+            </button>
+          )}
+          <button type="button" role="menuitem" onClick={() => handleDelete('me')}>
+            Удалить у себя
+          </button>
+          {showDeleteForAll && (
+            <button type="button" role="menuitem" onClick={() => handleDelete('everyone')}>
+              Удалить у всех
+            </button>
+          )}
         </div>
       )}
     </div>

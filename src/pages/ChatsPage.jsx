@@ -33,6 +33,7 @@ import { CallScreen } from '../components/Chat/CallScreen';
 import { SelectionToolbar } from '../components/Chat/SelectionToolbar';
 import { ForwardPickerModal } from '../components/Chat/ForwardPickerModal';
 import { QuoteComposerBar } from '../components/Chat/QuoteComposerBar';
+import { SendIconButton } from '../components/Chat/SendIconButton';
 import { warmAvatarCache } from '../utils/avatarCache';
 import { groupMessagesByDay } from '../utils/formatChatDate';
 import { invalidateMediaCache, warmMediaCache } from '../utils/mediaCache';
@@ -1660,12 +1661,17 @@ export default function ChatsPage() {
 
   const beginReply = () => {
     if (selectedMessages.length !== 1) return;
+    beginReplyToMessage(selectedMessages[0]);
+  };
+
+  const beginReplyToMessage = useCallback((message) => {
+    if (!message || message.message_type === 'call' || String(message.id).startsWith('temp-')) return;
     clearPendingAttachments();
     setPendingForward(null);
-    setReplyTo(selectedMessages[0]);
+    setReplyTo(message);
     setSelectedMessageIds([]);
     requestAnimationFrame(() => messageInputRef.current?.focus());
-  };
+  }, [clearPendingAttachments]);
 
   const chooseForwardTarget = async (chat, person) => {
     if (!selectedMessages.length || forwardBusy) return;
@@ -1778,11 +1784,14 @@ export default function ChatsPage() {
         privateSessionId ? 'with-private' : '',
         isSpecialFavoritesOpen ? 'chats-page--special' : '',
         isBackModeOpen ? 'chats-page--back' : '',
-        selectedChat || routeChatId ? 'has-selected-chat' : '',
-        isMobileViewport && !routeChatId ? 'chats-page--mobile-list' : '',
-        isMobileViewport && routeChatId ? 'chats-page--mobile-chat' : '',
+        selectedChat || routeChatId || accountSettingsOpen ? 'has-selected-chat' : '',
+        isMobileViewport && !routeChatId && !accountSettingsOpen ? 'chats-page--mobile-list' : '',
+        isMobileViewport && (routeChatId || accountSettingsOpen) ? 'chats-page--mobile-chat' : '',
         callScreenVisible ? 'chats-page--call-active' : '',
-        !callScreenVisible && detailsPanelOpen && selectedChat ? 'chats-page--details-open' : '',
+        !callScreenVisible && detailsPanelOpen && selectedChat && !accountSettingsOpen
+          ? 'chats-page--details-open'
+          : '',
+        accountSettingsOpen ? 'chats-page--settings-open' : '',
       ]
         .filter(Boolean)
         .join(' ')}
@@ -1816,6 +1825,7 @@ export default function ChatsPage() {
         onLogout={handleLogout}
         onOpenSettings={() => {
           setAccountSettingsOpen(true);
+          setDetailsPanelOpen(false);
           setIsSpecialFavoritesOpen(false);
           setIsBackModeOpen(false);
         }}
@@ -1823,14 +1833,6 @@ export default function ChatsPage() {
         specialMode={isSpecialFavoritesOpen}
         backMode={isBackModeOpen}
       />
-      {accountSettingsOpen ? (
-        <AccountSettings
-          user={user}
-          onUserUpdated={updateUser}
-          onClose={() => setAccountSettingsOpen(false)}
-        />
-      ) : (
-        <>
       <aside className="chat-sidebar">
         <div className="sidebar-header">
           <h2>{isBackModeOpen ? 'Пустота' : isSpecialFavoritesOpen ? 'Chats' : 'Чаты'}</h2>
@@ -1901,6 +1903,14 @@ export default function ChatsPage() {
         </ul>
       </aside>
 
+      {accountSettingsOpen ? (
+        <AccountSettings
+          user={user}
+          onUserUpdated={updateUser}
+          onClose={() => setAccountSettingsOpen(false)}
+        />
+      ) : (
+        <>
       <main
         className={['chat-main', isFileDragOver ? 'chat-main--drag-over' : ''].filter(Boolean).join(' ')}
         onDragEnter={handleChatDragEnter}
@@ -1915,6 +1925,7 @@ export default function ChatsPage() {
                 <span>Отпустите файлы, чтобы прикрепить</span>
               </div>
             )}
+            <div className="chat-main__column chat-main__column--header">
             <ChatHeader
               partner={selectedChat.partner}
               isOnline={isOnline(selectedChat.partner?.id, selectedChat.partner?.is_online)}
@@ -1942,12 +1953,13 @@ export default function ChatsPage() {
                 </button>
               </div>
             )}
-            <>
+            </div>
             <div
               ref={messagesAreaRef}
               className="messages-area"
               onScroll={handleMessagesScroll}
             >
+              <div className="messages-area__inner">
               {loadingOlderMessages && (
                 <div className="messages-history-loading">Загрузка истории…</div>
               )}
@@ -1973,6 +1985,7 @@ export default function ChatsPage() {
                       selectionMode={selectionMode}
                       onToggleSelect={toggleMessageSelection}
                       onQuickForward={beginQuickForward}
+                      onReply={beginReplyToMessage}
                       onJumpToReply={jumpToMessage}
                       onOpenOriginal={handleOpenOriginal}
                     />
@@ -1985,7 +1998,9 @@ export default function ChatsPage() {
                 </div>
               )}
               <div ref={messagesEndRef} />
+              </div>
             </div>
+            <div className="chat-main__column chat-main__column--composer">
             {pendingAttachments.length > 0 && !codeMode && !selectionMode && (
               <div className="attachment-preview-list">
                 {pendingAttachments.map((item) => (
@@ -2252,8 +2267,17 @@ export default function ChatsPage() {
                     />
                   )}
                 </div>
-                <button
-                  type="submit"
+                <SendIconButton
+                  busy={uploading || forwardBusy}
+                  title={
+                    pendingForward
+                      ? 'Переслать'
+                      : isBackModeOpen
+                        ? 'Отправить…'
+                        : isSpecialFavoritesOpen
+                          ? 'Send'
+                          : 'Отправить'
+                  }
                   disabled={
                     uploading
                     || forwardBusy
@@ -2263,33 +2287,25 @@ export default function ChatsPage() {
                       ? !input.trim() || !codeLanguage || !codeFileName.trim()
                       : !pendingForward && !input.trim() && pendingAttachments.length === 0)
                   }
-                >
-                  {uploading || forwardBusy
-                    ? '...'
-                    : pendingForward
-                      ? 'Переслать'
-                      : isBackModeOpen
-                        ? 'Отправить…'
-                        : isSpecialFavoritesOpen
-                          ? 'Send ▷'
-                          : 'Отправить'}
-                </button>
+                />
               </div>
             </form>
             )}
-            </>
+            </div>
           </>
         ) : (
-          <div className="chat-empty">
-            <p>
-              {routeChatId
-                ? 'Загрузка чата…'
-                : isBackModeOpen
-                  ? 'Здесь никого нет. Как и смысла.'
-                  : isSpecialFavoritesOpen
-                    ? 'Select a channel from the sidebar'
-                    : 'Выберите чат или найдите пользователя для начала диалога'}
-            </p>
+          <div className="chat-main__column chat-main__column--empty">
+            <div className="chat-empty">
+              <p>
+                {routeChatId
+                  ? 'Загрузка чата…'
+                  : isBackModeOpen
+                    ? 'Здесь никого нет. Как и смысла.'
+                    : isSpecialFavoritesOpen
+                      ? 'Select a channel from the sidebar'
+                      : 'Выберите чат или найдите пользователя для начала диалога'}
+              </p>
+            </div>
           </div>
         )}
       </main>
