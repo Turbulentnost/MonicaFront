@@ -31,13 +31,44 @@
 
 .login-page__bg {
   position: absolute;
-  inset: 0;
+  left: 0;
+  right: 0;
+  /* Сдвигаем кадр вверх: splash/M выше в viewport */
+  top: -18%;
   width: 100%;
-  height: 100%;
+  height: 130%;
   object-fit: cover;
-  object-position: top center;
+  object-position: center 62%;
   pointer-events: none;
   user-select: none;
+}
+
+/* Если фото не добивает низ — плавный блюр в чёрный */
+.login-page__fade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: min(48vh, 520px);
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    rgba(10, 10, 10, 0) 0%,
+    rgba(10, 10, 10, 0.35) 28%,
+    rgba(0, 0, 0, 0.82) 68%,
+    #000000 100%
+  );
+}
+
+.login-page__fade::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.55) 45%, #000 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.55) 45%, #000 100%);
 }
 
 .login-page__form {
@@ -267,12 +298,17 @@
 
 @media (min-width: 900px) {
   .login-page__bg {
-    object-fit: cover;
-    object-position: center 18%;
+    top: -22%;
+    height: 135%;
+    object-position: center 58%;
+  }
+
+  .login-page__fade {
+    height: min(55vh, 620px);
   }
 
   .login-page__spacer {
-    min-height: 46vh;
+    min-height: 40vh;
   }
 
   .login-page__form {

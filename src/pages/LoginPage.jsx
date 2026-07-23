@@ -64,6 +64,7 @@ export default function LoginPage() {
         aria-hidden="true"
         draggable={false}
       />
+      <div className="login-page__fade" aria-hidden="true" />
 
       <form className="login-page__form" onSubmit={handleSubmit} noValidate>
         <div className="login-page__spacer" aria-hidden="true" />
