@@ -7,7 +7,8 @@
   --login-field-bg: rgba(26, 26, 26, 0.8);
   --login-field-border: rgba(255, 255, 255, 0.4);
   --login-field-border-focus: rgba(255, 255, 255, 0.7);
-  --login-button: #000000;
+  --login-button: #ffffff;
+  --login-button-text: #0a0a0a;
   --login-error: #ff6b7a;
   --login-font:
     'SF Pro Display',
@@ -29,46 +30,73 @@
   font-family: var(--login-font);
 }
 
+/* M — слева сверху; остальное уходит в чёрный через fade */
 .login-page__bg {
   position: absolute;
-  left: 0;
-  right: 0;
-  /* Сдвигаем кадр вверх: splash/M выше в viewport */
-  top: -18%;
-  width: 100%;
-  height: 130%;
+  left: -4%;
+  top: -6%;
+  width: min(78vw, 720px);
+  height: min(78vw, 720px);
+  max-height: 72vh;
   object-fit: cover;
-  object-position: center 62%;
+  object-position: center 42%;
   pointer-events: none;
   user-select: none;
+  z-index: 0;
 }
 
-/* Если фото не добивает низ — плавный блюр в чёрный */
 .login-page__fade {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: min(48vh, 520px);
   z-index: 0;
   pointer-events: none;
+}
+
+.login-page__fade--right {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(62vw, 820px);
   background: linear-gradient(
-    to bottom,
-    rgba(10, 10, 10, 0) 0%,
-    rgba(10, 10, 10, 0.35) 28%,
-    rgba(0, 0, 0, 0.82) 68%,
+    to right,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.45) 38%,
+    rgba(0, 0, 0, 0.88) 72%,
     #000000 100%
   );
 }
 
-.login-page__fade::before {
+.login-page__fade--right::before {
   content: '';
   position: absolute;
   inset: 0;
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.55) 45%, #000 100%);
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.55) 45%, #000 100%);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  mask-image: linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.5) 42%, #000 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.5) 42%, #000 100%);
+}
+
+.login-page__fade--bottom {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: min(58vh, 640px);
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.4) 30%,
+    rgba(0, 0, 0, 0.88) 70%,
+    #000000 100%
+  );
+}
+
+.login-page__fade--bottom::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.55) 42%, #000 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.55) 42%, #000 100%);
 }
 
 .login-page__form {
@@ -221,18 +249,19 @@
   border: 0;
   border-radius: 999px;
   background: var(--login-button);
-  color: var(--login-text);
+  color: var(--login-button-text);
   font: inherit;
   font-size: 17px;
   font-weight: 600;
   cursor: pointer;
   transition:
     opacity 160ms ease,
-    transform 160ms ease;
+    transform 160ms ease,
+    filter 160ms ease;
 }
 
 .login-page__submit:hover:not(:disabled) {
-  opacity: 0.92;
+  filter: brightness(0.94);
 }
 
 .login-page__submit:active:not(:disabled) {
@@ -245,7 +274,7 @@
 }
 
 .login-page__submit:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.55);
+  outline: 2px solid rgba(255, 255, 255, 0.7);
   outline-offset: 2px;
 }
 
@@ -298,17 +327,24 @@
 
 @media (min-width: 900px) {
   .login-page__bg {
-    top: -22%;
-    height: 135%;
-    object-position: center 58%;
+    left: -2%;
+    top: -4%;
+    width: min(58vw, 860px);
+    height: min(58vw, 860px);
+    max-height: 78vh;
+    object-position: center 40%;
   }
 
-  .login-page__fade {
-    height: min(55vh, 620px);
+  .login-page__fade--right {
+    width: min(58vw, 960px);
+  }
+
+  .login-page__fade--bottom {
+    height: min(52vh, 600px);
   }
 
   .login-page__spacer {
-    min-height: 40vh;
+    min-height: 36vh;
   }
 
   .login-page__form {
