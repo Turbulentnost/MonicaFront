@@ -2005,7 +2005,12 @@ export default function ChatsPage() {
       ) : (
         <>
       <main
-        className={['chat-main', isFileDragOver ? 'chat-main--drag-over' : ''].filter(Boolean).join(' ')}
+        className={[
+          'chat-main',
+          isFileDragOver ? 'chat-main--drag-over' : '',
+          chatBackground ? 'has-custom-bg' : '',
+        ].filter(Boolean).join(' ')}
+        style={chatBackground ? { backgroundImage: `url(${chatBackground})` } : undefined}
         onDragEnter={handleChatDragEnter}
         onDragLeave={handleChatDragLeave}
         onDragOver={handleChatDragOver}
@@ -2061,10 +2066,7 @@ export default function ChatsPage() {
             </div>
             <div
               ref={messagesAreaRef}
-              className={['messages-area', chatBackground ? 'has-custom-bg' : ''].filter(Boolean).join(' ')}
-              style={chatBackground ? {
-                backgroundImage: `url(${chatBackground})`,
-              } : undefined}
+              className="messages-area"
               onScroll={handleMessagesScroll}
             >
               <div className="messages-area__inner">
