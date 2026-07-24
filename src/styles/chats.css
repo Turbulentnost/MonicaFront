@@ -1060,7 +1060,7 @@
 
 .chats-page .message {
   position: relative;
-  padding: 7px 11px;
+  padding: 10px 14px;
   overflow: visible;
 }
 
@@ -1179,7 +1179,7 @@
 }
 
 .chats-page .message-meta {
-  margin-bottom: 2px;
+  margin-bottom: 4px;
   line-height: 1.1;
 }
 
@@ -1421,9 +1421,18 @@
   transform: translateY(calc(100% + 22px)) scale(1);
 }
 
-.chats-page .message-wrapper.is-reacting .message-react-trigger {
-  opacity: 0;
-  pointer-events: none;
+/* Открыта панель реакций — триггер 😊+ у этого сообщения полностью убираем
+   (в т.ч. при :hover, иначе старые правила снова показывают кнопку). */
+.chats-page .message-wrapper.is-reacting .message-react-trigger,
+.chats-page .message-wrapper.is-reacting:hover .message-react-trigger,
+.chats-page .message-wrapper.is-reacting .message-react-trigger.is-above,
+.chats-page .message-wrapper.is-reacting .message-react-trigger.is-below,
+.chats-page .message-wrapper.is-reacting:hover .message-react-trigger.is-above,
+.chats-page .message-wrapper.is-reacting:hover .message-react-trigger.is-below,
+.chats-page .message-wrapper.is-reacting .message-react-trigger:focus-visible {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden;
 }
 
 .chats-page .message-react-trigger:hover {
@@ -1444,7 +1453,7 @@
 
 .chats-page .message-footer {
   gap: 4px;
-  margin-top: 1px;
+  margin-top: 4px;
   line-height: 1;
 }
 
@@ -4384,6 +4393,15 @@
   line-height: 1.2;
 }
 
+.chat-header-selection__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.chat-header-selection__action,
 .chat-header-selection__close {
   flex-shrink: 0;
   width: 36px;
@@ -4400,8 +4418,52 @@
   justify-content: center;
 }
 
+.chat-header-selection__action {
+  font-size: 0;
+}
+
+.chat-header-selection__action:hover,
 .chat-header-selection__close:hover {
   background: rgba(255, 255, 255, 0.12);
+}
+
+.chat-header-selection__action--danger:hover {
+  background: rgba(255, 82, 82, 0.18);
+  color: #ff8a8a;
+}
+
+.chat-header-selection__delete-wrap {
+  position: relative;
+}
+
+.chat-header-selection__delete-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  min-width: 168px;
+  padding: 4px;
+  border: 1px solid rgba(135, 153, 190, 0.28);
+  border-radius: 10px;
+  background: rgba(22, 28, 46, 0.98);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.chat-header-selection__delete-menu button {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  padding: 9px 12px;
+  background: transparent;
+  color: #e8eaed;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chat-header-selection__delete-menu button:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .message-context-menu {

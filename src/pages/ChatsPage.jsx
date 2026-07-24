@@ -39,6 +39,7 @@ import { UploadProgressRing } from '../components/Chat/UploadProgressRing';
 import { warmAvatarCache } from '../utils/avatarCache';
 import { groupMessagesByDay } from '../utils/formatChatDate';
 import { invalidateMediaCache, warmMediaCache } from '../utils/mediaCache';
+import { canDeleteForEveryone, canEditMessage } from '../utils/messageActions';
 import { API_URL } from '../config';
 import { VoiceRecorder, canUseMicrophone } from '../utils/voiceRecorder';
 
@@ -102,6 +103,7 @@ export default function ChatsPage() {
   const [messageReactions, setMessageReactions] = useState({});
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const [selectedMessageIds, setSelectedMessageIds] = useState([]);
+  const [requestEditMessageId, setRequestEditMessageId] = useState(null);
   const [forwardPickerOpen, setForwardPickerOpen] = useState(false);
   const [pendingForward, setPendingForward] = useState(null);
   const [replyTo, setReplyTo] = useState(null);
@@ -1470,21 +1472,23 @@ export default function ChatsPage() {
     });
   }, []);
 
-  const handleDeleteMessage = async (messageId, scope) => {
+  const handleDeleteMessage = useCallback(async (messageId, scope) => {
     if (!selectedChat) return;
     if (String(messageId).startsWith('temp-')) return;
     try {
       await chatsApi.deleteMessage(selectedChat.id, messageId, scope);
-      const removed = messages.find((m) => m.id === messageId);
-      if (scope === 'everyone' && removed?.message_type === 'photo') {
-        const items = Array.isArray(removed.attachments) && removed.attachments.length
-          ? removed.attachments
-          : [{ path: removed.content }];
-        items.forEach((item) => {
-          if (item?.path) invalidateMediaCache(item.path);
-        });
-      }
-      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+      setMessages((prev) => {
+        const removed = prev.find((m) => m.id === messageId);
+        if (scope === 'everyone' && removed?.message_type === 'photo') {
+          const items = Array.isArray(removed.attachments) && removed.attachments.length
+            ? removed.attachments
+            : [{ path: removed.content }];
+          items.forEach((item) => {
+            if (item?.path) invalidateMediaCache(item.path);
+          });
+        }
+        return prev.filter((m) => m.id !== messageId);
+      });
       setMessageReactions((prev) => {
         if (!prev[messageId]) return prev;
         const next = { ...prev };
@@ -1495,7 +1499,7 @@ export default function ChatsPage() {
     } catch {
       // ignore
     }
-  };
+  }, [selectedChat, loadChats]);
 
   const resizeMessageInput = useCallback(() => {
     const el = messageInputRef.current;
@@ -1681,10 +1685,40 @@ export default function ChatsPage() {
   }, [messages, selectedMessageIds]);
   const selectionMode = selectedMessageIds.length > 0;
 
+  const selectionCanEdit = useMemo(() => {
+    if (selectedMessages.length !== 1) return false;
+    const message = selectedMessages[0];
+    return canEditMessage(message, message?.sender?.id === user?.id);
+  }, [selectedMessages, user?.id]);
+
+  const selectionCanDeleteForEveryone = useMemo(() => {
+    if (!selectedMessages.length) return false;
+    return selectedMessages.every((message) => (
+      canDeleteForEveryone(message, message?.sender?.id === user?.id)
+    ));
+  }, [selectedMessages, user?.id]);
+
   const clearMessageSelection = useCallback(() => {
     setSelectedMessageIds([]);
     setForwardPickerOpen(false);
   }, []);
+
+  const handleSelectionEdit = useCallback(() => {
+    if (!selectionCanEdit || selectedMessages.length !== 1) return;
+    const messageId = String(selectedMessages[0].id);
+    clearMessageSelection();
+    setRequestEditMessageId(messageId);
+  }, [selectionCanEdit, selectedMessages, clearMessageSelection]);
+
+  const handleSelectionDelete = useCallback(async (scope) => {
+    if (!selectedMessages.length) return;
+    const ids = selectedMessages.map((message) => message.id);
+    clearMessageSelection();
+    for (const messageId of ids) {
+      // eslint-disable-next-line no-await-in-loop
+      await handleDeleteMessage(messageId, scope);
+    }
+  }, [selectedMessages, clearMessageSelection, handleDeleteMessage]);
 
   const toggleMessageSelection = useCallback((message) => {
     if (!message || message.message_type === 'call' || String(message.id).startsWith('temp-')) return;
@@ -1982,6 +2016,11 @@ export default function ChatsPage() {
               <SelectionHeader
                 count={selectedMessageIds.length}
                 onClose={clearMessageSelection}
+                canEdit={selectionCanEdit}
+                canDeleteForEveryone={selectionCanDeleteForEveryone}
+                onEdit={handleSelectionEdit}
+                onDeleteMe={() => handleSelectionDelete('me')}
+                onDeleteEveryone={() => handleSelectionDelete('everyone')}
               />
             ) : (
               <ChatHeader
@@ -2047,6 +2086,8 @@ export default function ChatsPage() {
                       onReply={beginReplyToMessage}
                       onJumpToReply={jumpToMessage}
                       onOpenOriginal={handleOpenOriginal}
+                      requestEdit={String(requestEditMessageId) === String(msg.id)}
+                      onRequestEditHandled={() => setRequestEditMessageId(null)}
                     />
                   ))}
                 </div>

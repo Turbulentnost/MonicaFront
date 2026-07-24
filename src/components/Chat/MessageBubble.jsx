@@ -6,14 +6,12 @@ import { ForwardedBundle } from './ForwardedBundle';
 import { LinkPreviewCard } from './LinkPreviewCard';
 import { getEditableMessageText, getPhotoCaption } from '../../utils/messageText';
 import { linkifyText } from '../../utils/linkifyText';
+import { canDeleteForEveryone, canEditMessage } from '../../utils/messageActions';
 import {
   claimReactionBar,
   releaseReactionBar,
   subscribeReactionBar,
 } from '../../utils/reactionBarHover';
-
-const DELETE_FOR_ALL_MS = 48 * 60 * 60 * 1000;
-const EDIT_FOR_MS = 7 * 24 * 60 * 60 * 1000;
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '🔥', '😮', '😢'];
 const BACK_QUICK_REACTIONS = ['🥀', '💀', '😭', '🖤', '😞', '💔'];
@@ -50,19 +48,6 @@ function ReplyIcon() {
       />
     </svg>
   );
-}
-
-function canDeleteForEveryone(message, isOwn) {
-  if (!isOwn || !message?.sent_at) return false;
-  if (String(message.id).startsWith('temp-')) return false;
-  return Date.now() - new Date(message.sent_at).getTime() < DELETE_FOR_ALL_MS;
-}
-
-function canEditMessage(message, isOwn) {
-  if (!isOwn || !message?.sent_at) return false;
-  if (String(message.id).startsWith('temp-')) return false;
-  if (message.message_type !== 'text' && message.message_type !== 'photo') return false;
-  return Date.now() - new Date(message.sent_at).getTime() < EDIT_FOR_MS;
 }
 
 function getDeliveryStatus(message, isOwn) {
@@ -199,6 +184,9 @@ function ChatMessageBubble({
   onReply,
   onJumpToReply,
   onOpenOriginal,
+  /** Внешний запрос начать редактирование (из шапки выбора). */
+  requestEdit = false,
+  onRequestEditHandled,
 }) {
   const [contextMenu, setContextMenu] = useState(null);
   const [barOpen, setBarOpen] = useState(false);
@@ -332,12 +320,18 @@ function ChatMessageBubble({
     onDelete?.(message.id, scope);
   };
 
-  const startEdit = () => {
+  const startEdit = useCallback(() => {
     closeContextMenu();
     setEditText(getEditableMessageText(message));
     setEditing(true);
     closeReactions();
-  };
+  }, [closeContextMenu, closeReactions, message]);
+
+  useEffect(() => {
+    if (!requestEdit || !canEditMessage(message, isOwn)) return;
+    startEdit();
+    onRequestEditHandled?.();
+  }, [requestEdit, message, isOwn, startEdit, onRequestEditHandled]);
 
   const cancelEdit = () => {
     setEditing(false);
@@ -632,19 +626,22 @@ function ChatMessageBubble({
             className={`message-react-hover-bridge is-${reactionSide}`}
             aria-hidden="true"
           />
-          <button
-            type="button"
-            className={`message-react-trigger is-${reactionSide}${barOpen ? ' is-open' : ''}`}
-            title="Реакция"
-            aria-label="Добавить реакцию"
-            aria-expanded={barOpen}
-            onClick={openReactions}
-          >
-            <span className="message-react-trigger__emoji" aria-hidden="true">😊</span>
-            <span className="message-react-trigger__plus" aria-hidden="true">
-              <PlusIcon />
-            </span>
-          </button>
+          {/* Пока открыта панель реакций — триггер 😊+ для этого сообщения скрыт */}
+          {!barOpen && (
+            <button
+              type="button"
+              className={`message-react-trigger is-${reactionSide}`}
+              title="Реакция"
+              aria-label="Добавить реакцию"
+              aria-expanded={false}
+              onClick={openReactions}
+            >
+              <span className="message-react-trigger__emoji" aria-hidden="true">😊</span>
+              <span className="message-react-trigger__plus" aria-hidden="true">
+                <PlusIcon />
+              </span>
+            </button>
+          )}
         </>
       )}
 
@@ -667,18 +664,21 @@ function ChatMessageBubble({
                 {emoji}
               </button>
             ))}
-            <button
-              type="button"
-              className="message-reaction-bar__expand"
-              onClick={handleExpandClick}
-              aria-label={pickerExpanded ? 'Скрыть эмодзи' : 'Больше эмодзи'}
-              aria-expanded={pickerExpanded}
-            >
-              <span className="message-reaction-bar__expand-icon" aria-hidden="true">
-                😊
-              </span>
-              <PlusIcon />
-            </button>
+            {/* Кнопка 😊+ только до раскрытия полного пикера */}
+            {!pickerExpanded && (
+              <button
+                type="button"
+                className="message-reaction-bar__expand"
+                onClick={handleExpandClick}
+                aria-label="Больше эмодзи"
+                aria-expanded={false}
+              >
+                <span className="message-reaction-bar__expand-icon" aria-hidden="true">
+                  😊
+                </span>
+                <PlusIcon />
+              </button>
+            )}
           </div>
           {pickerExpanded && (
             <div className="message-reaction-bar__picker">
