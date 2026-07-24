@@ -1704,6 +1704,28 @@
   max-width: none;
 }
 
+.chats-page .message-input.has-attachments {
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.chats-page .message-input .attachment-preview-list {
+  padding: 0 2px 10px;
+  border-bottom: 1px solid rgba(135, 153, 190, 0.18);
+  background: transparent;
+}
+
+.chats-page .message-input .attachment-preview-file {
+  background: rgba(20, 26, 42, 0.92);
+  border: 1px solid rgba(135, 153, 190, 0.22);
+}
+
+.chats-page .message-input .attachment-count {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .chats-page .message-input-row {
   display: flex;
   align-items: flex-end;
@@ -2109,6 +2131,19 @@
 .chats-page .message-send-btn__busy {
   font-size: 16px;
   line-height: 1;
+}
+
+.chats-page .message-send-btn.is-uploading {
+  background: #3a4260;
+}
+
+.chats-page .message-send-btn .upload-progress-ring__label {
+  font-size: 7px;
+}
+
+.chats-page .message-input .attachment-preview-list.is-uploading,
+.chats-page .message-input.is-uploading .attachment-preview-list {
+  border-bottom-color: rgba(111, 141, 255, 0.4);
 }
 
 .chats-page .message-input button[type='submit']:hover:not(:disabled),

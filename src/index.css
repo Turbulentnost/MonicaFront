@@ -838,9 +838,13 @@ select:autofill {
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  padding: 10px 24px;
-  border-top: 1px solid #2d3140;
-  background: #1a1d29;
+  width: 100%;
+  padding: 2px 2px 8px;
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
+  box-sizing: border-box;
 }
 
 .attachment-preview-item {
@@ -848,6 +852,11 @@ select:autofill {
   display: flex;
   align-items: center;
   max-width: 180px;
+}
+
+.attachment-preview-item.is-uploading .attachment-preview-image,
+.attachment-preview-item.is-uploading .attachment-preview-file {
+  opacity: 0.45;
 }
 
 .attachment-preview-image {
@@ -867,6 +876,69 @@ select:autofill {
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 140px;
+}
+
+.attachment-upload-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.upload-progress-ring {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.upload-progress-ring svg {
+  display: block;
+  transform: rotate(-90deg);
+}
+
+.upload-progress-ring__track {
+  stroke: rgba(255, 255, 255, 0.18);
+  stroke-width: 2.6;
+}
+
+.upload-progress-ring__value {
+  stroke: #6f8dff;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 120ms linear;
+}
+
+.upload-progress-ring.is-indeterminate svg {
+  animation: upload-ring-spin 0.9s linear infinite;
+}
+
+.upload-progress-ring.is-indeterminate .upload-progress-ring__value {
+  stroke: #8aa4ff;
+  transition: none;
+}
+
+.upload-progress-ring__label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: 700;
+  color: #e8eaed;
+  line-height: 1;
+  pointer-events: none;
+}
+
+@keyframes upload-ring-spin {
+  to {
+    transform: rotate(270deg);
+  }
 }
 
 .attachment-remove {

@@ -35,6 +35,7 @@ import { SelectionToolbar } from '../components/Chat/SelectionToolbar';
 import { ForwardPickerModal } from '../components/Chat/ForwardPickerModal';
 import { QuoteComposerBar } from '../components/Chat/QuoteComposerBar';
 import { SendIconButton } from '../components/Chat/SendIconButton';
+import { UploadProgressRing } from '../components/Chat/UploadProgressRing';
 import { warmAvatarCache } from '../utils/avatarCache';
 import { groupMessagesByDay } from '../utils/formatChatDate';
 import { invalidateMediaCache, warmMediaCache } from '../utils/mediaCache';
@@ -83,6 +84,7 @@ export default function ChatsPage() {
   const [pendingAttachments, setPendingAttachments] = useState([]);
   const [attachError, setAttachError] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(null);
   const [codeMode, setCodeMode] = useState(false);
   const [codeLanguage, setCodeLanguage] = useState('');
   const [codeFileName, setCodeFileName] = useState('');
@@ -947,7 +949,11 @@ export default function ChatsPage() {
     const voiceMeta = extra.waveform || extra.voiceDurationMs != null
       ? { waveform: extra.waveform, voiceDurationMs: extra.voiceDurationMs }
       : null;
-    const { data } = await chatsApi.uploadMessageFiles(selectedChat.id, files);
+    setUploadProgress(0);
+    const { data } = await chatsApi.uploadMessageFiles(selectedChat.id, files, {
+      onUploadProgress: (pct) => setUploadProgress(pct),
+    });
+    setUploadProgress(100);
     const uploaded = data.files || [];
     let allSent = true;
 
@@ -1141,6 +1147,7 @@ export default function ChatsPage() {
       }
 
       setUploading(true);
+      setUploadProgress(0);
       await uploadAndSendFiles([result.file], {
         waveform: result.waveform,
         voiceDurationMs: result.voiceDurationMs,
@@ -1150,6 +1157,7 @@ export default function ChatsPage() {
       await cancelVoiceRecording();
     } finally {
       setUploading(false);
+      setUploadProgress(null);
       setVoiceBusy(false);
     }
   };
@@ -1186,6 +1194,7 @@ export default function ChatsPage() {
     stopTyping();
     setAttachError('');
     setUploading(true);
+    setUploadProgress(0);
     try {
       await uploadAndSendFiles([file]);
       setInput('');
@@ -1194,6 +1203,7 @@ export default function ChatsPage() {
       setAttachError(err.response?.data?.detail || err.message || 'Не удалось отправить код');
     } finally {
       setUploading(false);
+      setUploadProgress(null);
     }
   };
 
@@ -1261,6 +1271,7 @@ export default function ChatsPage() {
 
     const hasPhotos = pendingAttachments.some((item) => item.file?.type?.startsWith('image/'));
     setUploading(true);
+    setUploadProgress(0);
     try {
       await uploadAndSendFiles(
         pendingAttachments.map((item) => item.file),
@@ -1279,6 +1290,7 @@ export default function ChatsPage() {
       setAttachError(err.response?.data?.detail || err.message || 'Не удалось загрузить файлы');
     } finally {
       setUploading(false);
+      setUploadProgress(null);
     }
   };
 
@@ -2047,35 +2059,6 @@ export default function ChatsPage() {
               </div>
             </div>
             <div className="chat-main__column chat-main__column--composer">
-            {pendingAttachments.length > 0 && !codeMode && !selectionMode && (
-              <div className="attachment-preview-list">
-                {pendingAttachments.map((item) => (
-                  <div key={item.id} className="attachment-preview-item">
-                    {item.previewUrl ? (
-                      <img
-                        src={item.previewUrl}
-                        alt={item.file.name}
-                        className="attachment-preview-image"
-                      />
-                    ) : (
-                      <span className="attachment-preview-file" title={item.file.name}>
-                        📎 {item.file.name}
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      className="attachment-remove"
-                      onClick={() => removePendingAttachment(item.id)}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-                <span className="attachment-count">
-                  {pendingAttachments.length}/{MAX_ATTACHMENTS}
-                </span>
-              </div>
-            )}
             {attachError && <div className="attachment-error">{attachError}</div>}
             {selectionMode ? (
               <SelectionToolbar
@@ -2091,6 +2074,8 @@ export default function ChatsPage() {
                 codeMode ? 'code-mode' : '',
                 isSpecialFavoritesOpen ? 'message-input--special' : '',
                 isBackModeOpen ? 'message-input--back' : '',
+                pendingAttachments.length > 0 && !codeMode ? 'has-attachments' : '',
+                uploading ? 'is-uploading' : '',
               ]
                 .filter(Boolean)
                 .join(' ')}
@@ -2105,6 +2090,50 @@ export default function ChatsPage() {
                     else setReplyTo(null);
                   }}
                 />
+              )}
+              {pendingAttachments.length > 0 && !codeMode && (
+                <div className={`attachment-preview-list${uploading ? ' is-uploading' : ''}`}>
+                  {pendingAttachments.map((item) => (
+                    <div
+                      key={item.id}
+                      className={`attachment-preview-item${uploading ? ' is-uploading' : ''}`}
+                    >
+                      {item.previewUrl ? (
+                        <img
+                          src={item.previewUrl}
+                          alt={item.file.name}
+                          className="attachment-preview-image"
+                        />
+                      ) : (
+                        <span className="attachment-preview-file" title={item.file.name}>
+                          📎 {item.file.name}
+                        </span>
+                      )}
+                      {uploading ? (
+                        <span className="attachment-upload-overlay">
+                          <UploadProgressRing
+                            progress={uploadProgress ?? 0}
+                            indeterminate={uploadProgress == null}
+                            size={34}
+                          />
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="attachment-remove"
+                          onClick={() => removePendingAttachment(item.id)}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <span className="attachment-count">
+                    {uploading && uploadProgress != null
+                      ? `${uploadProgress}%`
+                      : `${pendingAttachments.length}/${MAX_ATTACHMENTS}`}
+                  </span>
+                </div>
               )}
               {isSpecialFavoritesOpen && !codeMode && (
                 <div className="message-input-formatbar" aria-hidden="true">
@@ -2315,6 +2344,7 @@ export default function ChatsPage() {
                 </div>
                 <SendIconButton
                   busy={uploading || forwardBusy}
+                  uploadProgress={uploading ? uploadProgress : null}
                   title={
                     pendingForward
                       ? 'Переслать'
