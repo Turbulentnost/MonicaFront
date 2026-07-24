@@ -29,20 +29,20 @@ function PlusIcon() {
   );
 }
 
-function ReplyIcon() {
+function ForwardIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
       <path
-        d="M6.5 3.5 2.5 7l4 3.5"
+        d="M9.5 3.5 13.5 7l-4 3.5"
         stroke="currentColor"
-        strokeWidth="1.5"
+        strokeWidth="1.55"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <path
-        d="M2.5 7h6.2c2.4 0 4.3 1.7 4.3 4v1"
+        d="M13.5 7H7.3C4.9 7 3 8.7 3 11v1"
         stroke="currentColor"
-        strokeWidth="1.5"
+        strokeWidth="1.55"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -355,6 +355,13 @@ function ChatMessageBubble({
     onReply?.(message);
   };
 
+  const handleQuickForward = (event) => {
+    event.stopPropagation();
+    closeContextMenu();
+    closeReactions();
+    onQuickForward?.(message);
+  };
+
   const handleSelectFromMenu = () => {
     closeContextMenu();
     onToggleSelect?.(message);
@@ -498,15 +505,15 @@ function ChatMessageBubble({
         </button>
       )}
 
-      {canInteract && !selectionMode && (
+      {canInteract && !selectionMode && onQuickForward && (
         <button
           type="button"
           className="message-reply-action"
-          title="Ответить"
-          aria-label="Ответить на сообщение"
-          onClick={handleReply}
+          title="Переслать"
+          aria-label="Переслать сообщение"
+          onClick={handleQuickForward}
         >
-          <ReplyIcon />
+          <ForwardIcon />
         </button>
       )}
 
@@ -637,6 +644,11 @@ function ChatMessageBubble({
           {showEdit && (
             <button type="button" role="menuitem" onClick={startEdit}>
               Редактировать
+            </button>
+          )}
+          {onReply && (
+            <button type="button" role="menuitem" onClick={handleReply}>
+              Ответить
             </button>
           )}
           <button type="button" role="menuitem" onClick={handleSelectFromMenu}>

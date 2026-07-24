@@ -1078,13 +1078,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   padding: 0;
-  border: none;
-  border-radius: 8px;
-  background: rgba(16, 22, 39, 0.88);
-  color: rgba(232, 234, 237, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(28, 34, 52, 0.92);
+  color: rgba(236, 240, 255, 0.92);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
   cursor: pointer;
   opacity: 0;
   pointer-events: none;
@@ -1093,25 +1094,19 @@
     opacity var(--transition-fast),
     transform var(--transition-fast),
     background var(--transition-fast),
+    border-color var(--transition-fast),
     color var(--transition-fast);
 }
 
+/* Свои — слева от пузыря, чужие — справа; без наложения */
 .chats-page .message-wrapper.own .message-reply-action {
-  right: calc(100% - 4px);
-  padding: 8px 12px 8px 8px;
-  margin: -8px 0;
-  box-sizing: content-box;
-  width: 28px;
-  height: 28px;
+  right: calc(100% + 8px);
+  left: auto;
 }
 
 .chats-page .message-wrapper.other .message-reply-action {
-  left: calc(100% - 4px);
-  padding: 8px 8px 8px 12px;
-  margin: -8px 0;
-  box-sizing: content-box;
-  width: 28px;
-  height: 28px;
+  left: calc(100% + 8px);
+  right: auto;
 }
 
 .chats-page .message-wrapper:hover .message-reply-action,
@@ -1122,8 +1117,15 @@
 }
 
 .chats-page .message-reply-action:hover {
-  background: rgba(91, 124, 255, 0.28);
+  background: rgba(47, 111, 237, 0.42);
+  border-color: rgba(160, 190, 255, 0.5);
   color: #fff;
+}
+
+.chats-page .message-reply-action svg {
+  width: 12px;
+  height: 12px;
+  display: block;
 }
 
 .chats-page .message-react-trigger {
@@ -1208,9 +1210,22 @@
 }
 
 .chats-page .message.own {
-  background: #4f5670;
+  background: #2f6fed;
   box-shadow: none;
   border-radius: var(--radius-lg) var(--radius-lg) var(--radius-xs) var(--radius-lg);
+}
+
+.chats-page .message.own .message-status,
+.chats-page .message.own .message-status-sending,
+.chats-page .message.own .message-status-sent,
+.chats-page .message.own .message-status-read {
+  color: #ffffff;
+  opacity: 0.95;
+}
+
+.chats-page .message.own .message-time {
+  color: rgba(255, 255, 255, 0.88);
+  opacity: 1;
 }
 
 .chats-page .message.other {
@@ -1231,7 +1246,7 @@
 
 .chats-page .message-wrapper {
   position: relative;
-  max-width: min(560px, 82%);
+  max-width: min(420px, 62%);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -2725,7 +2740,7 @@
   }
 
   .chats-page .message-wrapper {
-    max-width: min(380px, 56%);
+    max-width: min(360px, 58%);
   }
 }
 
@@ -2936,7 +2951,7 @@
   }
 
   .chats-page .message-wrapper {
-    max-width: min(92%, 420px);
+    max-width: min(78%, 340px);
   }
 
   .chats-page .chat-empty {

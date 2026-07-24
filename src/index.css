@@ -389,7 +389,7 @@ select:autofill {
 }
 
 .message {
-  max-width: min(420px, 58%);
+  max-width: min(400px, 62%);
   padding: 10px 14px;
   border-radius: 12px;
   position: relative;
@@ -397,7 +397,7 @@ select:autofill {
 
 .message.own {
   align-self: flex-end;
-  background: #5b7fff;
+  background: #2f6fed;
 }
 
 .message.other {
@@ -517,11 +517,15 @@ select:autofill {
 
 .message-status-read {
   opacity: 0.95;
-  color: #73b7ff;
+  color: #ffffff;
 }
 
+.message.own .message-status,
+.message.own .message-status-sending,
+.message.own .message-status-sent,
 .message.own .message-status-read {
-  color: #8ac5ff;
+  color: #ffffff;
+  opacity: 0.95;
 }
 
 .message-status-checks {
