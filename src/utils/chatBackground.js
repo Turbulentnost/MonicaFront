@@ -6,6 +6,7 @@ function storageKey(chatId) {
   return `${STORAGE_PREFIX}${chatId}`;
 }
 
+/** Legacy localStorage helper — kept for one-time MinIO migration. */
 export function getChatBackground(chatId) {
   if (!chatId) return null;
   try {
@@ -16,28 +17,20 @@ export function getChatBackground(chatId) {
   }
 }
 
-export function setChatBackground(chatId, dataUrl) {
+export function clearChatBackground(chatId) {
   if (!chatId) return false;
   try {
-    if (!dataUrl) {
-      localStorage.removeItem(storageKey(chatId));
-      return true;
-    }
-    localStorage.setItem(storageKey(chatId), dataUrl);
+    localStorage.removeItem(storageKey(chatId));
     return true;
   } catch {
     return false;
   }
 }
 
-export function clearChatBackground(chatId) {
-  return setChatBackground(chatId, null);
-}
-
 /**
- * Сжимает изображение в data URL (JPEG), чтобы уместить в localStorage.
+ * Сжимает изображение в JPEG File для загрузки в MinIO.
  */
-export function fileToBackgroundDataUrl(file) {
+export function fileToBackgroundFile(file) {
   return new Promise((resolve, reject) => {
     if (!file || !file.type?.startsWith('image/')) {
       reject(new Error('Нужно изображение'));
@@ -61,14 +54,29 @@ export function fileToBackgroundDataUrl(file) {
           return;
         }
         ctx.drawImage(img, 0, 0, width, height);
-        try {
-          resolve(canvas.toDataURL('image/jpeg', JPEG_QUALITY));
-        } catch (err) {
-          reject(err);
-        }
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              reject(new Error('Не удалось сжать изображение'));
+              return;
+            }
+            resolve(new File([blob], 'background.jpg', { type: 'image/jpeg' }));
+          },
+          'image/jpeg',
+          JPEG_QUALITY,
+        );
       };
       img.src = reader.result;
     };
     reader.readAsDataURL(file);
   });
+}
+
+export async function dataUrlToBackgroundFile(dataUrl) {
+  if (!dataUrl || !String(dataUrl).startsWith('data:')) {
+    throw new Error('Некорректный фон');
+  }
+  const response = await fetch(dataUrl);
+  const blob = await response.blob();
+  return new File([blob], 'background.jpg', { type: blob.type || 'image/jpeg' });
 }

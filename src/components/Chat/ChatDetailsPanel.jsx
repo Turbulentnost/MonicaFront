@@ -3,9 +3,8 @@ import { chatsApi } from '../../api/client';
 import { getCachedMediaSrc, warmMediaCache } from '../../utils/mediaCache';
 import { getPhotoCaption, looksLikeStoragePath } from '../../utils/messageText';
 import {
-  fileToBackgroundDataUrl,
-  getChatBackground,
-  setChatBackground,
+  clearChatBackground,
+  fileToBackgroundFile,
 } from '../../utils/chatBackground';
 import pngIcon from '../../design-references/icons/png-svgrepo-com.svg';
 import { FileTypeIcon } from './FileTypeIcon';
@@ -204,6 +203,7 @@ export function ChatDetailsPanel({
   backMode = false,
   onJumpToMessage,
   onBackgroundChange,
+  backgroundUrl = null,
 }) {
   const [activeTab, setActiveTab] = useState('shared');
   const [fileMessages, setFileMessages] = useState([]);
@@ -224,11 +224,11 @@ export function ChatDetailsPanel({
   const bgInputRef = useRef(null);
 
   useEffect(() => {
-    setHasCustomBg(Boolean(getChatBackground(chatId)));
+    setHasCustomBg(Boolean(backgroundUrl));
     setMenuOpen(false);
     setBgEditorOpen(false);
     setBgError('');
-  }, [chatId]);
+  }, [chatId, backgroundUrl]);
 
   useEffect(() => {
     if (!menuOpen) return undefined;
@@ -246,34 +246,39 @@ export function ChatDetailsPanel({
     };
   }, [menuOpen]);
 
-  const applyBackground = (dataUrl) => {
-    const ok = setChatBackground(chatId, dataUrl);
-    if (!ok) {
-      setBgError('Не удалось сохранить фон (файл слишком большой)');
-      return false;
-    }
-    setHasCustomBg(Boolean(dataUrl));
-    onBackgroundChange?.(dataUrl || null);
-    return true;
-  };
-
   const handleBackgroundFile = async (file) => {
-    if (!file) return;
+    if (!file || !chatId) return;
     setBgBusy(true);
     setBgError('');
     try {
-      const dataUrl = await fileToBackgroundDataUrl(file);
-      applyBackground(dataUrl);
+      const prepared = await fileToBackgroundFile(file);
+      const { data } = await chatsApi.uploadBackground(chatId, prepared);
+      const url = data?.background_url || null;
+      clearChatBackground(chatId);
+      setHasCustomBg(Boolean(url));
+      onBackgroundChange?.(url);
     } catch {
-      setBgError('Не удалось обработать изображение');
+      setBgError('Не удалось загрузить фон');
     } finally {
       setBgBusy(false);
     }
   };
 
-  const handleResetBackground = () => {
-    applyBackground(null);
-    setMenuOpen(false);
+  const handleResetBackground = async () => {
+    if (!chatId) return;
+    setBgBusy(true);
+    setBgError('');
+    try {
+      await chatsApi.deleteBackground(chatId);
+      clearChatBackground(chatId);
+      setHasCustomBg(false);
+      onBackgroundChange?.(null);
+      setMenuOpen(false);
+    } catch {
+      setBgError('Не удалось сбросить фон');
+    } finally {
+      setBgBusy(false);
+    }
   };
 
   useEffect(() => {

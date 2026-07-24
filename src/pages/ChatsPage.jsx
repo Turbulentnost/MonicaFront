@@ -41,7 +41,11 @@ import { warmAvatarCache } from '../utils/avatarCache';
 import { groupMessagesByDay } from '../utils/formatChatDate';
 import { invalidateMediaCache, warmMediaCache } from '../utils/mediaCache';
 import { canDeleteForEveryone, canEditMessage } from '../utils/messageActions';
-import { getChatBackground } from '../utils/chatBackground';
+import {
+  clearChatBackground,
+  dataUrlToBackgroundFile,
+  getChatBackground,
+} from '../utils/chatBackground';
 import { API_URL } from '../config';
 import { VoiceRecorder, canUseMicrophone } from '../utils/voiceRecorder';
 
@@ -803,8 +807,55 @@ export default function ChatsPage() {
   }, [selectedChat?.id]);
 
   useEffect(() => {
-    setChatBackgroundState(getChatBackground(selectedChat?.id));
-  }, [selectedChat?.id]);
+    const chatId = selectedChat?.id;
+    if (!chatId) {
+      setChatBackgroundState(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const serverUrl = selectedChat?.background_url || null;
+    if (serverUrl) {
+      setChatBackgroundState(serverUrl);
+      clearChatBackground(chatId);
+      return undefined;
+    }
+
+    const localDataUrl = getChatBackground(chatId);
+    if (!localDataUrl) {
+      setChatBackgroundState(null);
+      return undefined;
+    }
+
+    // One-time migration: old localStorage data URL → MinIO.
+    setChatBackgroundState(localDataUrl);
+    (async () => {
+      try {
+        const file = await dataUrlToBackgroundFile(localDataUrl);
+        const { data } = await chatsApi.uploadBackground(chatId, file);
+        if (cancelled) return;
+        const url = data?.background_url || null;
+        clearChatBackground(chatId);
+        setChatBackgroundState(url);
+        setChats((prev) => prev.map((chat) => (
+          String(chat.id) === String(chatId)
+            ? { ...chat, background_url: url }
+            : chat
+        )));
+        setSelectedChat((prev) => (
+          prev && String(prev.id) === String(chatId)
+            ? { ...prev, background_url: url }
+            : prev
+        ));
+      } catch {
+        // Keep local preview if upload fails; user can re-upload later.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedChat?.id, selectedChat?.background_url]);
 
   useEffect(() => () => {
     if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
@@ -2488,7 +2539,22 @@ export default function ChatsPage() {
               specialMode={isSpecialFavoritesOpen}
               backMode={isBackModeOpen}
               onJumpToMessage={jumpToMessage}
-              onBackgroundChange={setChatBackgroundState}
+              backgroundUrl={chatBackground}
+              onBackgroundChange={(url) => {
+                setChatBackgroundState(url);
+                const chatId = selectedChat?.id;
+                if (!chatId) return;
+                setChats((prev) => prev.map((chat) => (
+                  String(chat.id) === String(chatId)
+                    ? { ...chat, background_url: url }
+                    : chat
+                )));
+                setSelectedChat((prev) => (
+                  prev && String(prev.id) === String(chatId)
+                    ? { ...prev, background_url: url }
+                    : prev
+                ));
+              }}
             />
           </>
         )

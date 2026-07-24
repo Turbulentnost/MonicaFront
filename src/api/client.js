@@ -92,6 +92,15 @@ export const chatsApi = {
       },
     });
   },
+  uploadBackground: (chatId, photo) => {
+    const form = new FormData();
+    form.append('photo', photo);
+    return api.post(`/chats/${chatId}/background/`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
+    });
+  },
+  deleteBackground: (chatId) => api.delete(`/chats/${chatId}/background/`),
   deleteMessage: (chatId, messageId, scope) =>
     api.delete(`/chats/${chatId}/messages/${messageId}/`, { data: { scope } }),
   forwardMessages: (targetChatId, sourceChatId, messageIds, comment = '') =>
