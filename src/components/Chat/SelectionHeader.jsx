@@ -31,14 +31,36 @@ function PencilIcon() {
 function TrashIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      {/* Крышка */}
       <path
-        d="M5 7h14M10 7V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2M9 7v11a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V7"
+        d="M4 7h16"
         stroke="currentColor"
-        strokeWidth="1.7"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      {/* Ручка крышки */}
+      <path
+        d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7"
+        stroke="currentColor"
+        strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <path d="M11 11v5M13 11v5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      {/* Корпус корзины */}
+      <path
+        d="M6.5 7 7.5 19.2A2 2 0 0 0 9.5 21h5a2 2 0 0 0 2-1.8L17.5 7"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* Вертикальные линии внутри */}
+      <path
+        d="M10 11v6M14 11v6"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
