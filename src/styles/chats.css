@@ -4519,6 +4519,13 @@
   justify-content: center;
   background: rgba(0, 0, 0, 0.92);
   padding: 56px 64px 32px;
+  box-sizing: border-box;
+}
+
+/* Поверх колонки чата (не в панели деталей / не в пузыре) */
+.photo-lightbox--chat {
+  position: absolute;
+  z-index: 80;
 }
 
 .photo-lightbox__toolbar {
@@ -4555,6 +4562,19 @@
   max-height: calc(100vh - 96px);
   object-fit: contain;
   border-radius: 4px;
+}
+
+.photo-lightbox--chat .photo-lightbox__stage {
+  max-width: min(960px, 100%);
+  max-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.photo-lightbox--chat .photo-lightbox__image {
+  max-height: calc(100% - 8px);
+  max-width: 100%;
 }
 
 .photo-lightbox__empty {

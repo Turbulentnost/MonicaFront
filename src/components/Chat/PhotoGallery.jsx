@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { getCachedMediaSrc, warmMediaCache } from '../../utils/mediaCache';
+
+function getLightboxHost() {
+  if (typeof document === 'undefined') return null;
+  return document.querySelector('.chats-page .chat-main') || document.body;
+}
 
 /** Telegram-like row sizes for 1–10 photos */
 export function galleryRowSizes(count) {
@@ -55,6 +61,11 @@ export function PhotoLightbox({ items, index, onClose, onChange }) {
   const key = current?.path;
   const remote = current?.content_url;
   const [src, setSrc] = useState(() => getCachedMediaSrc(key, remote));
+  const [host, setHost] = useState(null);
+
+  useEffect(() => {
+    setHost(getLightboxHost());
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,10 +105,17 @@ export function PhotoLightbox({ items, index, onClose, onChange }) {
     };
   }, [go, onClose]);
 
-  if (!current) return null;
+  if (!current || !host) return null;
 
-  return (
-    <div className="photo-lightbox" role="dialog" aria-modal="true" onClick={onClose}>
+  const inChat = host !== document.body;
+
+  return createPortal(
+    <div
+      className={`photo-lightbox${inChat ? ' photo-lightbox--chat' : ''}`}
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+    >
       <div className="photo-lightbox__toolbar" onClick={(e) => e.stopPropagation()}>
         <span className="photo-lightbox__counter">
           {index + 1} / {items.length}
@@ -139,7 +157,8 @@ export function PhotoLightbox({ items, index, onClose, onChange }) {
           ›
         </button>
       )}
-    </div>
+    </div>,
+    host,
   );
 }
 
