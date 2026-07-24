@@ -57,15 +57,21 @@ export default function LoginPage() {
 
   return (
     <div className="login-page">
-      <img
-        className="login-page__bg"
-        src={`${process.env.PUBLIC_URL || ''}/login-bg.png`}
-        alt=""
-        aria-hidden="true"
-        draggable={false}
-      />
-      <div className="login-page__fade login-page__fade--right" aria-hidden="true" />
-      <div className="login-page__fade login-page__fade--bottom" aria-hidden="true" />
+      <div className="login-page__art" aria-hidden="true">
+        <img
+          className="login-page__bg login-page__bg--soft"
+          src={`${process.env.PUBLIC_URL || ''}/login-bg.png`}
+          alt=""
+          draggable={false}
+        />
+        <img
+          className="login-page__bg"
+          src={`${process.env.PUBLIC_URL || ''}/login-bg.png`}
+          alt=""
+          draggable={false}
+        />
+      </div>
+      <div className="login-page__veil" aria-hidden="true" />
 
       <form className="login-page__form" onSubmit={handleSubmit} noValidate>
         <div className="login-page__spacer" aria-hidden="true" />

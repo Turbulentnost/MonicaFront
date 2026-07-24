@@ -30,73 +30,120 @@
   font-family: var(--login-font);
 }
 
-/* M — слева сверху; остальное уходит в чёрный через fade */
+/* M слева сверху; края картинки сами уходят в прозрачность → чёрный фон */
+.login-page__art {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: min(92vw, 920px);
+  height: min(92vw, 920px);
+  max-height: 82vh;
+  z-index: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
 .login-page__bg {
   position: absolute;
-  left: -4%;
-  top: -6%;
-  width: min(78vw, 720px);
-  height: min(78vw, 720px);
-  max-height: 72vh;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  object-position: center 42%;
-  pointer-events: none;
+  object-position: center 40%;
   user-select: none;
-  z-index: 0;
+  /* Плавное растворение вправо и вниз — без жёсткой рамки */
+  -webkit-mask-image:
+    linear-gradient(
+      to right,
+      #000 0%,
+      #000 28%,
+      rgba(0, 0, 0, 0.85) 48%,
+      rgba(0, 0, 0, 0.4) 68%,
+      rgba(0, 0, 0, 0.1) 84%,
+      transparent 100%
+    ),
+    linear-gradient(
+      to bottom,
+      #000 0%,
+      #000 26%,
+      rgba(0, 0, 0, 0.85) 46%,
+      rgba(0, 0, 0, 0.4) 66%,
+      rgba(0, 0, 0, 0.1) 84%,
+      transparent 100%
+    );
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(
+      to right,
+      #000 0%,
+      #000 28%,
+      rgba(0, 0, 0, 0.85) 48%,
+      rgba(0, 0, 0, 0.4) 68%,
+      rgba(0, 0, 0, 0.1) 84%,
+      transparent 100%
+    ),
+    linear-gradient(
+      to bottom,
+      #000 0%,
+      #000 26%,
+      rgba(0, 0, 0, 0.85) 46%,
+      rgba(0, 0, 0, 0.4) 66%,
+      rgba(0, 0, 0, 0.1) 84%,
+      transparent 100%
+    );
+  mask-composite: intersect;
 }
 
-.login-page__fade {
+/* Размытый слой по краям — усиливает «постепенный» блюр */
+.login-page__bg--soft {
+  filter: blur(28px);
+  transform: scale(1.06);
+  transform-origin: top left;
+  opacity: 0.95;
+  -webkit-mask-image: radial-gradient(
+    ellipse 88% 88% at 12% 10%,
+    transparent 0%,
+    transparent 34%,
+    rgba(0, 0, 0, 0.35) 52%,
+    rgba(0, 0, 0, 0.75) 70%,
+    #000 88%
+  );
+  -webkit-mask-composite: source-over;
+  mask-image: radial-gradient(
+    ellipse 88% 88% at 12% 10%,
+    transparent 0%,
+    transparent 34%,
+    rgba(0, 0, 0, 0.35) 52%,
+    rgba(0, 0, 0, 0.75) 70%,
+    #000 88%
+  );
+  mask-composite: add;
+}
+
+.login-page__veil {
   position: absolute;
+  inset: 0;
   z-index: 0;
   pointer-events: none;
-}
-
-.login-page__fade--right {
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: min(62vw, 820px);
-  background: linear-gradient(
-    to right,
-    rgba(0, 0, 0, 0) 0%,
-    rgba(0, 0, 0, 0.45) 38%,
-    rgba(0, 0, 0, 0.88) 72%,
-    #000000 100%
-  );
-}
-
-.login-page__fade--right::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  backdrop-filter: blur(22px);
-  -webkit-backdrop-filter: blur(22px);
-  mask-image: linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.5) 42%, #000 100%);
-  -webkit-mask-image: linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.5) 42%, #000 100%);
-}
-
-.login-page__fade--bottom {
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: min(58vh, 640px);
-  background: linear-gradient(
-    to bottom,
-    rgba(0, 0, 0, 0) 0%,
-    rgba(0, 0, 0, 0.4) 30%,
-    rgba(0, 0, 0, 0.88) 70%,
-    #000000 100%
-  );
-}
-
-.login-page__fade--bottom::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.55) 42%, #000 100%);
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.55) 42%, #000 100%);
+  background:
+    linear-gradient(
+      105deg,
+      rgba(0, 0, 0, 0) 0%,
+      rgba(0, 0, 0, 0) 16%,
+      rgba(0, 0, 0, 0.12) 34%,
+      rgba(0, 0, 0, 0.42) 52%,
+      rgba(0, 0, 0, 0.78) 72%,
+      #000000 90%
+    ),
+    linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0) 0%,
+      rgba(0, 0, 0, 0) 24%,
+      rgba(0, 0, 0, 0.18) 44%,
+      rgba(0, 0, 0, 0.55) 66%,
+      rgba(0, 0, 0, 0.9) 84%,
+      #000000 100%
+    );
 }
 
 .login-page__form {
@@ -269,8 +316,11 @@
 }
 
 .login-page__submit:disabled {
-  opacity: 0.55;
+  background: #ffffff;
+  color: rgba(10, 10, 10, 0.38);
+  opacity: 1;
   cursor: default;
+  filter: none;
 }
 
 .login-page__submit:focus-visible {
@@ -326,21 +376,10 @@
 }
 
 @media (min-width: 900px) {
-  .login-page__bg {
-    left: -2%;
-    top: -4%;
-    width: min(58vw, 860px);
-    height: min(58vw, 860px);
-    max-height: 78vh;
-    object-position: center 40%;
-  }
-
-  .login-page__fade--right {
-    width: min(58vw, 960px);
-  }
-
-  .login-page__fade--bottom {
-    height: min(52vh, 600px);
+  .login-page__art {
+    width: min(68vw, 980px);
+    height: min(68vw, 980px);
+    max-height: 86vh;
   }
 
   .login-page__spacer {
