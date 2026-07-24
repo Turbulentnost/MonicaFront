@@ -30,6 +30,7 @@ import { PrivatePanel } from '../components/Chat/PrivatePanel';
 import { UserSearchResult } from '../components/Chat/UserSearchResult';
 import { IncomingCallOverlay } from '../components/Chat/IncomingCallOverlay';
 import { CallScreen } from '../components/Chat/CallScreen';
+import { SelectionHeader } from '../components/Chat/SelectionHeader';
 import { SelectionToolbar } from '../components/Chat/SelectionToolbar';
 import { ForwardPickerModal } from '../components/Chat/ForwardPickerModal';
 import { QuoteComposerBar } from '../components/Chat/QuoteComposerBar';
@@ -1926,22 +1927,29 @@ export default function ChatsPage() {
               </div>
             )}
             <div className="chat-main__column chat-main__column--header">
-            <ChatHeader
-              partner={selectedChat.partner}
-              isOnline={isOnline(selectedChat.partner?.id, selectedChat.partner?.is_online)}
-              lastSeenAt={getLastSeen(
-                selectedChat.partner?.id,
-                selectedChat.partner?.last_seen_at
-              )}
-              onInvitePrivate={handleInvitePrivate}
-              privateBusy={privateBusy || invitePending || Boolean(privateSessionId)}
-              onOpenDetails={() => setDetailsPanelOpen((open) => !open)}
-              onStartCall={handleStartCall}
-              onStartVideoCall={handleStartVideoCall}
-              callDisabled={!selectedChat?.partner || !['idle', 'ended'].includes(callController.status)}
-              onBack={isMobileViewport ? handleBackToChatList : undefined}
-            />
-            {invitePending && !privateSessionId && (
+            {selectionMode ? (
+              <SelectionHeader
+                count={selectedMessageIds.length}
+                onClose={clearMessageSelection}
+              />
+            ) : (
+              <ChatHeader
+                partner={selectedChat.partner}
+                isOnline={isOnline(selectedChat.partner?.id, selectedChat.partner?.is_online)}
+                lastSeenAt={getLastSeen(
+                  selectedChat.partner?.id,
+                  selectedChat.partner?.last_seen_at
+                )}
+                onInvitePrivate={handleInvitePrivate}
+                privateBusy={privateBusy || invitePending || Boolean(privateSessionId)}
+                onOpenDetails={() => setDetailsPanelOpen((open) => !open)}
+                onStartCall={handleStartCall}
+                onStartVideoCall={handleStartVideoCall}
+                callDisabled={!selectedChat?.partner || !['idle', 'ended'].includes(callController.status)}
+                onBack={isMobileViewport ? handleBackToChatList : undefined}
+              />
+            )}
+            {invitePending && !privateSessionId && !selectionMode && (
               <div className="private-invite-banner">
                 <span>Приглашение отправлено — ожидание ответа…</span>
                 <button

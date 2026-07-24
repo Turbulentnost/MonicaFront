@@ -214,8 +214,8 @@ function ChatMessageBubble({
   const canInteract = !isPending && !editing;
   const isEdited = Boolean(message.edited_at);
   const photoCaption = getPhotoCaption(message);
-  const selectable = !isPending;
-  const showSelectControl = selectable && (selectionMode || selected);
+  const selectable = !isPending && message.message_type !== 'call' && !String(message.id).startsWith('temp-');
+  const showSelectControl = selectable && Boolean(onToggleSelect);
 
   const closeReactions = useCallback(() => {
     releaseReactionBar(message.id);
@@ -493,7 +493,7 @@ function ChatMessageBubble({
       {showSelectControl && (
         <button
           type="button"
-          className="message-select-control"
+          className={`message-select-control${selected ? ' is-checked' : ''}`}
           aria-label={selected ? 'Снять выделение' : 'Выбрать сообщение'}
           aria-pressed={selected}
           onClick={(event) => {
@@ -501,7 +501,18 @@ function ChatMessageBubble({
             onToggleSelect?.(message);
           }}
         >
-          {selected ? '✓' : ''}
+          {selected ? (
+            <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
+              <path
+                d="M2.2 6.1 4.8 8.6 9.8 3.4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          ) : null}
         </button>
       )}
 
