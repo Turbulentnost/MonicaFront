@@ -365,14 +365,12 @@ function ChatMessageBubble({
   };
 
   const openReactions = (event) => {
-    event?.stopPropagation?.();
+    event.stopPropagation();
     closeContextMenu();
-    if (barOpen && event?.type === 'click') {
-      // Повторный клик по триггеру закрывает; hover только открывает
+    if (barOpen) {
       closeReactions();
       return;
     }
-    if (barOpen) return;
     updateReactionLayout(false);
     claimReactionBar(message.id);
     setBarOpen(true);
@@ -633,7 +631,6 @@ function ChatMessageBubble({
             aria-label="Добавить реакцию"
             aria-expanded={barOpen}
             onClick={openReactions}
-            onMouseEnter={openReactions}
           >
             <span className="message-react-trigger__emoji" aria-hidden="true">😊</span>
             <span className="message-react-trigger__plus" aria-hidden="true">
