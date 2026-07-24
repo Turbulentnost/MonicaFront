@@ -365,12 +365,14 @@ function ChatMessageBubble({
   };
 
   const openReactions = (event) => {
-    event.stopPropagation();
+    event?.stopPropagation?.();
     closeContextMenu();
-    if (barOpen) {
+    if (barOpen && event?.type === 'click') {
+      // Повторный клик по триггеру закрывает; hover только открывает
       closeReactions();
       return;
     }
+    if (barOpen) return;
     updateReactionLayout(false);
     claimReactionBar(message.id);
     setBarOpen(true);
@@ -618,19 +620,27 @@ function ChatMessageBubble({
       </div>
 
       {showReactionUi && (
-        <button
-          type="button"
-          className={`message-react-trigger is-${reactionSide}${barOpen ? ' is-open' : ''}`}
-          title="Реакция"
-          aria-label="Добавить реакцию"
-          aria-expanded={barOpen}
-          onClick={openReactions}
-        >
-          <span className="message-react-trigger__emoji" aria-hidden="true">😊</span>
-          <span className="message-react-trigger__plus" aria-hidden="true">
-            <PlusIcon />
-          </span>
-        </button>
+        <>
+          {/* Невидимый мост через зазор — иначе hover сбрасывается по пути к реакции */}
+          <span
+            className={`message-react-hover-bridge is-${reactionSide}`}
+            aria-hidden="true"
+          />
+          <button
+            type="button"
+            className={`message-react-trigger is-${reactionSide}${barOpen ? ' is-open' : ''}`}
+            title="Реакция"
+            aria-label="Добавить реакцию"
+            aria-expanded={barOpen}
+            onClick={openReactions}
+            onMouseEnter={openReactions}
+          >
+            <span className="message-react-trigger__emoji" aria-hidden="true">😊</span>
+            <span className="message-react-trigger__plus" aria-hidden="true">
+              <PlusIcon />
+            </span>
+          </button>
+        </>
       )}
 
       {showReactionUi && barOpen && (
@@ -638,6 +648,7 @@ function ChatMessageBubble({
           className={reactionBarClass}
           role="toolbar"
           aria-label="Реакции на сообщение"
+          onMouseEnter={() => updateReactionLayout(pickerExpanded)}
         >
           <div className="message-reaction-bar__row">
             {(backMode ? BACK_QUICK_REACTIONS : QUICK_REACTIONS).map((emoji) => (

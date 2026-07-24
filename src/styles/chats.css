@@ -1188,6 +1188,43 @@
   display: block;
 }
 
+/* Мост через зазор между пузырём и реакцией (иначе hover пропадает) */
+.chats-page .message-react-hover-bridge {
+  position: absolute;
+  z-index: 6;
+  width: 72px;
+  pointer-events: none;
+}
+
+.chats-page .message-wrapper.own .message-react-hover-bridge {
+  left: 0;
+  right: auto;
+}
+
+.chats-page .message-wrapper.other .message-react-hover-bridge {
+  right: 0;
+  left: auto;
+}
+
+.chats-page .message-react-hover-bridge.is-above {
+  top: 0;
+  height: 44px;
+  transform: translateY(-100%);
+}
+
+.chats-page .message-react-hover-bridge.is-below {
+  bottom: 0;
+  height: 56px;
+  transform: translateY(100%);
+}
+
+.chats-page .message-wrapper:hover .message-react-hover-bridge,
+.chats-page .message-wrapper.is-reacting .message-react-hover-bridge,
+.chats-page .message-wrapper:has(.message-react-trigger:hover) .message-react-hover-bridge,
+.chats-page .message-wrapper:has(.message-reaction-bar:hover) .message-react-hover-bridge {
+  pointer-events: auto;
+}
+
 .chats-page .message-react-trigger {
   position: absolute;
   z-index: 7;
@@ -1212,6 +1249,25 @@
     border-color var(--transition-fast),
     top var(--transition-fast),
     bottom var(--transition-fast);
+}
+
+/* Доп. мост прямо на кнопке — к пузырю */
+.chats-page .message-react-trigger::before {
+  content: '';
+  position: absolute;
+  left: -10px;
+  right: -10px;
+  pointer-events: auto;
+}
+
+.chats-page .message-react-trigger.is-above::before {
+  top: 100%;
+  height: 16px;
+}
+
+.chats-page .message-react-trigger.is-below::before {
+  bottom: 100%;
+  height: 28px;
 }
 
 /* По умолчанию — над сообщением */
@@ -1239,6 +1295,8 @@
 }
 
 .chats-page .message-wrapper:hover .message-react-trigger.is-above,
+.chats-page .message-wrapper:has(.message-react-trigger:hover) .message-react-trigger.is-above,
+.chats-page .message-wrapper:has(.message-react-hover-bridge:hover) .message-react-trigger.is-above,
 .chats-page .message-react-trigger.is-above:focus-visible {
   opacity: 1;
   pointer-events: auto;
@@ -1246,6 +1304,8 @@
 }
 
 .chats-page .message-wrapper:hover .message-react-trigger.is-below,
+.chats-page .message-wrapper:has(.message-react-trigger:hover) .message-react-trigger.is-below,
+.chats-page .message-wrapper:has(.message-react-hover-bridge:hover) .message-react-trigger.is-below,
 .chats-page .message-react-trigger.is-below:focus-visible {
   opacity: 1;
   pointer-events: auto;
@@ -1489,6 +1549,26 @@
 
 .message-reaction-bar.is-docked.is-below.is-visible {
   transform: translateY(calc(100% + 22px)) scale(1);
+}
+
+/* Мост от открытой панели реакций к пузырю */
+.message-reaction-bar.is-docked::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: -1;
+  pointer-events: auto;
+}
+
+.message-reaction-bar.is-docked.is-above::after {
+  top: 100%;
+  height: 18px;
+}
+
+.message-reaction-bar.is-docked.is-below::after {
+  bottom: 100%;
+  height: 30px;
 }
 
 .message-reaction-bar.is-expanded {
