@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { chatsApi } from '../../api/client';
 import { getCachedMediaSrc, warmMediaCache } from '../../utils/mediaCache';
 import { getPhotoCaption, looksLikeStoragePath } from '../../utils/messageText';
+import { FileTypeIcon } from './FileTypeIcon';
 import { PhotoLightbox } from './PhotoGallery';
 import { UserAvatar } from './UserAvatar';
 
@@ -22,17 +23,6 @@ const BACK_INTEGRATIONS = [
   { name: 'Jira', status: 'Forgotten', color: '#333' },
   { name: 'Figma', status: 'Deleted', color: '#2a2a2a' },
 ];
-
-function FileIcon({ color }) {
-  return (
-    <span className="chat-details__file-icon" style={{ color }}>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-        <path d="M14 2v6h6" />
-      </svg>
-    </span>
-  );
-}
 
 function formatFileSize(bytes) {
   if (!Number.isFinite(Number(bytes)) || Number(bytes) <= 0) return '';
@@ -91,6 +81,7 @@ function flattenFiles(messages) {
       result.push({
         id: key,
         name,
+        mimeType,
         meta: [type, sizeLabel].filter(Boolean).join(' · '),
         color: fileColor(mimeType, name),
         url: item.content_url,
@@ -467,7 +458,9 @@ export function ChatDetailsPanel({
           <ul className="chat-details__files">
             {visibleFiles.map((file) => (
               <li key={file.id} className="chat-details__file">
-                <FileIcon color={file.color} />
+                <span className="chat-details__file-icon">
+                  <FileTypeIcon fileName={file.name} mimeType={file.mimeType} size="md" />
+                </span>
                 <div className="chat-details__file-info">
                   <span className="chat-details__file-name">{file.name}</span>
                   <span className="chat-details__file-meta">{file.meta}</span>

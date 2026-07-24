@@ -36,6 +36,7 @@ import { ForwardPickerModal } from '../components/Chat/ForwardPickerModal';
 import { QuoteComposerBar } from '../components/Chat/QuoteComposerBar';
 import { SendIconButton } from '../components/Chat/SendIconButton';
 import { UploadProgressRing } from '../components/Chat/UploadProgressRing';
+import { FileTypeIcon } from '../components/Chat/FileTypeIcon';
 import { warmAvatarCache } from '../utils/avatarCache';
 import { groupMessagesByDay } from '../utils/formatChatDate';
 import { invalidateMediaCache, warmMediaCache } from '../utils/mediaCache';
@@ -2148,7 +2149,12 @@ export default function ChatsPage() {
                         />
                       ) : (
                         <span className="attachment-preview-file" title={item.file.name}>
-                          📎 {item.file.name}
+                          <FileTypeIcon
+                            fileName={item.file.name}
+                            mimeType={item.file.type}
+                            size="sm"
+                          />
+                          <span>{item.file.name}</span>
                         </span>
                       )}
                       {uploading ? (

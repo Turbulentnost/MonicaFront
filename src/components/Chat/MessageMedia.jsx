@@ -5,6 +5,7 @@ import pythonLang from 'react-syntax-highlighter/dist/esm/languages/prism/python
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { chatsApi } from '../../api/client';
 import { getCachedMediaSrc, warmMediaCache } from '../../utils/mediaCache';
+import { FileTypeIcon } from './FileTypeIcon';
 import { PhotoGallery } from './PhotoGallery';
 
 SyntaxHighlighter.registerLanguage('python', pythonLang);
@@ -158,6 +159,13 @@ export function MessageMedia({ message, chatId }) {
     return (
       <div className="message-code-wrap">
         <div className="message-code-toolbar">
+          <FileTypeIcon
+            className="message-code-file-icon"
+            fileName={label}
+            mimeType={message.mime_type}
+            language={codeLang}
+            size="sm"
+          />
           <span className="message-code-name">{label}</span>
           <span className="message-code-lang">{langLabel}</span>
           <a
@@ -258,7 +266,12 @@ export function MessageMedia({ message, chatId }) {
         rel="noopener noreferrer"
         download={message.file_name || undefined}
       >
-        <span className="message-file-icon">📎</span>
+        <FileTypeIcon
+          className="message-file-icon"
+          fileName={label}
+          mimeType={message.mime_type}
+          size="md"
+        />
         <span className="message-file-name">
           {label}
           {sizeLabel}

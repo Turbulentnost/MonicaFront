@@ -610,7 +610,17 @@ select:autofill {
 }
 
 .message-file-icon {
-  font-size: 18px;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 6px;
+}
+
+.message-code-file-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border-radius: 4px;
 }
 
 .message-file-name {
@@ -867,15 +877,23 @@ select:autofill {
 }
 
 .attachment-preview-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
   color: #e8eaed;
   padding: 8px 10px;
   background: #2d3140;
   border-radius: 8px;
   overflow: hidden;
+  max-width: 160px;
+}
+
+.attachment-preview-file > span {
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 140px;
+  min-width: 0;
 }
 
 .attachment-upload-overlay {
