@@ -29,18 +29,18 @@ function PlusIcon() {
   );
 }
 
-function ForwardIcon() {
+function ReplyIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
       <path
-        d="M9.5 3.5 13.5 7l-4 3.5"
+        d="M6.5 3.5 2.5 7l4 3.5"
         stroke="currentColor"
         strokeWidth="1.55"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <path
-        d="M13.5 7H7.3C4.9 7 3 8.7 3 11v1"
+        d="M2.5 7h6.2c2.4 0 4.3 1.7 4.3 4v1"
         stroke="currentColor"
         strokeWidth="1.55"
         strokeLinecap="round"
@@ -201,6 +201,10 @@ function ChatMessageBubble({
   const [contextMenu, setContextMenu] = useState(null);
   const [barOpen, setBarOpen] = useState(false);
   const [pickerExpanded, setPickerExpanded] = useState(false);
+  /** above = над сообщением, below = под ним (для верхних сообщений) */
+  const [reactionSide, setReactionSide] = useState('above');
+  /** up = пикер раскрывается вверх, down = вниз */
+  const [pickerSide, setPickerSide] = useState('up');
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState('');
   const wrapperRef = useRef(null);
@@ -227,6 +231,30 @@ function ChatMessageBubble({
     setContextMenu(null);
   }, []);
 
+  const updateReactionLayout = useCallback((expanded = pickerExpanded) => {
+    const node = wrapperRef.current;
+    if (!node) return;
+    const rect = node.getBoundingClientRect();
+    const area = node.closest('.messages-area');
+    const areaRect = area?.getBoundingClientRect();
+    const topBound = areaRect?.top ?? 0;
+    const bottomBound = areaRect?.bottom ?? window.innerHeight;
+    const spaceAbove = rect.top - topBound;
+    const spaceBelow = bottomBound - rect.bottom;
+
+    // Мало места сверху (сообщение у края) — реакция снизу с отступом
+    const side = spaceAbove < 64 ? 'below' : 'above';
+    setReactionSide(side);
+
+    // Пикер: вверх по умолчанию, вниз если сверху не помещается
+    const pickerNeed = expanded ? 280 : 72;
+    if (side === 'above') {
+      setPickerSide(spaceAbove >= pickerNeed ? 'up' : 'down');
+    } else {
+      setPickerSide(spaceBelow >= pickerNeed ? 'down' : 'up');
+    }
+  }, [pickerExpanded]);
+
   useEffect(() => () => {
     releaseReactionBar(message.id);
   }, [message.id]);
@@ -241,6 +269,27 @@ function ChatMessageBubble({
       setPickerExpanded(false);
     });
   }, [message.id]);
+
+  useEffect(() => {
+    const node = wrapperRef.current;
+    if (!node) return undefined;
+    const onEnter = () => updateReactionLayout(false);
+    node.addEventListener('mouseenter', onEnter);
+    return () => node.removeEventListener('mouseenter', onEnter);
+  }, [updateReactionLayout]);
+
+  useEffect(() => {
+    if (!barOpen) return undefined;
+    updateReactionLayout(pickerExpanded);
+    const onScrollOrResize = () => updateReactionLayout(pickerExpanded);
+    window.addEventListener('resize', onScrollOrResize);
+    const area = wrapperRef.current?.closest('.messages-area');
+    area?.addEventListener('scroll', onScrollOrResize, { passive: true });
+    return () => {
+      window.removeEventListener('resize', onScrollOrResize);
+      area?.removeEventListener('scroll', onScrollOrResize);
+    };
+  }, [barOpen, pickerExpanded, updateReactionLayout]);
 
   useEffect(() => {
     if (!barOpen && !contextMenu) return undefined;
@@ -322,6 +371,7 @@ function ChatMessageBubble({
       closeReactions();
       return;
     }
+    updateReactionLayout(false);
     claimReactionBar(message.id);
     setBarOpen(true);
     setPickerExpanded(false);
@@ -329,7 +379,11 @@ function ChatMessageBubble({
 
   const handleExpandClick = (event) => {
     event.stopPropagation();
-    setPickerExpanded((value) => !value);
+    setPickerExpanded((value) => {
+      const next = !value;
+      updateReactionLayout(next);
+      return next;
+    });
     setBarOpen(true);
     claimReactionBar(message.id);
   };
@@ -349,17 +403,10 @@ function ChatMessageBubble({
   };
 
   const handleReply = (event) => {
-    event.stopPropagation();
+    event?.stopPropagation?.();
     closeContextMenu();
     closeReactions();
     onReply?.(message);
-  };
-
-  const handleQuickForward = (event) => {
-    event.stopPropagation();
-    closeContextMenu();
-    closeReactions();
-    onQuickForward?.(message);
   };
 
   const handleSelectFromMenu = () => {
@@ -456,6 +503,8 @@ function ChatMessageBubble({
   const reactionBarClass = [
     'message-reaction-bar',
     'is-docked',
+    `is-${reactionSide}`,
+    `picker-${pickerSide}`,
     isOwn ? 'message-reaction-bar--own' : 'message-reaction-bar--other',
     specialMode ? 'message-reaction-bar--special' : '',
     backMode ? 'message-reaction-bar--back' : '',
@@ -485,8 +534,10 @@ function ChatMessageBubble({
         selected ? 'is-selected' : '',
         selectionMode ? 'is-selection-mode' : '',
         barOpen ? 'is-reacting' : '',
+        `reaction-side-${reactionSide}`,
       ].filter(Boolean).join(' ')}
       data-message-id={message.id}
+      data-reaction-side={reactionSide}
       onClick={selectionMode && selectable ? () => onToggleSelect?.(message) : undefined}
       onContextMenu={handleContextMenu}
     >
@@ -516,15 +567,15 @@ function ChatMessageBubble({
         </button>
       )}
 
-      {canInteract && !selectionMode && onQuickForward && (
+      {canInteract && !selectionMode && onReply && (
         <button
           type="button"
           className="message-reply-action"
-          title="Переслать"
-          aria-label="Переслать сообщение"
-          onClick={handleQuickForward}
+          title="Ответить"
+          aria-label="Ответить на сообщение"
+          onClick={handleReply}
         >
-          <ForwardIcon />
+          <ReplyIcon />
         </button>
       )}
 
@@ -564,22 +615,23 @@ function ChatMessageBubble({
           )}
         </div>
 
-        {showReactionUi && (
-          <button
-            type="button"
-            className={`message-react-trigger${barOpen ? ' is-open' : ''}`}
-            title="Реакция"
-            aria-label="Добавить реакцию"
-            aria-expanded={barOpen}
-            onClick={openReactions}
-          >
-            <span className="message-react-trigger__emoji" aria-hidden="true">😊</span>
-            <span className="message-react-trigger__plus" aria-hidden="true">
-              <PlusIcon />
-            </span>
-          </button>
-        )}
       </div>
+
+      {showReactionUi && (
+        <button
+          type="button"
+          className={`message-react-trigger is-${reactionSide}${barOpen ? ' is-open' : ''}`}
+          title="Реакция"
+          aria-label="Добавить реакцию"
+          aria-expanded={barOpen}
+          onClick={openReactions}
+        >
+          <span className="message-react-trigger__emoji" aria-hidden="true">😊</span>
+          <span className="message-react-trigger__plus" aria-hidden="true">
+            <PlusIcon />
+          </span>
+        </button>
+      )}
 
       {showReactionUi && barOpen && (
         <div

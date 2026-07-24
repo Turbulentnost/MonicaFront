@@ -1701,8 +1701,9 @@ export default function ChatsPage() {
   }, []);
 
   const beginReply = () => {
-    if (selectedMessages.length !== 1) return;
-    beginReplyToMessage(selectedMessages[0]);
+    if (!selectedMessages.length) return;
+    // Ответ — всегда в этот чат; при нескольких выбранных отвечаем на последнее
+    beginReplyToMessage(selectedMessages[selectedMessages.length - 1]);
   };
 
   const beginReplyToMessage = useCallback((message) => {
