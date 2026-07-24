@@ -53,6 +53,7 @@ export function ChatListItem({
   active,
   onSelect,
   isOnline,
+  unread = false,
   ringing = false,
   ringingMediaMode = 'audio',
   onAcceptCall,
@@ -66,9 +67,10 @@ export function ChatListItem({
   const ringingLabel = ringingMediaMode === 'video'
     ? 'Входящий видеозвонок…'
     : 'Входящий звонок…';
+  const showUnread = unread && !ringing;
 
   return (
-    <li className={[active ? 'active' : '', ringing ? 'ringing' : ''].filter(Boolean).join(' ')}>
+    <li className={[active ? 'active' : '', ringing ? 'ringing' : '', showUnread ? 'has-unread' : ''].filter(Boolean).join(' ')}>
       <div className={`chat-item-row ${ringing ? 'chat-item-row--ringing' : ''}`}>
         <button type="button" className="chat-item-btn" onClick={() => onSelect(chat)}>
           <UserAvatar user={partner} size={44} showOnline isOnline={isOnline} />
@@ -82,6 +84,9 @@ export function ChatListItem({
               {ringing ? ringingLabel : preview}
             </span>
           </span>
+          {showUnread && (
+            <span className="chat-item-unread" aria-label="Есть непрочитанные сообщения" />
+          )}
         </button>
         {ringing && (
           <div className="chat-item-call-actions" role="group" aria-label={ringingLabel}>

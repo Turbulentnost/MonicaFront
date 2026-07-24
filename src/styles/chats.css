@@ -785,6 +785,17 @@
   color: var(--text-muted);
 }
 
+.chats-page .chat-item-unread {
+  flex-shrink: 0;
+  align-self: center;
+  width: 10px;
+  height: 10px;
+  margin-left: 4px;
+  border-radius: 50%;
+  background: #2f6fed;
+  box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.22);
+}
+
 /* ??? Main chat ??? */
 
 .chats-page .chat-main {
@@ -2082,10 +2093,17 @@
   justify-content: center;
 }
 
-.chats-page .message-send-btn__icon svg {
+.chats-page .message-send-btn__icon svg,
+.chats-page .message-send-btn__img {
   width: 20px;
   height: 20px;
   display: block;
+  object-fit: contain;
+}
+
+/* send.png — белая стрелка на чёрном; убираем фон на тёмной кнопке */
+.chats-page .message-send-btn__img {
+  mix-blend-mode: screen;
 }
 
 .chats-page .message-send-btn__busy {

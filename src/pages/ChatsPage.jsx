@@ -1616,6 +1616,34 @@ export default function ChatsPage() {
     [chats, isChatUnread]
   );
 
+  const [titleTick, setTitleTick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setTitleTick((n) => n + 1), 30000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const agedUnreadUserCount = useMemo(() => {
+    void titleTick;
+    const now = Date.now();
+    const minAgeMs = 5 * 60 * 1000;
+    return chats.filter((chat) => {
+      if (!isChatUnread(chat)) return false;
+      if (selectedChat && String(chat.id) === String(selectedChat.id)) return false;
+      const sentAt = chat.last_message?.sent_at;
+      if (!sentAt) return false;
+      const age = now - new Date(sentAt).getTime();
+      return Number.isFinite(age) && age >= minAgeMs;
+    }).length;
+  }, [chats, isChatUnread, selectedChat, titleTick]);
+
+  const openChatTitle = useMemo(() => {
+    const partner = selectedChat?.partner;
+    if (!partner) return 'Monica';
+    if (partner.nickname) return `@${partner.nickname}`;
+    const fullName = [partner.first_name, partner.last_name].filter(Boolean).join(' ');
+    return fullName || 'Monica';
+  }, [selectedChat?.partner]);
+
   const filteredChats = useMemo(() => {
     let list;
     if (isSpecialFavoritesOpen || isBackModeOpen) list = chats;
@@ -1774,9 +1802,15 @@ export default function ChatsPage() {
       document.title = 'нам очень жаль что вы приняли эту сторону...';
       return () => { document.title = prevTitle || 'Monica'; };
     }
-    if (!isSpecialFavoritesOpen) document.title = 'Monica';
-    return undefined;
-  }, [isBackModeOpen, isSpecialFavoritesOpen]);
+    if (isSpecialFavoritesOpen) return undefined;
+
+    if (agedUnreadUserCount > 0) {
+      document.title = `(${agedUnreadUserCount}) ${openChatTitle}`;
+    } else {
+      document.title = openChatTitle;
+    }
+    return () => { document.title = prevTitle || 'Monica'; };
+  }, [isBackModeOpen, isSpecialFavoritesOpen, agedUnreadUserCount, openChatTitle]);
 
   return (
     <div
@@ -1892,6 +1926,10 @@ export default function ChatsPage() {
               active={selectedChat?.id === chat.id}
               onSelect={handleSelectChat}
               isOnline={isOnline(chat.partner?.id, chat.partner?.is_online)}
+              unread={
+                isChatUnread(chat)
+                && String(selectedChat?.id) !== String(chat.id)
+              }
               ringing={
                 callController.status === 'incoming'
                 && String(callChatId) === String(chat.id)
