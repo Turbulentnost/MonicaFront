@@ -1,4 +1,4 @@
-/* Mobile-matching login screen */
+/* Login page — full-bleed photo background, mobile-style form */
 
 .login-page {
   --login-ink: #0a0a0a;
@@ -30,120 +30,16 @@
   font-family: var(--login-font);
 }
 
-/* M слева сверху; края картинки сами уходят в прозрачность → чёрный фон */
-.login-page__art {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: min(92vw, 920px);
-  height: min(92vw, 920px);
-  max-height: 82vh;
-  z-index: 0;
-  pointer-events: none;
-  overflow: visible;
-}
-
 .login-page__bg {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center 40%;
-  user-select: none;
-  /* Плавное растворение вправо и вниз — без жёсткой рамки */
-  -webkit-mask-image:
-    linear-gradient(
-      to right,
-      #000 0%,
-      #000 28%,
-      rgba(0, 0, 0, 0.85) 48%,
-      rgba(0, 0, 0, 0.4) 68%,
-      rgba(0, 0, 0, 0.1) 84%,
-      transparent 100%
-    ),
-    linear-gradient(
-      to bottom,
-      #000 0%,
-      #000 26%,
-      rgba(0, 0, 0, 0.85) 46%,
-      rgba(0, 0, 0, 0.4) 66%,
-      rgba(0, 0, 0, 0.1) 84%,
-      transparent 100%
-    );
-  -webkit-mask-composite: source-in;
-  mask-image:
-    linear-gradient(
-      to right,
-      #000 0%,
-      #000 28%,
-      rgba(0, 0, 0, 0.85) 48%,
-      rgba(0, 0, 0, 0.4) 68%,
-      rgba(0, 0, 0, 0.1) 84%,
-      transparent 100%
-    ),
-    linear-gradient(
-      to bottom,
-      #000 0%,
-      #000 26%,
-      rgba(0, 0, 0, 0.85) 46%,
-      rgba(0, 0, 0, 0.4) 66%,
-      rgba(0, 0, 0, 0.1) 84%,
-      transparent 100%
-    );
-  mask-composite: intersect;
-}
-
-/* Размытый слой по краям — усиливает «постепенный» блюр */
-.login-page__bg--soft {
-  filter: blur(28px);
-  transform: scale(1.06);
-  transform-origin: top left;
-  opacity: 0.95;
-  -webkit-mask-image: radial-gradient(
-    ellipse 88% 88% at 12% 10%,
-    transparent 0%,
-    transparent 34%,
-    rgba(0, 0, 0, 0.35) 52%,
-    rgba(0, 0, 0, 0.75) 70%,
-    #000 88%
-  );
-  -webkit-mask-composite: source-over;
-  mask-image: radial-gradient(
-    ellipse 88% 88% at 12% 10%,
-    transparent 0%,
-    transparent 34%,
-    rgba(0, 0, 0, 0.35) 52%,
-    rgba(0, 0, 0, 0.75) 70%,
-    #000 88%
-  );
-  mask-composite: add;
-}
-
-.login-page__veil {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
+  object-position: center;
   pointer-events: none;
-  background:
-    linear-gradient(
-      105deg,
-      rgba(0, 0, 0, 0) 0%,
-      rgba(0, 0, 0, 0) 16%,
-      rgba(0, 0, 0, 0.12) 34%,
-      rgba(0, 0, 0, 0.42) 52%,
-      rgba(0, 0, 0, 0.78) 72%,
-      #000000 90%
-    ),
-    linear-gradient(
-      to bottom,
-      rgba(0, 0, 0, 0) 0%,
-      rgba(0, 0, 0, 0) 24%,
-      rgba(0, 0, 0, 0.18) 44%,
-      rgba(0, 0, 0, 0.55) 66%,
-      rgba(0, 0, 0, 0.9) 84%,
-      #000000 100%
-    );
+  user-select: none;
+  z-index: 0;
 }
 
 .login-page__form {
@@ -302,7 +198,6 @@
   font-weight: 600;
   cursor: pointer;
   transition:
-    opacity 160ms ease,
     transform 160ms ease,
     filter 160ms ease;
 }
@@ -376,14 +271,8 @@
 }
 
 @media (min-width: 900px) {
-  .login-page__art {
-    width: min(68vw, 980px);
-    height: min(68vw, 980px);
-    max-height: 86vh;
-  }
-
   .login-page__spacer {
-    min-height: 36vh;
+    min-height: 40vh;
   }
 
   .login-page__form {

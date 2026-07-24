@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import '../styles/login.css';
 
+const AUTH_BG = `${process.env.PUBLIC_URL || ''}/auth-bg.png`;
+
 function EyeIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
@@ -57,21 +59,13 @@ export default function LoginPage() {
 
   return (
     <div className="login-page">
-      <div className="login-page__art" aria-hidden="true">
-        <img
-          className="login-page__bg login-page__bg--soft"
-          src={`${process.env.PUBLIC_URL || ''}/login-bg.png`}
-          alt=""
-          draggable={false}
-        />
-        <img
-          className="login-page__bg"
-          src={`${process.env.PUBLIC_URL || ''}/login-bg.png`}
-          alt=""
-          draggable={false}
-        />
-      </div>
-      <div className="login-page__veil" aria-hidden="true" />
+      <img
+        className="login-page__bg"
+        src={AUTH_BG}
+        alt=""
+        aria-hidden="true"
+        draggable={false}
+      />
 
       <form className="login-page__form" onSubmit={handleSubmit} noValidate>
         <div className="login-page__spacer" aria-hidden="true" />
