@@ -107,6 +107,7 @@ export const chatsApi = {
   declinePrivate: (sessionId) => api.post(`/private/${sessionId}/decline/`),
   closePrivate: (sessionId) => api.post(`/private/${sessionId}/close/`),
   leavePrivate: () => api.post('/private/leave/'),
+  linkPreview: (url) => api.get('/link-preview/', { params: { url }, timeout: 8000 }),
 };
 
 export const callsApi = {

@@ -1,4 +1,6 @@
 import { UserAvatar } from './UserAvatar';
+import { LinkPreviewCard } from './LinkPreviewCard';
+import { linkifyText } from '../../utils/linkifyText';
 
 function relativeTime(value) {
   const time = new Date(value).getTime();
@@ -41,6 +43,7 @@ export function ForwardedBundle({ bundle = [], comment, onOpenOriginal }) {
       <strong className="forwarded-bundle__title">{forwardedCountLabel(bundle.length)}</strong>
       {bundle.map((item, index) => {
         const photos = item.message_type === 'photo' ? photoItems(item) : [];
+        const text = itemText(item);
         return (
           <article className="forwarded-item" key={`${item.original_chat_id}-${item.original_id}-${index}`}>
             <UserAvatar user={item.sender} size={30} />
@@ -71,12 +74,22 @@ export function ForwardedBundle({ bundle = [], comment, onOpenOriginal }) {
                   ))}
                 </div>
               )}
-              {itemText(item) && <div className="forwarded-item__content">{itemText(item)}</div>}
+              {text ? (
+                <>
+                  <div className="forwarded-item__content">{linkifyText(text)}</div>
+                  <LinkPreviewCard text={text} />
+                </>
+              ) : null}
             </div>
           </article>
         );
       })}
-      {comment && <div className="forwarded-bundle__comment">{comment}</div>}
+      {comment ? (
+        <>
+          <div className="forwarded-bundle__comment">{linkifyText(comment)}</div>
+          <LinkPreviewCard text={comment} />
+        </>
+      ) : null}
     </div>
   );
 }

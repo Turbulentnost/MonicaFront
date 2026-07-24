@@ -3,7 +3,9 @@ import { MessageMedia } from './MessageMedia';
 import { VoiceMessagePlayer } from './VoiceMessagePlayer';
 import { EmojiPicker } from './EmojiPicker';
 import { ForwardedBundle } from './ForwardedBundle';
+import { LinkPreviewCard } from './LinkPreviewCard';
 import { getEditableMessageText, getPhotoCaption } from '../../utils/messageText';
+import { linkifyText } from '../../utils/linkifyText';
 import {
   claimReactionBar,
   releaseReactionBar,
@@ -459,10 +461,13 @@ function ChatMessageBubble({
 
     if (message.message_type === 'text') {
       return (
-        <div className="message-content">
-          {message.content}
-          <EditedMark show={isEdited} />
-        </div>
+        <>
+          <div className="message-content">
+            {linkifyText(message.content)}
+            <EditedMark show={isEdited} />
+          </div>
+          <LinkPreviewCard text={message.content} />
+        </>
       );
     }
     if (message.message_type === 'photo') {
@@ -470,10 +475,13 @@ function ChatMessageBubble({
         <>
           <MessageMedia message={message} chatId={chatId} />
           {photoCaption ? (
-            <div className="message-content message-caption">
-              {photoCaption}
-              <EditedMark show={isEdited} />
-            </div>
+            <>
+              <div className="message-content message-caption">
+                {linkifyText(photoCaption)}
+                <EditedMark show={isEdited} />
+              </div>
+              <LinkPreviewCard text={photoCaption} />
+            </>
           ) : null}
         </>
       );
