@@ -1060,7 +1060,7 @@
 
 .chats-page .message {
   position: relative;
-  padding: 10px 14px;
+  padding: 12px 16px;
   overflow: visible;
 }
 
@@ -1179,7 +1179,7 @@
 }
 
 .chats-page .message-meta {
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   line-height: 1.1;
 }
 
@@ -1453,7 +1453,7 @@
 
 .chats-page .message-footer {
   gap: 4px;
-  margin-top: 4px;
+  margin-top: 6px;
   line-height: 1;
 }
 
