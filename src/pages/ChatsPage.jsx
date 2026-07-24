@@ -41,6 +41,7 @@ import { warmAvatarCache } from '../utils/avatarCache';
 import { groupMessagesByDay } from '../utils/formatChatDate';
 import { invalidateMediaCache, warmMediaCache } from '../utils/mediaCache';
 import { canDeleteForEveryone, canEditMessage } from '../utils/messageActions';
+import { getChatBackground } from '../utils/chatBackground';
 import { API_URL } from '../config';
 import { VoiceRecorder, canUseMicrophone } from '../utils/voiceRecorder';
 
@@ -98,6 +99,7 @@ export default function ChatsPage() {
   const [isSpecialFavoritesOpen, setIsSpecialFavoritesOpen] = useState(false);
   const [isBackModeOpen, setIsBackModeOpen] = useState(false);
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(true);
+  const [chatBackground, setChatBackgroundState] = useState(null);
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [isFileDragOver, setIsFileDragOver] = useState(false);
   const fileDragDepthRef = useRef(0);
@@ -798,6 +800,10 @@ export default function ChatsPage() {
   useEffect(() => {
     setPartnerTyping(false);
     lastTypingSentRef.current = false;
+  }, [selectedChat?.id]);
+
+  useEffect(() => {
+    setChatBackgroundState(getChatBackground(selectedChat?.id));
   }, [selectedChat?.id]);
 
   useEffect(() => () => {
@@ -2055,7 +2061,10 @@ export default function ChatsPage() {
             </div>
             <div
               ref={messagesAreaRef}
-              className="messages-area"
+              className={['messages-area', chatBackground ? 'has-custom-bg' : ''].filter(Boolean).join(' ')}
+              style={chatBackground ? {
+                backgroundImage: `url(${chatBackground})`,
+              } : undefined}
               onScroll={handleMessagesScroll}
             >
               <div className="messages-area__inner">
@@ -2477,6 +2486,7 @@ export default function ChatsPage() {
               specialMode={isSpecialFavoritesOpen}
               backMode={isBackModeOpen}
               onJumpToMessage={jumpToMessage}
+              onBackgroundChange={setChatBackgroundState}
             />
           </>
         )

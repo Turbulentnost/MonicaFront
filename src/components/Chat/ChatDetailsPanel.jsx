@@ -1,10 +1,27 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { chatsApi } from '../../api/client';
 import { getCachedMediaSrc, warmMediaCache } from '../../utils/mediaCache';
 import { getPhotoCaption, looksLikeStoragePath } from '../../utils/messageText';
+import {
+  clearChatBackground,
+  fileToBackgroundDataUrl,
+  getChatBackground,
+  setChatBackground,
+} from '../../utils/chatBackground';
+import pngIcon from '../../design-references/icons/png-svgrepo-com.svg';
 import { FileTypeIcon } from './FileTypeIcon';
 import { PhotoLightbox } from './PhotoGallery';
 import { UserAvatar } from './UserAvatar';
+
+function MoreDotsIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <circle cx="5" cy="12" r="1.8" />
+      <circle cx="12" cy="12" r="1.8" />
+      <circle cx="19" cy="12" r="1.8" />
+    </svg>
+  );
+}
 
 const TABS = [
   { id: 'shared', label: 'Files' },
@@ -187,6 +204,7 @@ export function ChatDetailsPanel({
   specialMode = false,
   backMode = false,
   onJumpToMessage,
+  onBackgroundChange,
 }) {
   const [activeTab, setActiveTab] = useState('shared');
   const [fileMessages, setFileMessages] = useState([]);
@@ -198,6 +216,70 @@ export function ChatDetailsPanel({
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [bgModalOpen, setBgModalOpen] = useState(false);
+  const [bgBusy, setBgBusy] = useState(false);
+  const [bgError, setBgError] = useState('');
+  const [hasCustomBg, setHasCustomBg] = useState(false);
+  const menuRef = useRef(null);
+  const bgInputRef = useRef(null);
+
+  useEffect(() => {
+    setHasCustomBg(Boolean(getChatBackground(chatId)));
+    setMenuOpen(false);
+    setBgModalOpen(false);
+    setBgError('');
+  }, [chatId]);
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const onPointerDown = (event) => {
+      if (!menuRef.current?.contains(event.target)) setMenuOpen(false);
+    };
+    const onKey = (event) => {
+      if (event.key === 'Escape') setMenuOpen(false);
+    };
+    window.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
+
+  const applyBackground = (dataUrl) => {
+    const ok = setChatBackground(chatId, dataUrl);
+    if (!ok) {
+      setBgError('Не удалось сохранить фон (файл слишком большой)');
+      return false;
+    }
+    setHasCustomBg(Boolean(dataUrl));
+    onBackgroundChange?.(dataUrl || null);
+    return true;
+  };
+
+  const handleBackgroundFile = async (file) => {
+    if (!file) return;
+    setBgBusy(true);
+    setBgError('');
+    try {
+      const dataUrl = await fileToBackgroundDataUrl(file);
+      if (applyBackground(dataUrl)) {
+        setBgModalOpen(false);
+      }
+    } catch {
+      setBgError('Не удалось обработать изображение');
+    } finally {
+      setBgBusy(false);
+    }
+  };
+
+  const handleResetBackground = () => {
+    if (applyBackground(null)) {
+      setBgModalOpen(false);
+      setMenuOpen(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -308,10 +390,118 @@ export function ChatDetailsPanel({
         <h2 className="chat-details__title">
           {backMode ? 'архив сожалений' : specialMode ? 'workspace' : 'Детали'}
         </h2>
-        <button type="button" className="chat-details__close" onClick={onClose} aria-label="Закрыть панель">
-          ×
-        </button>
+        <div className="chat-details__header-actions" ref={menuRef}>
+          <button
+            type="button"
+            className={`chat-details__menu-btn${menuOpen ? ' is-open' : ''}`}
+            aria-label="Меню настроек чата"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            title="Меню"
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <MoreDotsIcon />
+          </button>
+          {menuOpen && (
+            <div className="chat-details__menu" role="menu">
+              <button
+                type="button"
+                role="menuitem"
+                className="chat-details__menu-item"
+                onClick={() => {
+                  setMenuOpen(false);
+                  setBgError('');
+                  setBgModalOpen(true);
+                }}
+              >
+                <img src={pngIcon} alt="" className="chat-details__menu-icon" draggable={false} />
+                <span>Изменить фон</span>
+              </button>
+              {hasCustomBg && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="chat-details__menu-item chat-details__menu-item--muted"
+                  onClick={handleResetBackground}
+                >
+                  <span className="chat-details__menu-icon chat-details__menu-icon--text">↺</span>
+                  <span>Сбросить фон</span>
+                </button>
+              )}
+            </div>
+          )}
+          <button type="button" className="chat-details__close" onClick={onClose} aria-label="Закрыть панель">
+            ×
+          </button>
+        </div>
       </div>
+
+      {bgModalOpen && (
+        <div
+          className="chat-details__bg-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Изменить фон чата"
+        >
+          <div className="chat-details__bg-modal-card">
+            <div className="chat-details__bg-modal-head">
+              <strong>Фон чата</strong>
+              <button
+                type="button"
+                className="chat-details__close"
+                onClick={() => setBgModalOpen(false)}
+                aria-label="Закрыть"
+              >
+                ×
+              </button>
+            </div>
+            <label
+              className={`chat-details__bg-dropzone${bgBusy ? ' is-busy' : ''}`}
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const file = event.dataTransfer?.files?.[0];
+                if (file) handleBackgroundFile(file);
+              }}
+            >
+              <input
+                ref={bgInputRef}
+                type="file"
+                accept="image/*"
+                hidden
+                disabled={bgBusy}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = '';
+                  if (file) handleBackgroundFile(file);
+                }}
+              />
+              <img src={pngIcon} alt="" className="chat-details__bg-dropzone-icon" draggable={false} />
+              <span className="chat-details__bg-dropzone-title">
+                {bgBusy ? 'Обработка…' : 'Загрузите изображение'}
+              </span>
+              <span className="chat-details__bg-dropzone-hint">
+                Перетащите файл сюда или нажмите, чтобы выбрать
+              </span>
+            </label>
+            {bgError ? <p className="chat-details__bg-error">{bgError}</p> : null}
+            {hasCustomBg && (
+              <button
+                type="button"
+                className="chat-details__bg-reset"
+                onClick={handleResetBackground}
+                disabled={bgBusy}
+              >
+                Сбросить фон
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {specialMode && !backMode && (
         <div className="chat-details__dev-icon" aria-hidden="true">
