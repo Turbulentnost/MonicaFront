@@ -216,7 +216,7 @@ export function ChatDetailsPanel({
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
-  const [bgModalOpen, setBgModalOpen] = useState(false);
+  const [bgEditorOpen, setBgEditorOpen] = useState(false);
   const [bgBusy, setBgBusy] = useState(false);
   const [bgError, setBgError] = useState('');
   const [hasCustomBg, setHasCustomBg] = useState(false);
@@ -226,7 +226,7 @@ export function ChatDetailsPanel({
   useEffect(() => {
     setHasCustomBg(Boolean(getChatBackground(chatId)));
     setMenuOpen(false);
-    setBgModalOpen(false);
+    setBgEditorOpen(false);
     setBgError('');
   }, [chatId]);
 
@@ -263,9 +263,7 @@ export function ChatDetailsPanel({
     setBgError('');
     try {
       const dataUrl = await fileToBackgroundDataUrl(file);
-      if (applyBackground(dataUrl)) {
-        setBgModalOpen(false);
-      }
+      applyBackground(dataUrl);
     } catch {
       setBgError('Не удалось обработать изображение');
     } finally {
@@ -274,10 +272,8 @@ export function ChatDetailsPanel({
   };
 
   const handleResetBackground = () => {
-    if (applyBackground(null)) {
-      setBgModalOpen(false);
-      setMenuOpen(false);
-    }
+    applyBackground(null);
+    setMenuOpen(false);
   };
 
   useEffect(() => {
@@ -387,73 +383,69 @@ export function ChatDetailsPanel({
     <aside className={panelClass} aria-label="Детали чата">
       <div className="chat-details__header">
         <h2 className="chat-details__title">
-          {backMode ? 'архив сожалений' : specialMode ? 'workspace' : 'Детали'}
+          {bgEditorOpen
+            ? 'Фон чата'
+            : backMode
+              ? 'архив сожалений'
+              : specialMode
+                ? 'workspace'
+                : 'Детали'}
         </h2>
         <div className="chat-details__header-actions" ref={menuRef}>
-          <button
-            type="button"
-            className={`chat-details__menu-btn${menuOpen ? ' is-open' : ''}`}
-            aria-label="Меню настроек чата"
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
-            title="Меню"
-            onClick={() => setMenuOpen((open) => !open)}
-          >
-            <MoreDotsIcon />
-          </button>
-          {menuOpen && (
-            <div className="chat-details__menu" role="menu">
+          {!bgEditorOpen && (
+            <>
               <button
                 type="button"
-                role="menuitem"
-                className="chat-details__menu-item"
-                onClick={() => {
-                  setMenuOpen(false);
-                  setBgError('');
-                  setBgModalOpen(true);
-                }}
+                className={`chat-details__menu-btn${menuOpen ? ' is-open' : ''}`}
+                aria-label="Меню настроек чата"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                title="Меню"
+                onClick={() => setMenuOpen((open) => !open)}
               >
-                <img src={pngIcon} alt="" className="chat-details__menu-icon" draggable={false} />
-                <span>Изменить фон</span>
+                <MoreDotsIcon />
               </button>
-              {hasCustomBg && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="chat-details__menu-item chat-details__menu-item--muted"
-                  onClick={handleResetBackground}
-                >
-                  <span className="chat-details__menu-icon chat-details__menu-icon--text">↺</span>
-                  <span>Сбросить фон</span>
-                </button>
+              {menuOpen && (
+                <div className="chat-details__menu" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="chat-details__menu-item"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setBgError('');
+                      setBgEditorOpen(true);
+                    }}
+                  >
+                    <img src={pngIcon} alt="" className="chat-details__menu-icon" draggable={false} />
+                    <span>Изменить фон</span>
+                  </button>
+                </div>
               )}
-            </div>
+            </>
           )}
-          <button type="button" className="chat-details__close" onClick={onClose} aria-label="Закрыть панель">
+          <button
+            type="button"
+            className="chat-details__close"
+            onClick={() => {
+              if (bgEditorOpen) {
+                setBgEditorOpen(false);
+                setBgError('');
+                return;
+              }
+              onClose();
+            }}
+            aria-label={bgEditorOpen ? 'Назад к деталям' : 'Закрыть панель'}
+            title={bgEditorOpen ? 'Назад' : 'Закрыть'}
+          >
             ×
           </button>
         </div>
       </div>
 
-      {bgModalOpen && (
-        <div
-          className="chat-details__bg-modal"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Изменить фон чата"
-        >
-          <div className="chat-details__bg-modal-card">
-            <div className="chat-details__bg-modal-head">
-              <strong>Фон чата</strong>
-              <button
-                type="button"
-                className="chat-details__close"
-                onClick={() => setBgModalOpen(false)}
-                aria-label="Закрыть"
-              >
-                ×
-              </button>
-            </div>
+      {bgEditorOpen ? (
+        <div className="chat-details__bg-editor">
+          <div className="chat-details__bg-editor-body">
             <label
               className={`chat-details__bg-dropzone${bgBusy ? ' is-busy' : ''}`}
               onDragOver={(event) => {
@@ -488,20 +480,20 @@ export function ChatDetailsPanel({
               </span>
             </label>
             {bgError ? <p className="chat-details__bg-error">{bgError}</p> : null}
-            {hasCustomBg && (
-              <button
-                type="button"
-                className="chat-details__bg-reset"
-                onClick={handleResetBackground}
-                disabled={bgBusy}
-              >
-                Сбросить фон
-              </button>
-            )}
+          </div>
+          <div className="chat-details__bg-editor-footer">
+            <button
+              type="button"
+              className="chat-details__bg-reset"
+              onClick={handleResetBackground}
+              disabled={bgBusy || !hasCustomBg}
+            >
+              Вернуть по умолчанию
+            </button>
           </div>
         </div>
-      )}
-
+      ) : (
+        <>
       {specialMode && !backMode && (
         <div className="chat-details__dev-icon" aria-hidden="true">
           <span>{'</>'}</span>
@@ -735,6 +727,8 @@ export function ChatDetailsPanel({
             ))}
           </ul>
         </div>
+      )}
+        </>
       )}
 
       {lightboxIndex != null && photos[lightboxIndex] && (
