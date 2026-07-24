@@ -3,7 +3,6 @@ import { chatsApi } from '../../api/client';
 import { getCachedMediaSrc, warmMediaCache } from '../../utils/mediaCache';
 import { getPhotoCaption, looksLikeStoragePath } from '../../utils/messageText';
 import {
-  clearChatBackground,
   fileToBackgroundDataUrl,
   getChatBackground,
   setChatBackground,
