@@ -15,7 +15,14 @@ function relativeTime(value) {
 
 function itemText(item) {
   if (item.message_type === 'voice') return 'Голосовое сообщение';
-  if (item.message_type === 'file') return item.file_name || 'Файл';
+  if (item.message_type === 'file') {
+    const mime = String(item.mime_type || '').toLowerCase();
+    const name = String(item.file_name || '').toLowerCase();
+    if (mime.startsWith('video/') || /\.(mp4|webm|mov|mkv|m4v|avi|ogv|3gp)$/.test(name)) {
+      return 'Видео';
+    }
+    return item.file_name || 'Файл';
+  }
   if (item.message_type === 'photo') return item.caption || (
     item.content && !item.content.includes('/') ? item.content : ''
   );

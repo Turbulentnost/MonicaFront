@@ -6,6 +6,7 @@ import {
   getGroupAvatarUser,
   isGroupChat,
 } from '../../utils/chatDisplay';
+import { isVideoMessage } from '../../utils/videoMedia';
 
 function formatPreview(lastMessage) {
   if (!lastMessage) return 'Нет сообщений';
@@ -28,6 +29,7 @@ function formatPreview(lastMessage) {
     return lastMessage.content || 'Звонок';
   }
   if (lastMessage.message_type === 'file') {
+    if (isVideoMessage(lastMessage)) return 'Видео';
     const name = (lastMessage.file_name || '').toLowerCase();
     if (name.endsWith('.py')) return `Python: ${lastMessage.file_name}`;
     if (name.endsWith('.js')) return `JS: ${lastMessage.file_name}`;

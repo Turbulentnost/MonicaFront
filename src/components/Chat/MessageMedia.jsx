@@ -5,8 +5,10 @@ import pythonLang from 'react-syntax-highlighter/dist/esm/languages/prism/python
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { chatsApi } from '../../api/client';
 import { getCachedMediaSrc, warmMediaCache } from '../../utils/mediaCache';
+import { isVideoMessage } from '../../utils/videoMedia';
 import { FileTypeIcon } from './FileTypeIcon';
 import { PhotoGallery } from './PhotoGallery';
+import { VideoMessage } from './VideoMessage';
 
 SyntaxHighlighter.registerLanguage('python', pythonLang);
 SyntaxHighlighter.registerLanguage('javascript', javascriptLang);
@@ -254,6 +256,9 @@ export function MessageMedia({ message, chatId }) {
   }
 
   if (message.message_type === 'file') {
+    if (isVideoMessage(message)) {
+      return <VideoMessage message={message} />;
+    }
     const label = message.file_name || 'Файл';
     const sizeLabel = message.file_size
       ? ` (${Math.round(message.file_size / 1024)} КБ)`
