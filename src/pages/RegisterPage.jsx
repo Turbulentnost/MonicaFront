@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { authApi } from '../api/client';
 import {
   AuthLayout,
   AuthCard,
@@ -19,8 +20,26 @@ export default function RegisterPage() {
   const [phone, setPhone] = useState('');
   const [registrationToken, setRegistrationToken] = useState('');
   const [debugCode, setDebugCode] = useState('');
+  const [telegramUrl, setTelegramUrl] = useState('');
+  const [botUsername, setBotUsername] = useState('');
 
   const stepIndex = step + 1;
+
+  const applyPhoneResult = (result = {}) => {
+    setDebugCode(result.debugCode || '');
+    setTelegramUrl(result.telegramUrl || '');
+    setBotUsername(result.botUsername || '');
+  };
+
+  const refreshTelegramLink = async () => {
+    const { data } = await authApi.registerPhone(phone);
+    if (data.phone) setPhone(data.phone);
+    applyPhoneResult({
+      debugCode: data.debug_code || '',
+      telegramUrl: data.telegram_url || '',
+      botUsername: data.bot_username || '',
+    });
+  };
 
   return (
     <AuthLayout>
@@ -32,8 +51,8 @@ export default function RegisterPage() {
           <PhoneStep
             phone={phone}
             setPhone={setPhone}
-            onNext={(code) => {
-              setDebugCode(code || '');
+            onNext={(result) => {
+              applyPhoneResult(result);
               setStep(1);
             }}
           />
@@ -42,7 +61,10 @@ export default function RegisterPage() {
           <CodeStep
             phone={phone}
             debugCode={debugCode}
+            telegramUrl={telegramUrl}
+            botUsername={botUsername}
             setRegistrationToken={setRegistrationToken}
+            onRefreshLink={refreshTelegramLink}
             onNext={() => setStep(2)}
           />
         )}

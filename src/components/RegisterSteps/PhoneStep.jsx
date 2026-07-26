@@ -13,12 +13,18 @@ export default function PhoneStep({ phone, setPhone, onNext }) {
     try {
       const { data } = await authApi.registerPhone(phone);
       if (data.phone) setPhone(data.phone);
-      onNext(data.debug_code || '');
+      onNext({
+        debugCode: data.debug_code || '',
+        telegramUrl: data.telegram_url || '',
+        botUsername: data.bot_username || '',
+      });
     } catch (err) {
+      const data = err.response?.data;
+      const detail = data?.detail;
       setError(
-        err.response?.data?.phone?.[0]
-        || err.response?.data?.detail
-        || 'Ошибка отправки SMS'
+        data?.phone?.[0]
+        || (Array.isArray(detail) ? detail[0] : detail)
+        || 'Не удалось начать подтверждение'
       );
     } finally {
       setLoading(false);
@@ -29,9 +35,9 @@ export default function PhoneStep({ phone, setPhone, onNext }) {
     <form onSubmit={handleSubmit} className="auth-form-body" noValidate>
       <h2 className="auth-title">Регистрация</h2>
       <p className="auth-helper">
-        Введите номер телефона — мы отправим
+        Введите номер телефона — подтвердим его
         <br />
-        SMS с кодом подтверждения.
+        через Telegram-бота и пришлём код.
       </p>
       <AuthInput
         id="register-phone"
@@ -47,7 +53,7 @@ export default function PhoneStep({ phone, setPhone, onNext }) {
         autoFocus
         error={error || undefined}
       />
-      <PrimaryButton loading={loading} loadingText="Отправка...">
+      <PrimaryButton loading={loading} loadingText="Далее...">
         Далее
       </PrimaryButton>
     </form>
