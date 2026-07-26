@@ -12,11 +12,13 @@ import {
   getChatTitle,
   getGroupAvatarUser,
   getMembersCount,
+  isFavoritesChat,
   isGroupChat,
 } from '../../utils/chatDisplay';
 import { FileTypeIcon } from './FileTypeIcon';
 import { PhotoLightbox } from './PhotoGallery';
 import { UserAvatar } from './UserAvatar';
+import { FavoritesAvatar } from './FavoritesAvatar';
 
 function MoreDotsIcon() {
   return (
@@ -216,8 +218,15 @@ export function ChatDetailsPanel({
   onJumpToMessage,
   onBackgroundChange,
   backgroundUrl = null,
+  currentUserId = null,
+  panelWidth,
+  searchOpen = false,
+  searchFocusSeq = 0,
+  onSearchOpenChange,
+  onCloseSearch,
 }) {
   const group = isGroupChat(chat);
+  const favorites = isFavoritesChat(chat, currentUserId);
   const members = Array.isArray(chat?.members) ? chat.members : [];
   const displayUser = group ? getGroupAvatarUser(chat) : partner;
   const [activeTab, setActiveTab] = useState('shared');
@@ -237,6 +246,7 @@ export function ChatDetailsPanel({
   const [hasCustomBg, setHasCustomBg] = useState(false);
   const menuRef = useRef(null);
   const bgInputRef = useRef(null);
+  const searchInputRef = useRef(null);
 
   useEffect(() => {
     setHasCustomBg(Boolean(backgroundUrl));
@@ -244,6 +254,37 @@ export function ChatDetailsPanel({
     setBgEditorOpen(false);
     setBgError('');
   }, [chatId, backgroundUrl]);
+
+  useEffect(() => {
+    if (!searchOpen) {
+      setSearchQuery('');
+      setSearchResults([]);
+      setSearchError('');
+      setSearchLoading(false);
+      return undefined;
+    }
+    // Wait for panel enter animation, then focus search.
+    const timer = window.setTimeout(() => {
+      const input = searchInputRef.current;
+      if (!input) return;
+      input.focus({ preventScroll: false });
+      input.select();
+    }, 220);
+    return () => window.clearTimeout(timer);
+  }, [searchOpen, searchFocusSeq, chatId]);
+
+  useEffect(() => {
+    if (!searchOpen) return undefined;
+    const onKey = (event) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      onCloseSearch?.();
+      onSearchOpenChange?.(false);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [onCloseSearch, onSearchOpenChange, searchOpen]);
 
   useEffect(() => {
     if (!menuOpen) return undefined;
@@ -398,35 +439,45 @@ export function ChatDetailsPanel({
       : TABS
   ), [group, specialMode]);
 
-  if (!group && !partner) return null;
+  if (!group && !favorites && !partner) return null;
 
   const panelClass = [
     'chat-details',
     specialMode ? 'chat-details--special' : '',
     backMode ? 'chat-details--back' : '',
     group ? 'chat-details--group' : '',
+    favorites ? 'chat-details--favorites' : '',
+    searchOpen ? 'chat-details--search-open' : '',
   ]
     .filter(Boolean)
     .join(' ');
 
-  const profileTitle = group
-    ? getChatTitle(chat)
-    : backMode
-      ? `${partner.first_name} ${partner.last_name}`
-      : specialMode
-        ? (`${partner.first_name} ${partner.last_name}`.trim() || partner.nickname)
-        : `${partner.first_name} ${partner.last_name}`;
+  const profileTitle = favorites
+    ? 'Избранное'
+    : group
+      ? getChatTitle(chat, currentUserId)
+      : backMode
+        ? `${partner.first_name} ${partner.last_name}`
+        : specialMode
+          ? (`${partner.first_name} ${partner.last_name}`.trim() || partner.nickname)
+          : `${partner.first_name} ${partner.last_name}`;
 
-  const profileSub = group
-    ? formatMembersCount(getMembersCount(chat))
-    : backMode
-      ? `@${partner.nickname} · давно ушёл`
-      : specialMode
-        ? `@${partner.nickname} · dev channel`
-        : `@${partner.nickname}`;
+  const profileSub = favorites
+    ? 'Заметки и сохранённое'
+    : group
+      ? formatMembersCount(getMembersCount(chat))
+      : backMode
+        ? `@${partner.nickname} · давно ушёл`
+        : specialMode
+          ? `@${partner.nickname} · dev channel`
+          : `@${partner.nickname}`;
 
   return (
-    <aside className={panelClass} aria-label="Детали чата">
+    <aside
+      className={panelClass}
+      aria-label="Детали чата"
+      style={panelWidth ? { width: panelWidth } : undefined}
+    >
       <div className="chat-details__header">
         <h2 className="chat-details__title">
           {bgEditorOpen
@@ -554,13 +605,17 @@ export function ChatDetailsPanel({
 
       <div className="chat-details__profile">
         {!specialMode && (
-          <UserAvatar
-            user={displayUser}
-            size={56}
-            showOnline={!backMode && !group}
-            isOnline={backMode || group ? false : isOnline}
-            className={group ? 'chat-details__avatar--group' : ''}
-          />
+          favorites ? (
+            <FavoritesAvatar size={56} className="chat-details__avatar--favorites" />
+          ) : (
+            <UserAvatar
+              user={displayUser}
+              size={56}
+              showOnline={!backMode && !group}
+              isOnline={backMode || group ? false : isOnline}
+              className={group ? 'chat-details__avatar--group' : ''}
+            />
+          )
         )}
         <h3 className="chat-details__name">
           {specialMode && !group ? (
@@ -573,48 +628,69 @@ export function ChatDetailsPanel({
         <p className="chat-details__sub">{profileSub}</p>
       </div>
 
-      <div className="chat-details__search">
-        <label className="chat-details__search-label" htmlFor="chat-details-search">
-          {specialMode ? 'Search messages' : 'Поиск по чату'}
-        </label>
-        <input
-          id="chat-details-search"
-          type="search"
-          className="chat-details__search-input"
-          value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
-          placeholder={specialMode ? 'Find in channel…' : 'Найти сообщение…'}
-          autoComplete="off"
-        />
-        {searchActive && (
-          <div className="chat-details__search-results" role="listbox" aria-label="Результаты поиска">
-            {searchLoading && (
-              <p className="chat-details__placeholder">Поиск…</p>
-            )}
-            {!searchLoading && searchError && (
-              <p className="chat-details__placeholder">{searchError}</p>
-            )}
-            {!searchLoading && !searchError && searchResults.length === 0 && (
-              <p className="chat-details__placeholder">Ничего не найдено</p>
-            )}
-            {!searchLoading && !searchError && searchResults.map((message) => (
-              <button
-                key={message.id}
-                type="button"
-                className="chat-details__search-item"
-                onClick={() => onJumpToMessage?.(message.id)}
-              >
-                <span className="chat-details__search-item-text">
-                  {getSearchPreview(message)}
-                </span>
-                <span className="chat-details__search-item-meta">
-                  @{message.sender?.nickname || 'user'} · {formatSearchTime(message.sent_at)}
-                </span>
-              </button>
-            ))}
+      {searchOpen && (
+        <div className="chat-details__search" role="search">
+          <div className="chat-details__search-head">
+            <label className="chat-details__search-label" htmlFor="chat-details-search">
+              {specialMode ? 'Search messages' : 'Поиск по чату'}
+            </label>
+            <button
+              type="button"
+              className="chat-details__search-close"
+              onClick={() => {
+                onCloseSearch?.();
+                onSearchOpenChange?.(false);
+              }}
+              aria-label={specialMode ? 'Close search' : 'Закрыть поиск'}
+              title={specialMode ? 'Esc' : 'Esc — закрыть'}
+            >
+              ×
+            </button>
           </div>
-        )}
-      </div>
+          <input
+            ref={searchInputRef}
+            id="chat-details-search"
+            type="search"
+            className="chat-details__search-input"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder={specialMode ? 'Find in channel…' : 'Найти сообщение…'}
+            autoComplete="off"
+            enterKeyHint="search"
+          />
+          <p className="chat-details__search-hint">
+            {specialMode ? 'Esc to close · Ctrl+F to refocus' : 'Esc — закрыть · Ctrl+F — снова в поиск'}
+          </p>
+          {searchActive && (
+            <div className="chat-details__search-results" role="listbox" aria-label="Результаты поиска">
+              {searchLoading && (
+                <p className="chat-details__placeholder">Поиск…</p>
+              )}
+              {!searchLoading && searchError && (
+                <p className="chat-details__placeholder">{searchError}</p>
+              )}
+              {!searchLoading && !searchError && searchResults.length === 0 && (
+                <p className="chat-details__placeholder">Ничего не найдено</p>
+              )}
+              {!searchLoading && !searchError && searchResults.map((message) => (
+                <button
+                  key={message.id}
+                  type="button"
+                  className="chat-details__search-item"
+                  onClick={() => onJumpToMessage?.(message.id)}
+                >
+                  <span className="chat-details__search-item-text">
+                    {getSearchPreview(message)}
+                  </span>
+                  <span className="chat-details__search-item-meta">
+                    @{message.sender?.nickname || 'user'} · {formatSearchTime(message.sent_at)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {(specialMode || backMode) && (
         <div className="chat-details__quick-actions">

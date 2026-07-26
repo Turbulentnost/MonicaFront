@@ -30,7 +30,6 @@ function fitPhotoSize(naturalW, naturalH, { minSide, maxW, maxH }) {
   let w = Math.max(1, naturalW);
   let h = Math.max(1, naturalH);
 
-  // Upscale tiny images so they stay readable in chat / lightbox.
   if (w < minSide && h < minSide) {
     const scale = minSide / Math.max(w, h);
     w *= scale;
@@ -44,17 +43,15 @@ function fitPhotoSize(naturalW, naturalH, { minSide, maxW, maxH }) {
   };
 }
 
-function GalleryThumb({ item, onOpen, single = false }) {
-  const key = item.path;
-  const remote = item.content_url;
+function usePhotoSrc(item) {
+  const key = item?.path;
+  const remote = item?.content_url;
   const [src, setSrc] = useState(() => getCachedMediaSrc(key, remote));
-  const [sizeStyle, setSizeStyle] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
     const cached = getCachedMediaSrc(key, remote);
     setSrc(cached);
-    setSizeStyle(null);
     if (key && remote) {
       warmMediaCache(key, remote).then((url) => {
         if (!cancelled && url) setSrc(url);
@@ -64,6 +61,17 @@ function GalleryThumb({ item, onOpen, single = false }) {
       cancelled = true;
     };
   }, [key, remote]);
+
+  return src;
+}
+
+function GalleryThumb({ item, onOpen, single = false }) {
+  const src = usePhotoSrc(item);
+  const [sizeStyle, setSizeStyle] = useState(null);
+
+  useEffect(() => {
+    setSizeStyle(null);
+  }, [src]);
 
   const handleLoad = (event) => {
     if (!single) return;
@@ -104,11 +112,41 @@ function GalleryThumb({ item, onOpen, single = false }) {
   );
 }
 
+function LightboxTile({ item, active = false, onClick }) {
+  const src = usePhotoSrc(item);
+  return (
+    <button
+      type="button"
+      className={`photo-lightbox__tile${active ? ' is-active' : ''}`}
+      onClick={onClick}
+      aria-current={active ? 'true' : undefined}
+    >
+      {src ? (
+        <img src={src} alt={item.file_name || 'Фото'} />
+      ) : (
+        <span className="photo-lightbox__tile-empty" />
+      )}
+    </button>
+  );
+}
+
+function ChevronIcon({ dir = 'prev' }) {
+  return (
+    <svg viewBox="0 0 24 24" width="28" height="28" fill="none" aria-hidden="true">
+      <path
+        d={dir === 'prev' ? 'M15 5L8 12l7 7' : 'M9 5l7 7-7 7'}
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function PhotoLightbox({ items, index, onClose, onChange }) {
   const current = items[index];
-  const key = current?.path;
-  const remote = current?.content_url;
-  const [src, setSrc] = useState(() => getCachedMediaSrc(key, remote));
+  const src = usePhotoSrc(current);
   const [host, setHost] = useState(null);
   const [sizeStyle, setSizeStyle] = useState(null);
 
@@ -117,26 +155,15 @@ export function PhotoLightbox({ items, index, onClose, onChange }) {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    const cached = getCachedMediaSrc(key, remote);
-    setSrc(cached);
     setSizeStyle(null);
-    if (key && remote) {
-      warmMediaCache(key, remote).then((url) => {
-        if (!cancelled && url) setSrc(url);
-      });
-    }
-    return () => {
-      cancelled = true;
-    };
-  }, [key, remote]);
+  }, [src, index]);
 
   const handleImageLoad = (event) => {
     const { naturalWidth, naturalHeight } = event.currentTarget;
     if (!naturalWidth || !naturalHeight) return;
-    const maxW = Math.min(920, Math.floor(window.innerWidth * 0.9));
-    const maxH = Math.floor(window.innerHeight * 0.82);
-    const minSide = Math.min(360, Math.floor(Math.min(maxW, maxH) * 0.55));
+    const maxW = Math.min(760, Math.floor(window.innerWidth * 0.72));
+    const maxH = Math.floor(window.innerHeight * 0.62);
+    const minSide = Math.min(240, Math.floor(Math.min(maxW, maxH) * 0.4));
     setSizeStyle(
       fitPhotoSize(naturalWidth, naturalHeight, {
         minSide,
@@ -162,11 +189,8 @@ export function PhotoLightbox({ items, index, onClose, onChange }) {
       if (e.key === 'ArrowRight') go(1);
     };
     window.addEventListener('keydown', onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
     return () => {
       window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prev;
     };
   }, [go, onClose]);
 
@@ -189,44 +213,58 @@ export function PhotoLightbox({ items, index, onClose, onChange }) {
           ×
         </button>
       </div>
-      {items.length > 1 && (
-        <button
-          type="button"
-          className="photo-lightbox__nav photo-lightbox__nav--prev"
-          onClick={(e) => {
-            e.stopPropagation();
-            go(-1);
-          }}
-          aria-label="Предыдущее"
-        >
-          ‹
-        </button>
-      )}
-      <div className="photo-lightbox__stage" onClick={(e) => e.stopPropagation()}>
-        {src ? (
-          <img
-            src={src}
-            alt={current.file_name || 'Фото'}
-            className="photo-lightbox__image"
-            onLoad={handleImageLoad}
-            style={sizeStyle || undefined}
-          />
-        ) : (
-          <div className="photo-lightbox__empty">Загрузка…</div>
+
+      <div className="photo-lightbox__body" onClick={(e) => e.stopPropagation()}>
+        {items.length > 1 && (
+          <button
+            type="button"
+            className="photo-lightbox__nav photo-lightbox__nav--prev"
+            onClick={() => go(-1)}
+            aria-label="Предыдущее"
+          >
+            <ChevronIcon dir="prev" />
+          </button>
+        )}
+
+        <div className="photo-lightbox__stage">
+          <div className="photo-lightbox__slide">
+            {src ? (
+              <img
+                src={src}
+                alt={current.file_name || 'Фото'}
+                className="photo-lightbox__image"
+                onLoad={handleImageLoad}
+                style={sizeStyle || undefined}
+              />
+            ) : (
+              <div className="photo-lightbox__empty">Загрузка…</div>
+            )}
+          </div>
+        </div>
+
+        {items.length > 1 && (
+          <button
+            type="button"
+            className="photo-lightbox__nav photo-lightbox__nav--next"
+            onClick={() => go(1)}
+            aria-label="Следующее"
+          >
+            <ChevronIcon dir="next" />
+          </button>
         )}
       </div>
+
       {items.length > 1 && (
-        <button
-          type="button"
-          className="photo-lightbox__nav photo-lightbox__nav--next"
-          onClick={(e) => {
-            e.stopPropagation();
-            go(1);
-          }}
-          aria-label="Следующее"
-        >
-          ›
-        </button>
+        <div className="photo-lightbox__tiles" onClick={(e) => e.stopPropagation()}>
+          {items.map((item, i) => (
+            <LightboxTile
+              key={item.path || item.content_url || i}
+              item={item}
+              active={i === index}
+              onClick={() => onChange(i)}
+            />
+          ))}
+        </div>
       )}
     </div>,
     host,
@@ -253,7 +291,7 @@ export function PhotoGallery({ items }) {
           const absoluteIndex = offset - size + colIdx;
           return (
             <GalleryThumb
-              key={item.path || `${rowIdx}-${colIdx}`}
+              key={item.path || item.content_url || `${rowIdx}-${colIdx}`}
               item={item}
               single={photos.length === 1}
               onOpen={() => setLightboxIndex(absoluteIndex)}

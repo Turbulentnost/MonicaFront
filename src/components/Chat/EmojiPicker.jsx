@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { EMOJI_CATEGORIES } from './emojiData';
 import { StickerView } from './StickerView';
+import { Twemoji } from './Twemoji';
 import { getInstalledStickerPacks } from '../../utils/stickerLibrary';
 
 export function EmojiPicker({
@@ -18,6 +19,10 @@ export function EmojiPicker({
   const [activeId, setActiveId] = useState(EMOJI_CATEGORIES[0]?.id || 'smileys');
   const [packs, setPacks] = useState(() => getInstalledStickerPacks());
   const [activePackId, setActivePackId] = useState(() => getInstalledStickerPacks()[0]?.id || '');
+  const [scrollEdge, setScrollEdge] = useState({ top: false, bottom: true });
+  const [scrolling, setScrolling] = useState(false);
+  const gridRef = useRef(null);
+  const scrollTimerRef = useRef(null);
 
   useEffect(() => {
     if (!visible) return;
@@ -31,6 +36,34 @@ export function EmojiPicker({
       next.some((pack) => pack.id === current) ? current : (next[0]?.id || '')
     ));
   }, [visible, installedPackIds, emojiOnly]);
+
+  const updateScrollEdges = () => {
+    const node = gridRef.current;
+    if (!node) return;
+    const top = node.scrollTop > 2;
+    const bottom = node.scrollTop + node.clientHeight < node.scrollHeight - 2;
+    setScrollEdge({ top, bottom });
+  };
+
+  useEffect(() => {
+    if (!visible || panel !== 'emoji') return undefined;
+    const node = gridRef.current;
+    if (!node) return undefined;
+    updateScrollEdges();
+    const onScroll = () => {
+      updateScrollEdges();
+      setScrolling(true);
+      if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
+      scrollTimerRef.current = window.setTimeout(() => setScrolling(false), 180);
+    };
+    node.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', updateScrollEdges);
+    return () => {
+      node.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', updateScrollEdges);
+      if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
+    };
+  }, [visible, panel, activeId]);
 
   const activeCategory = EMOJI_CATEGORIES.find((c) => c.id === activeId) || EMOJI_CATEGORIES[0];
   const activePack = packs.find((pack) => pack.id === activePackId) || packs[0] || null;
@@ -103,26 +136,40 @@ export function EmojiPicker({
                 tabIndex={visible ? 0 : -1}
               >
                 <span className="emoji-picker__tab-icon" aria-hidden="true">
-                  {cat.icon}
+                  <Twemoji emoji={cat.icon} />
                 </span>
               </button>
             ))}
           </div>
-          <div className="emoji-picker__grid" role="listbox" aria-label={activeCategory?.label}>
-            {activeCategory?.emojis.map((emoji) => (
-              <button
-                key={`${activeCategory.id}-${emoji}`}
-                type="button"
-                role="option"
-                aria-selected="false"
-                className="emoji-picker__emoji"
-                onClick={() => onSelect?.(emoji)}
-                aria-label={emoji}
-                tabIndex={visible ? 0 : -1}
-              >
-                {emoji}
-              </button>
-            ))}
+          <div
+            className={[
+              'emoji-picker__grid-wrap',
+              scrollEdge.top ? 'has-top-fade' : '',
+              scrollEdge.bottom ? 'has-bottom-fade' : '',
+              scrolling ? 'is-scrolling' : '',
+            ].filter(Boolean).join(' ')}
+          >
+            <div
+              ref={gridRef}
+              className="emoji-picker__grid"
+              role="listbox"
+              aria-label={activeCategory?.label}
+            >
+              {activeCategory?.emojis.map((emoji) => (
+                <button
+                  key={`${activeCategory.id}-${emoji}`}
+                  type="button"
+                  role="option"
+                  aria-selected="false"
+                  className="emoji-picker__emoji"
+                  onClick={() => onSelect?.(emoji)}
+                  aria-label={emoji}
+                  tabIndex={visible ? 0 : -1}
+                >
+                  <Twemoji emoji={emoji} />
+                </button>
+              ))}
+            </div>
           </div>
         </>
       ) : (
@@ -141,7 +188,7 @@ export function EmojiPicker({
                 tabIndex={visible ? 0 : -1}
               >
                 <span className="emoji-picker__tab-icon" aria-hidden="true">
-                  {pack.cover}
+                  <Twemoji emoji={pack.cover} />
                 </span>
               </button>
             ))}
@@ -168,7 +215,7 @@ export function EmojiPicker({
                   aria-label={sticker.label}
                   tabIndex={visible ? 0 : -1}
                 >
-                  <StickerView sticker={sticker} size="md" />
+                  <StickerView sticker={sticker} size="picker" />
                 </button>
               ))}
             </div>

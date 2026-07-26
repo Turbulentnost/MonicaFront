@@ -1,4 +1,6 @@
 import { Fragment } from 'react';
+import { Twemoji } from '../components/Chat/Twemoji';
+import { splitTextAndEmoji } from './twemoji';
 
 /** Rough WEB_URL-like matcher (http(s), www., bare domains with path). */
 const URL_RE =
@@ -37,6 +39,15 @@ export function firstUrl(text) {
   return extractUrls(text)[0] || null;
 }
 
+function renderPlainWithEmoji(text, keyPrefix) {
+  return splitTextAndEmoji(text).map((part, index) => {
+    if (part.type === 'emoji') {
+      return <Twemoji key={`${keyPrefix}-e-${index}`} emoji={part.value} />;
+    }
+    return <Fragment key={`${keyPrefix}-t-${index}`}>{part.value}</Fragment>;
+  });
+}
+
 export function linkifyText(text) {
   if (text == null || text === '') return null;
   const source = String(text);
@@ -51,7 +62,7 @@ export function linkifyText(text) {
     const trimmed = raw.replace(TRAILING_PUNCT, '');
     const punct = raw.slice(trimmed.length);
     if (start > cursor) {
-      parts.push(<Fragment key={`t-${key++}`}>{source.slice(cursor, start)}</Fragment>);
+      parts.push(...renderPlainWithEmoji(source.slice(cursor, start), `t-${key++}`));
     }
     const href = normalizeUrl(trimmed);
     parts.push(
@@ -73,7 +84,7 @@ export function linkifyText(text) {
     match = URL_RE.exec(source);
   }
   if (cursor < source.length) {
-    parts.push(<Fragment key={`t-${key++}`}>{source.slice(cursor)}</Fragment>);
+    parts.push(...renderPlainWithEmoji(source.slice(cursor), `t-${key++}`));
   }
   return parts.length ? parts : source;
 }

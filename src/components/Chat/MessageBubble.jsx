@@ -5,6 +5,7 @@ import { EmojiPicker } from './EmojiPicker';
 import { ForwardedBundle } from './ForwardedBundle';
 import { LinkPreviewCard } from './LinkPreviewCard';
 import { StickerView } from './StickerView';
+import { Twemoji } from './Twemoji';
 import { getEditableMessageText, getPhotoCaption } from '../../utils/messageText';
 import { linkifyText } from '../../utils/linkifyText';
 import { canDeleteForEveryone, canEditMessage } from '../../utils/messageActions';
@@ -194,10 +195,10 @@ function ChatMessageBubble({
   const [contextMenu, setContextMenu] = useState(null);
   const [barOpen, setBarOpen] = useState(false);
   const [pickerExpanded, setPickerExpanded] = useState(false);
-  /** above = над сообщением, below = под ним (для верхних сообщений) */
-  const [reactionSide, setReactionSide] = useState('above');
+  /** Реакции всегда ниже сообщения */
+  const [reactionSide, setReactionSide] = useState('below');
   /** up = пикер раскрывается вверх, down = вниз */
-  const [pickerSide, setPickerSide] = useState('up');
+  const [pickerSide, setPickerSide] = useState('down');
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState('');
   const [copyBusy, setCopyBusy] = useState(false);
@@ -237,22 +238,14 @@ function ChatMessageBubble({
     const rect = node.getBoundingClientRect();
     const area = node.closest('.messages-area');
     const areaRect = area?.getBoundingClientRect();
-    const topBound = areaRect?.top ?? 0;
     const bottomBound = areaRect?.bottom ?? window.innerHeight;
-    const spaceAbove = rect.top - topBound;
     const spaceBelow = bottomBound - rect.bottom;
 
-    // Мало места сверху (сообщение у края) — реакция снизу с отступом
-    const side = spaceAbove < 64 ? 'below' : 'above';
-    setReactionSide(side);
-
-    // Пикер: вверх по умолчанию, вниз если сверху не помещается
-    const pickerNeed = expanded ? 280 : 72;
-    if (side === 'above') {
-      setPickerSide(spaceAbove >= pickerNeed ? 'up' : 'down');
-    } else {
-      setPickerSide(spaceBelow >= pickerNeed ? 'down' : 'up');
-    }
+    // Реакции всегда сразу под сообщением (~5px); полный пикер раскрываем
+    // вверх, если снизу мало места — чтобы не резать следующее сообщение.
+    setReactionSide('below');
+    const pickerNeed = expanded ? 260 : 48;
+    setPickerSide(spaceBelow >= pickerNeed ? 'down' : 'up');
   }, [pickerExpanded]);
 
   useEffect(() => () => {
@@ -685,7 +678,9 @@ function ChatMessageBubble({
               aria-expanded={false}
               onClick={openReactions}
             >
-              <span className="message-react-trigger__emoji" aria-hidden="true">😊</span>
+              <span className="message-react-trigger__emoji" aria-hidden="true">
+                <Twemoji emoji="😊" />
+              </span>
               <span className="message-react-trigger__plus" aria-hidden="true">
                 <PlusIcon />
               </span>
@@ -710,7 +705,7 @@ function ChatMessageBubble({
                 onClick={() => handleReactionPick(emoji)}
                 aria-label={`Реакция ${emoji}`}
               >
-                {emoji}
+                <Twemoji emoji={emoji} />
               </button>
             ))}
             {/* Кнопка 😊+ только до раскрытия полного пикера */}
@@ -723,7 +718,7 @@ function ChatMessageBubble({
                 aria-expanded={false}
               >
                 <span className="message-reaction-bar__expand-icon" aria-hidden="true">
-                  😊
+                  <Twemoji emoji="😊" />
                 </span>
                 <PlusIcon />
               </button>
@@ -755,7 +750,9 @@ function ChatMessageBubble({
               aria-label={`${emoji}, ${count}${reactedByMe ? ', ваша реакция' : ''}`}
               aria-pressed={reactedByMe}
             >
-              <span className="message-reaction-chip__emoji">{emoji}</span>
+              <span className="message-reaction-chip__emoji">
+                <Twemoji emoji={emoji} />
+              </span>
               {count > 1 && <span className="message-reaction-chip__count">{count}</span>}
             </button>
           ))}

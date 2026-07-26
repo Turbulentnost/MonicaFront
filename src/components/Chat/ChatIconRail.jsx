@@ -92,7 +92,7 @@ export function ChatIconRail({
           aria-label="Настройки аккаунта"
           title="Настройки аккаунта"
         >
-          <UserAvatar user={user} size={36} showOnline={!backMode} isOnline={!backMode} />
+          <UserAvatar user={user} size={30} showOnline={!backMode} isOnline={!backMode} />
         </button>
       </div>
     </nav>

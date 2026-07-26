@@ -4,9 +4,11 @@ import {
   getChatSubtitle,
   getChatTitle,
   getGroupAvatarUser,
+  isFavoritesChat,
   isGroupChat,
 } from '../../utils/chatDisplay';
 import { UserAvatar } from './UserAvatar';
+import { FavoritesAvatar } from './FavoritesAvatar';
 
 function IconPhone() {
   return (
@@ -54,19 +56,21 @@ export function ChatHeader({
   onStartVideoCall,
   callDisabled,
   onBack,
+  currentUserId = null,
 }) {
   const [, setTick] = useState(0);
   const group = isGroupChat(chat);
+  const favorites = isFavoritesChat(chat, currentUserId);
   const displayPartner = group ? getGroupAvatarUser(chat) : (partner || chat?.partner);
 
   useEffect(() => {
-    if (group || isOnline || !lastSeenAt) return undefined;
+    if (group || favorites || isOnline || !lastSeenAt) return undefined;
     const id = setInterval(() => setTick((n) => n + 1), 60000);
     return () => clearInterval(id);
-  }, [group, isOnline, lastSeenAt]);
+  }, [group, favorites, isOnline, lastSeenAt]);
 
   const title = chat
-    ? getChatTitle(chat)
+    ? getChatTitle(chat, currentUserId)
     : ([displayPartner?.first_name, displayPartner?.last_name].filter(Boolean).join(' ')
       || displayPartner?.nickname
       || '—');
@@ -75,6 +79,7 @@ export function ChatHeader({
     ? getChatSubtitle(chat, {
       isOnline,
       lastSeenText: formatLastSeen(lastSeenAt),
+      currentUserId,
     })
     : (isOnline ? 'в сети' : formatLastSeen(lastSeenAt));
 
@@ -107,22 +112,26 @@ export function ChatHeader({
         aria-label="Показать или скрыть детали чата"
         title="Детали чата"
       >
-        <UserAvatar
-          user={displayPartner}
-          size={40}
-          showOnline={!group}
-          isOnline={isOnline}
-          className={group ? 'chat-header-avatar--group' : ''}
-        />
+        {favorites ? (
+          <FavoritesAvatar size={40} className="chat-header-avatar--favorites" />
+        ) : (
+          <UserAvatar
+            user={displayPartner}
+            size={40}
+            showOnline={!group}
+            isOnline={isOnline}
+            className={group ? 'chat-header-avatar--group' : ''}
+          />
+        )}
         <div className="chat-header-info">
           <h3 className="chat-header-name">{title}</h3>
-          <span className={`chat-header-status ${!group && isOnline ? 'is-online' : 'is-offline'}`}>
+          <span className={`chat-header-status ${!group && !favorites && isOnline ? 'is-online' : 'is-offline'}`}>
             {statusText}
           </span>
         </div>
       </div>
 
-      {!group && (
+      {!group && !favorites && (
         <div className="chat-header-actions">
           <button
             type="button"

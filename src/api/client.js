@@ -75,6 +75,7 @@ export const chatsApi = {
   files: (chatId) => api.get(`/chats/${chatId}/files/`),
   messages: (chatId, params) => api.get(`/chats/${chatId}/messages/`, { params }),
   start: (recipientId) => api.post('/chats/start/', { recipient_id: recipientId }),
+  favorites: () => api.post('/chats/favorites/'),
   createGroup: ({ title, member_ids }) =>
     api.post('/chats/groups/', {
       title,

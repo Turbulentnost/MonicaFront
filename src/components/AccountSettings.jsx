@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { authApi } from '../api/client';
 import { UserAvatar } from './Chat/UserAvatar';
+import { ThemePicker } from './ThemePicker';
 
 function getErrorMessage(error) {
   const data = error.response?.data;
@@ -10,7 +11,7 @@ function getErrorMessage(error) {
   return typeof first === 'string' ? first : 'Не удалось сохранить изменения';
 }
 
-export function AccountSettings({ user, onUserUpdated, onClose }) {
+export function AccountSettings({ user, onUserUpdated, onClose, themeId, onThemeChange }) {
   const [form, setForm] = useState({
     first_name: '',
     last_name: '',
@@ -138,6 +139,13 @@ export function AccountSettings({ user, onUserUpdated, onClose }) {
         </section>
 
         <div className="account-settings__divider" />
+
+        {typeof onThemeChange === 'function' && (
+          <>
+            <ThemePicker themeId={themeId} onThemeChange={onThemeChange} />
+            <div className="account-settings__divider" />
+          </>
+        )}
 
         <div className="account-settings__fields">
           <label>
