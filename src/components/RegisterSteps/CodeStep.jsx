@@ -51,9 +51,9 @@ export default function CodeStep({
     <form onSubmit={handleSubmit} className="auth-form-body" noValidate>
       <h2 className="auth-title">Подтверждение номера</h2>
       <p className="auth-helper">
-        Откройте Telegram, подтвердите номер {phoneLabel || ''}
+        Нажмите кнопку ниже — откроется бот со ссылкой
         <br />
-        кнопкой в боте — он сразу пришлёт код.
+        для номера {phoneLabel || ''} и сразу пришлёт код.
       </p>
 
       {telegramUrl ? (

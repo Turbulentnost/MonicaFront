@@ -35,9 +35,9 @@ export default function PhoneStep({ phone, setPhone, onNext }) {
     <form onSubmit={handleSubmit} className="auth-form-body" noValidate>
       <h2 className="auth-title">Регистрация</h2>
       <p className="auth-helper">
-        Введите номер телефона — подтвердим его
+        Введите номер телефона — откроем Telegram
         <br />
-        через Telegram-бота и пришлём код.
+        и бот пришлёт код именно для этого номера.
       </p>
       <AuthInput
         id="register-phone"
