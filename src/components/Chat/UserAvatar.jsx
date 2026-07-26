@@ -4,7 +4,8 @@ import { getCachedAvatarSrc, warmAvatarCache } from '../../utils/avatarCache';
 export function UserAvatar({ user, size = 40, className = '', showOnline = false, isOnline = false }) {
   const label = user?.nickname || user?.first_name || '?';
   const initials = label.slice(0, 2).toUpperCase();
-  const style = { width: size, height: size, fontSize: Math.max(12, size * 0.35) };
+  const wrapStyle = { width: size, height: size };
+  const fallbackStyle = { fontSize: Math.max(12, size * 0.35) };
   const photoKey = user?.photo || (user?.id ? String(user.id) : null);
   const remoteUrl = user?.photo_url || null;
 
@@ -36,18 +37,17 @@ export function UserAvatar({ user, size = 40, className = '', showOnline = false
   const dotSize = Math.max(8, Math.round(size * 0.22));
 
   return (
-    <div className={`user-avatar-wrap ${className}`} style={{ width: size, height: size }}>
+    <div className={`user-avatar-wrap ${className}`} style={wrapStyle}>
       {src ? (
         <img
           src={src}
           alt={label}
           className="user-avatar"
-          style={style}
           loading="lazy"
           decoding="async"
         />
       ) : (
-        <div className="user-avatar user-avatar-fallback" style={style}>
+        <div className="user-avatar user-avatar-fallback" style={fallbackStyle}>
           {initials}
         </div>
       )}

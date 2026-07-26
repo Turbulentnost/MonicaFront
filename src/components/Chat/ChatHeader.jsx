@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react';
 import { formatLastSeen } from '../../utils/formatLastSeen';
+import {
+  getChatSubtitle,
+  getChatTitle,
+  getGroupAvatarUser,
+  isGroupChat,
+} from '../../utils/chatDisplay';
 import { UserAvatar } from './UserAvatar';
 
 function IconPhone() {
@@ -37,6 +43,7 @@ function IconLock() {
 }
 
 export function ChatHeader({
+  chat = null,
   partner,
   isOnline,
   lastSeenAt,
@@ -49,23 +56,30 @@ export function ChatHeader({
   onBack,
 }) {
   const [, setTick] = useState(0);
+  const group = isGroupChat(chat);
+  const displayPartner = group ? getGroupAvatarUser(chat) : (partner || chat?.partner);
 
   useEffect(() => {
-    if (isOnline || !lastSeenAt) return undefined;
+    if (group || isOnline || !lastSeenAt) return undefined;
     const id = setInterval(() => setTick((n) => n + 1), 60000);
     return () => clearInterval(id);
-  }, [isOnline, lastSeenAt]);
+  }, [group, isOnline, lastSeenAt]);
 
-  const fullName = [partner?.first_name, partner?.last_name].filter(Boolean).join(' ')
-    || partner?.nickname
-    || '—';
+  const title = chat
+    ? getChatTitle(chat)
+    : ([displayPartner?.first_name, displayPartner?.last_name].filter(Boolean).join(' ')
+      || displayPartner?.nickname
+      || '—');
 
-  const statusText = isOnline
-    ? 'в сети'
-    : formatLastSeen(lastSeenAt);
+  const statusText = chat
+    ? getChatSubtitle(chat, {
+      isOnline,
+      lastSeenText: formatLastSeen(lastSeenAt),
+    })
+    : (isOnline ? 'в сети' : formatLastSeen(lastSeenAt));
 
   return (
-    <div className="chat-header">
+    <div className={`chat-header${group ? ' chat-header--group' : ''}`}>
       {onBack && (
         <button
           type="button"
@@ -93,47 +107,55 @@ export function ChatHeader({
         aria-label="Показать или скрыть детали чата"
         title="Детали чата"
       >
-        <UserAvatar user={partner} size={40} showOnline isOnline={isOnline} />
+        <UserAvatar
+          user={displayPartner}
+          size={40}
+          showOnline={!group}
+          isOnline={isOnline}
+          className={group ? 'chat-header-avatar--group' : ''}
+        />
         <div className="chat-header-info">
-          <h3 className="chat-header-name">{fullName}</h3>
-          <span className={`chat-header-status ${isOnline ? 'is-online' : 'is-offline'}`}>
+          <h3 className="chat-header-name">{title}</h3>
+          <span className={`chat-header-status ${!group && isOnline ? 'is-online' : 'is-offline'}`}>
             {statusText}
           </span>
         </div>
       </div>
 
-      <div className="chat-header-actions">
-        <button
-          type="button"
-          className="chat-header-icon-btn"
-          onClick={onInvitePrivate}
-          disabled={privateBusy}
-          title="Пригласить в приватный чат"
-          aria-label="Приватный чат"
-        >
-          <IconLock />
-        </button>
-        <button
-          type="button"
-          className="chat-header-icon-btn"
-          onClick={onStartCall}
-          disabled={callDisabled}
-          title={callDisabled ? 'Звонок уже выполняется' : 'Аудиозвонок'}
-          aria-label="Начать аудиозвонок"
-        >
-          <IconPhone />
-        </button>
-        <button
-          type="button"
-          className="chat-header-icon-btn"
-          onClick={onStartVideoCall}
-          disabled={callDisabled}
-          title={callDisabled ? 'Звонок уже выполняется' : 'Видеозвонок'}
-          aria-label="Начать видеозвонок"
-        >
-          <IconVideo />
-        </button>
-      </div>
+      {!group && (
+        <div className="chat-header-actions">
+          <button
+            type="button"
+            className="chat-header-icon-btn"
+            onClick={onInvitePrivate}
+            disabled={privateBusy}
+            title="Пригласить в приватный чат"
+            aria-label="Приватный чат"
+          >
+            <IconLock />
+          </button>
+          <button
+            type="button"
+            className="chat-header-icon-btn"
+            onClick={onStartCall}
+            disabled={callDisabled}
+            title={callDisabled ? 'Звонок уже выполняется' : 'Аудиозвонок'}
+            aria-label="Начать аудиозвонок"
+          >
+            <IconPhone />
+          </button>
+          <button
+            type="button"
+            className="chat-header-icon-btn"
+            onClick={onStartVideoCall}
+            disabled={callDisabled}
+            title={callDisabled ? 'Звонок уже выполняется' : 'Видеозвонок'}
+            aria-label="Начать видеозвонок"
+          >
+            <IconVideo />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

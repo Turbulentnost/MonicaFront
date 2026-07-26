@@ -26,13 +26,17 @@ import { MessageBubble } from '../components/Chat/MessageBubble';
 import { NotificationBell } from '../components/Chat/NotificationBell';
 import { CodeEditorInput } from '../components/Chat/CodeEditorInput';
 import { EmojiPicker } from '../components/Chat/EmojiPicker';
+import { StickerStorePage } from '../components/Chat/StickerStorePage';
 import { PrivatePanel } from '../components/Chat/PrivatePanel';
+import { getInstalledStickerPackIds } from '../utils/stickerLibrary';
+import { encodeStickerMessage, isStickerMessageContent } from '../utils/stickerPayload';
 import { UserSearchResult } from '../components/Chat/UserSearchResult';
 import { IncomingCallOverlay } from '../components/Chat/IncomingCallOverlay';
 import { CallScreen } from '../components/Chat/CallScreen';
 import { SelectionHeader } from '../components/Chat/SelectionHeader';
 import { SelectionToolbar } from '../components/Chat/SelectionToolbar';
 import { ForwardPickerModal } from '../components/Chat/ForwardPickerModal';
+import { CreateGroupModal } from '../components/Chat/CreateGroupModal';
 import { QuoteComposerBar } from '../components/Chat/QuoteComposerBar';
 import { SendIconButton } from '../components/Chat/SendIconButton';
 import { UploadProgressRing } from '../components/Chat/UploadProgressRing';
@@ -46,6 +50,7 @@ import {
   dataUrlToBackgroundFile,
   getChatBackground,
 } from '../utils/chatBackground';
+import { getChatTitle, isGroupChat } from '../utils/chatDisplay';
 import { API_URL } from '../config';
 import { VoiceRecorder, canUseMicrophone } from '../utils/voiceRecorder';
 
@@ -105,6 +110,8 @@ export default function ChatsPage() {
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(true);
   const [chatBackground, setChatBackgroundState] = useState(null);
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
+  const [stickerStoreOpen, setStickerStoreOpen] = useState(false);
+  const [installedStickerPackIds, setInstalledStickerPackIds] = useState(() => getInstalledStickerPackIds());
   const [isFileDragOver, setIsFileDragOver] = useState(false);
   const fileDragDepthRef = useRef(0);
   const [messageReactions, setMessageReactions] = useState({});
@@ -112,6 +119,7 @@ export default function ChatsPage() {
   const [selectedMessageIds, setSelectedMessageIds] = useState([]);
   const [requestEditMessageId, setRequestEditMessageId] = useState(null);
   const [forwardPickerOpen, setForwardPickerOpen] = useState(false);
+  const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [pendingForward, setPendingForward] = useState(null);
   const [replyTo, setReplyTo] = useState(null);
   const [forwardBusy, setForwardBusy] = useState(false);
@@ -160,7 +168,14 @@ export default function ChatsPage() {
 
   const loadChats = useCallback(async () => {
     const { data } = await chatsApi.list();
-    setChats(data);
+    const list = Array.isArray(data) ? data : [];
+    setChats(list);
+    setSelectedChat((prev) => {
+      if (!prev?.id) return prev;
+      const fresh = list.find((item) => String(item.id) === String(prev.id));
+      return fresh || prev;
+    });
+    return list;
   }, []);
 
   useEffect(() => {
@@ -323,6 +338,7 @@ export default function ChatsPage() {
     }
     clearPendingAttachments();
     setAccountSettingsOpen(false);
+    setStickerStoreOpen(false);
     if (typeof window !== 'undefined' && window.matchMedia(MOBILE_CHAT_QUERY).matches) {
       setDetailsPanelOpen(false);
     }
@@ -1316,7 +1332,9 @@ export default function ChatsPage() {
           id: replyTo.id,
           chat: selectedChat.id,
           sender: replyTo.sender,
-          preview: replyTo.content || replyTo.caption || replyTo.file_name || 'Сообщение',
+          preview: isStickerMessageContent(replyTo.content)
+            ? 'Стикер'
+            : (replyTo.content || replyTo.caption || replyTo.file_name || 'Сообщение'),
           message_type: replyTo.message_type,
         },
       } : {});
@@ -1615,7 +1633,7 @@ export default function ChatsPage() {
     clearEmojiHideTimeout();
     emojiHideTimeoutRef.current = setTimeout(() => {
       setEmojiPickerVisible(false);
-    }, 150);
+    }, 280);
   }, [clearEmojiHideTimeout]);
 
   const handleEmojiSelect = useCallback(
@@ -1624,6 +1642,81 @@ export default function ChatsPage() {
     },
     [handleInputChange, input]
   );
+
+  const handleStickerSelect = useCallback(
+    async (sticker) => {
+      if (!selectedChat || uploading || forwardBusy || pendingForward || voiceRecording) return;
+      if (!connected) {
+        setAttachError('Нет соединения с чатом — подождите и попробуйте снова');
+        return;
+      }
+      clearEmojiHideTimeout();
+      setEmojiPickerVisible(false);
+      stopTyping();
+      setAttachError('');
+
+      // Custom image stickers (data URLs) go through photo upload so peers can see them.
+      if (sticker.type === 'image' && String(sticker.src || '').startsWith('data:')) {
+        try {
+          setUploading(true);
+          const res = await fetch(sticker.src);
+          const blob = await res.blob();
+          const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+          const file = new File([blob], `${sticker.label || 'sticker'}.${ext}`, {
+            type: blob.type || 'image/png',
+          });
+          await uploadAndSendFiles([file]);
+        } catch (err) {
+          setAttachError(err.message || 'Не удалось отправить стикер');
+        } finally {
+          setUploading(false);
+        }
+        return;
+      }
+
+      const content = encodeStickerMessage(sticker);
+      const replyMeta = replyTo
+        ? {
+          reply_to: replyTo.id,
+          reply_to_summary: {
+            id: replyTo.id,
+            chat: selectedChat.id,
+            sender: replyTo.sender,
+            preview: isStickerMessageContent(replyTo.content)
+              ? 'Стикер'
+              : (replyTo.content || replyTo.caption || replyTo.file_name || 'Сообщение'),
+            message_type: replyTo.message_type,
+          },
+        }
+        : {};
+      const ok = enqueueOptimistic(content, 'text', replyMeta);
+      if (!ok) {
+        setAttachError('Не удалось отправить стикер');
+        return;
+      }
+      setReplyTo(null);
+    },
+    [
+      selectedChat,
+      uploading,
+      forwardBusy,
+      pendingForward,
+      voiceRecording,
+      connected,
+      clearEmojiHideTimeout,
+      stopTyping,
+      enqueueOptimistic,
+      uploadAndSendFiles,
+      replyTo,
+    ]
+  );
+
+  const handleOpenStickerStore = useCallback(() => {
+    clearEmojiHideTimeout();
+    setEmojiPickerVisible(false);
+    setAccountSettingsOpen(false);
+    setStickerStoreOpen(true);
+  }, [clearEmojiHideTimeout]);
 
   useEffect(() => () => clearEmojiHideTimeout(), [clearEmojiHideTimeout]);
 
@@ -1671,6 +1764,39 @@ export default function ChatsPage() {
       partner: data.partner,
       last_message: null,
       updated_at: new Date().toISOString(),
+      is_group: false,
+      chat_type: 'direct',
+    };
+    await handleSelectChat(chat);
+  };
+
+  const handleCreateGroup = async ({ title, member_ids }) => {
+    const { data } = await chatsApi.createGroup({
+      title,
+      member_ids: (member_ids || []).map((id) => String(id)),
+    });
+    setCreateGroupOpen(false);
+    let list = [];
+    try {
+      const listed = await chatsApi.list();
+      list = Array.isArray(listed.data) ? listed.data : [];
+      setChats(list);
+    } catch {
+      await loadChats();
+    }
+    const fromList = list.find((item) => String(item.id) === String(data.id));
+    const chat = fromList || {
+      ...data,
+      title: data.title || title,
+      partner: data.partner ?? null,
+      members: Array.isArray(data.members) ? data.members : [],
+      members_count: data.members_count
+        ?? (Array.isArray(data.members) ? data.members.length : member_ids.length + 1),
+      is_group: data.is_group ?? true,
+      chat_type: data.chat_type || 'group',
+      last_message: data.last_message ?? null,
+      updated_at: data.updated_at || new Date().toISOString(),
+      background_url: data.background_url ?? null,
     };
     await handleSelectChat(chat);
   };
@@ -1711,12 +1837,14 @@ export default function ChatsPage() {
   }, [chats, isChatUnread, selectedChat, titleTick]);
 
   const openChatTitle = useMemo(() => {
-    const partner = selectedChat?.partner;
+    if (!selectedChat) return 'Monica';
+    if (isGroupChat(selectedChat)) return getChatTitle(selectedChat) || 'Monica';
+    const partner = selectedChat.partner;
     if (!partner) return 'Monica';
     if (partner.nickname) return `@${partner.nickname}`;
     const fullName = [partner.first_name, partner.last_name].filter(Boolean).join(' ');
     return fullName || 'Monica';
-  }, [selectedChat?.partner]);
+  }, [selectedChat]);
 
   const filteredChats = useMemo(() => {
     let list;
@@ -1924,14 +2052,14 @@ export default function ChatsPage() {
         privateSessionId ? 'with-private' : '',
         isSpecialFavoritesOpen ? 'chats-page--special' : '',
         isBackModeOpen ? 'chats-page--back' : '',
-        selectedChat || routeChatId || accountSettingsOpen ? 'has-selected-chat' : '',
-        isMobileViewport && !routeChatId && !accountSettingsOpen ? 'chats-page--mobile-list' : '',
-        isMobileViewport && (routeChatId || accountSettingsOpen) ? 'chats-page--mobile-chat' : '',
+        selectedChat || routeChatId || accountSettingsOpen || stickerStoreOpen ? 'has-selected-chat' : '',
+        isMobileViewport && !routeChatId && !accountSettingsOpen && !stickerStoreOpen ? 'chats-page--mobile-list' : '',
+        isMobileViewport && (routeChatId || accountSettingsOpen || stickerStoreOpen) ? 'chats-page--mobile-chat' : '',
         callScreenVisible ? 'chats-page--call-active' : '',
-        !callScreenVisible && detailsPanelOpen && selectedChat && !accountSettingsOpen
+        !callScreenVisible && detailsPanelOpen && selectedChat && !accountSettingsOpen && !stickerStoreOpen
           ? 'chats-page--details-open'
           : '',
-        accountSettingsOpen ? 'chats-page--settings-open' : '',
+        accountSettingsOpen || stickerStoreOpen ? 'chats-page--settings-open' : '',
       ]
         .filter(Boolean)
         .join(' ')}
@@ -1964,12 +2092,13 @@ export default function ChatsPage() {
         user={user}
         onLogout={handleLogout}
         onOpenSettings={() => {
+          setStickerStoreOpen(false);
           setAccountSettingsOpen(true);
           setDetailsPanelOpen(false);
           setIsSpecialFavoritesOpen(false);
           setIsBackModeOpen(false);
         }}
-        settingsActive={accountSettingsOpen}
+        settingsActive={accountSettingsOpen || stickerStoreOpen}
         specialMode={isSpecialFavoritesOpen}
         backMode={isBackModeOpen}
       />
@@ -1977,6 +2106,17 @@ export default function ChatsPage() {
         <div className="sidebar-header">
           <h2>{isBackModeOpen ? 'Пустота' : isSpecialFavoritesOpen ? 'Chats' : 'Чаты'}</h2>
           <div className="sidebar-header-actions">
+            <button
+              type="button"
+              className="sidebar-create-group"
+              onClick={() => setCreateGroupOpen(true)}
+              title="Новая группа"
+              aria-label="Создать группу"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+              </svg>
+            </button>
             <NotificationBell
               open={notifOpen}
               onToggle={() => setNotifOpen((v) => !v)}
@@ -2053,6 +2193,11 @@ export default function ChatsPage() {
           onUserUpdated={updateUser}
           onClose={() => setAccountSettingsOpen(false)}
         />
+      ) : stickerStoreOpen ? (
+        <StickerStorePage
+          onClose={() => setStickerStoreOpen(false)}
+          onLibraryChange={setInstalledStickerPackIds}
+        />
       ) : (
         <>
       <main
@@ -2087,6 +2232,7 @@ export default function ChatsPage() {
               />
             ) : (
               <ChatHeader
+                chat={selectedChat}
                 partner={selectedChat.partner}
                 isOnline={isOnline(selectedChat.partner?.id, selectedChat.partner?.is_online)}
                 lastSeenAt={getLastSeen(
@@ -2098,11 +2244,15 @@ export default function ChatsPage() {
                 onOpenDetails={() => setDetailsPanelOpen((open) => !open)}
                 onStartCall={handleStartCall}
                 onStartVideoCall={handleStartVideoCall}
-                callDisabled={!selectedChat?.partner || !['idle', 'ended'].includes(callController.status)}
+                callDisabled={
+                  isGroupChat(selectedChat)
+                  || !selectedChat?.partner
+                  || !['idle', 'ended'].includes(callController.status)
+                }
                 onBack={isMobileViewport ? handleBackToChatList : undefined}
               />
             )}
-            {invitePending && !privateSessionId && !selectionMode && (
+            {invitePending && !privateSessionId && !selectionMode && !isGroupChat(selectedChat) && (
               <div className="private-invite-banner">
                 <span>Приглашение отправлено — ожидание ответа…</span>
                 <button
@@ -2133,7 +2283,7 @@ export default function ChatsPage() {
                     <MessageBubble
                       key={msg.id}
                       message={msg}
-                      isOwn={msg.sender?.id === user?.id}
+                      isOwn={String(msg.sender?.id) === String(user?.id)}
                       onDelete={handleDeleteMessage}
                       onEdit={handleEditMessage}
                       chatId={selectedChat.id}
@@ -2155,9 +2305,14 @@ export default function ChatsPage() {
                   ))}
                 </div>
               ))}
-              {partnerTyping && (
+              {partnerTyping && !isGroupChat(selectedChat) && (
                 <div className="typing-indicator">
                   @{selectedChat.partner?.nickname} печатает...
+                </div>
+              )}
+              {partnerTyping && isGroupChat(selectedChat) && (
+                <div className="typing-indicator">
+                  Печатают...
                 </div>
               )}
               <div ref={messagesEndRef} />
@@ -2356,6 +2511,9 @@ export default function ChatsPage() {
                         specialMode={isSpecialFavoritesOpen}
                         backMode={isBackModeOpen}
                         onSelect={handleEmojiSelect}
+                        onStickerSelect={handleStickerSelect}
+                        onOpenStore={handleOpenStickerStore}
+                        installedPackIds={installedStickerPackIds}
                       />
                     </div>
                   )}
@@ -2533,6 +2691,7 @@ export default function ChatsPage() {
             />
             <ChatDetailsPanel
               chatId={selectedChat.id}
+              chat={selectedChat}
               partner={selectedChat.partner}
               isOnline={isOnline(selectedChat.partner?.id, selectedChat.partner?.is_online)}
               onClose={() => setDetailsPanelOpen(false)}
@@ -2561,7 +2720,7 @@ export default function ChatsPage() {
       )}
       {forwardPickerOpen && (
         <ForwardPickerModal
-          chats={chats}
+          chats={chats.filter((chat) => !isGroupChat(chat))}
           currentUserId={user?.id}
           onSelect={chooseForwardTarget}
           onClose={() => setForwardPickerOpen(false)}
@@ -2578,6 +2737,14 @@ export default function ChatsPage() {
         />
       )}
         </>
+      )}
+      {createGroupOpen && (
+        <CreateGroupModal
+          chats={chats}
+          currentUserId={user?.id}
+          onCreate={handleCreateGroup}
+          onClose={() => setCreateGroupOpen(false)}
+        />
       )}
       </div>
     </div>

@@ -7,6 +7,13 @@ import {
   fileToBackgroundFile,
 } from '../../utils/chatBackground';
 import pngIcon from '../../design-references/icons/png-svgrepo-com.svg';
+import {
+  formatMembersCount,
+  getChatTitle,
+  getGroupAvatarUser,
+  getMembersCount,
+  isGroupChat,
+} from '../../utils/chatDisplay';
 import { FileTypeIcon } from './FileTypeIcon';
 import { PhotoLightbox } from './PhotoGallery';
 import { UserAvatar } from './UserAvatar';
@@ -171,7 +178,11 @@ function formatSearchTime(iso) {
 
 function getSearchPreview(message) {
   if (!message) return '';
-  if (message.message_type === 'text') return (message.content || '').trim();
+  if (message.message_type === 'text') {
+    const content = (message.content || '').trim();
+    if (content.startsWith('monica-sticker')) return 'Стикер';
+    return content;
+  }
   if (message.message_type === 'photo') {
     const caption = getPhotoCaption(message);
     return caption || 'Фото';
@@ -196,6 +207,7 @@ function getSearchPreview(message) {
 
 export function ChatDetailsPanel({
   chatId,
+  chat = null,
   partner,
   isOnline,
   onClose,
@@ -205,6 +217,9 @@ export function ChatDetailsPanel({
   onBackgroundChange,
   backgroundUrl = null,
 }) {
+  const group = isGroupChat(chat);
+  const members = Array.isArray(chat?.members) ? chat.members : [];
+  const displayUser = group ? getGroupAvatarUser(chat) : partner;
   const [activeTab, setActiveTab] = useState('shared');
   const [fileMessages, setFileMessages] = useState([]);
   const [filesLoading, setFilesLoading] = useState(false);
@@ -310,9 +325,9 @@ export function ChatDetailsPanel({
     };
   }, [chatId]);
 
-  // Members tab: retry media load if the shared files request previously failed.
+  // Members tab (direct chats): retry media load if the shared files request previously failed.
   useEffect(() => {
-    if (activeTab !== 'members' || !chatId || filesLoading || !filesError) return undefined;
+    if (group || activeTab !== 'members' || !chatId || filesLoading || !filesError) return undefined;
 
     let cancelled = false;
     setFilesLoading(true);
@@ -331,7 +346,7 @@ export function ChatDetailsPanel({
     return () => {
       cancelled = true;
     };
-  }, [activeTab, chatId, filesLoading, filesError]);
+  }, [group, activeTab, chatId, filesLoading, filesError]);
 
   useEffect(() => {
     const query = searchQuery.trim();
@@ -373,16 +388,42 @@ export function ChatDetailsPanel({
   const searchActive = searchQuery.trim().length >= 2;
   const photosLoading = filesLoading;
   const photosError = filesError;
+  const tabs = useMemo(() => (
+    group
+      ? [
+        { id: 'shared', label: specialMode ? 'Files' : 'Файлы' },
+        { id: 'members', label: specialMode ? 'Members' : 'Участники' },
+        { id: 'pinned', label: specialMode ? 'Pinned' : 'Закреп' },
+      ]
+      : TABS
+  ), [group, specialMode]);
 
-  if (!partner) return null;
+  if (!group && !partner) return null;
 
   const panelClass = [
     'chat-details',
     specialMode ? 'chat-details--special' : '',
     backMode ? 'chat-details--back' : '',
+    group ? 'chat-details--group' : '',
   ]
     .filter(Boolean)
     .join(' ');
+
+  const profileTitle = group
+    ? getChatTitle(chat)
+    : backMode
+      ? `${partner.first_name} ${partner.last_name}`
+      : specialMode
+        ? (`${partner.first_name} ${partner.last_name}`.trim() || partner.nickname)
+        : `${partner.first_name} ${partner.last_name}`;
+
+  const profileSub = group
+    ? formatMembersCount(getMembersCount(chat))
+    : backMode
+      ? `@${partner.nickname} · давно ушёл`
+      : specialMode
+        ? `@${partner.nickname} · dev channel`
+        : `@${partner.nickname}`;
 
   return (
     <aside className={panelClass} aria-label="Детали чата">
@@ -514,31 +555,22 @@ export function ChatDetailsPanel({
       <div className="chat-details__profile">
         {!specialMode && (
           <UserAvatar
-            user={partner}
+            user={displayUser}
             size={56}
-            showOnline={!backMode}
-            isOnline={backMode ? false : isOnline}
+            showOnline={!backMode && !group}
+            isOnline={backMode || group ? false : isOnline}
+            className={group ? 'chat-details__avatar--group' : ''}
           />
         )}
         <h3 className="chat-details__name">
-          {backMode
-            ? `${partner.first_name} ${partner.last_name}`
-            : specialMode
-              ? (
-                <>
-                  <span className="chat-details__hash">#</span>
-                  {`${partner.first_name} ${partner.last_name}`.trim() || partner.nickname}
-                </>
-              )
-              : `${partner.first_name} ${partner.last_name}`}
+          {specialMode && !group ? (
+            <>
+              <span className="chat-details__hash">#</span>
+              {profileTitle}
+            </>
+          ) : profileTitle}
         </h3>
-        <p className="chat-details__sub">
-          {backMode
-            ? `@${partner.nickname} · давно ушёл`
-            : specialMode
-              ? `@${partner.nickname} · dev channel`
-              : `@${partner.nickname}`}
-        </p>
+        <p className="chat-details__sub">{profileSub}</p>
       </div>
 
       <div className="chat-details__search">
@@ -595,7 +627,7 @@ export function ChatDetailsPanel({
       )}
 
       <div className="chat-details__tabs" role="tablist">
-        {TABS.map((tab) => (
+        {tabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
@@ -677,7 +709,47 @@ export function ChatDetailsPanel({
         </div>
       )}
 
-      {activeTab === 'members' && (
+      {activeTab === 'members' && group && (
+        <div className="chat-details__section">
+          <div className="chat-details__section-head">
+            <span>{specialMode ? 'Members' : 'Участники'}</span>
+            {members.length > 0 && (
+              <span className="chat-details__count">{members.length}</span>
+            )}
+          </div>
+          {members.length === 0 ? (
+            <p className="chat-details__placeholder">
+              Список участников появится после ответа сервера
+            </p>
+          ) : (
+            <ul className="chat-details__members">
+              {members.map((member) => {
+                const fullName = [member.first_name, member.last_name].filter(Boolean).join(' ');
+                return (
+                  <li key={member.id} className="chat-details__member">
+                    <UserAvatar user={member} size={40} />
+                    <span className="chat-details__member-text">
+                      <strong>@{member.nickname || 'user'}</strong>
+                      {fullName ? <small>{fullName}</small> : null}
+                      {member.role ? (
+                        <em className="chat-details__member-role">
+                          {member.role === 'owner'
+                            ? 'владелец'
+                            : member.role === 'admin'
+                              ? 'админ'
+                              : 'участник'}
+                        </em>
+                      ) : null}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'members' && !group && (
         <div className="chat-details__section">
           <div className="chat-details__section-head">
             <span>{specialMode ? 'Shared photos' : 'Фотографии'}</span>

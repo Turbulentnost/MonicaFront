@@ -22,15 +22,39 @@ export function galleryRowSizes(count) {
   return [5, 5];
 }
 
-function GalleryThumb({ item, onOpen }) {
+const PREVIEW_MIN = 180;
+const PREVIEW_MAX_W = 320;
+const PREVIEW_MAX_H = 420;
+
+function fitPhotoSize(naturalW, naturalH, { minSide, maxW, maxH }) {
+  let w = Math.max(1, naturalW);
+  let h = Math.max(1, naturalH);
+
+  // Upscale tiny images so they stay readable in chat / lightbox.
+  if (w < minSide && h < minSide) {
+    const scale = minSide / Math.max(w, h);
+    w *= scale;
+    h *= scale;
+  }
+
+  const down = Math.min(1, maxW / w, maxH / h);
+  return {
+    width: Math.round(w * down),
+    height: Math.round(h * down),
+  };
+}
+
+function GalleryThumb({ item, onOpen, single = false }) {
   const key = item.path;
   const remote = item.content_url;
   const [src, setSrc] = useState(() => getCachedMediaSrc(key, remote));
+  const [sizeStyle, setSizeStyle] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
     const cached = getCachedMediaSrc(key, remote);
     setSrc(cached);
+    setSizeStyle(null);
     if (key && remote) {
       warmMediaCache(key, remote).then((url) => {
         if (!cancelled && url) setSrc(url);
@@ -40,6 +64,19 @@ function GalleryThumb({ item, onOpen }) {
       cancelled = true;
     };
   }, [key, remote]);
+
+  const handleLoad = (event) => {
+    if (!single) return;
+    const { naturalWidth, naturalHeight } = event.currentTarget;
+    if (!naturalWidth || !naturalHeight) return;
+    setSizeStyle(
+      fitPhotoSize(naturalWidth, naturalHeight, {
+        minSide: PREVIEW_MIN,
+        maxW: PREVIEW_MAX_W,
+        maxH: PREVIEW_MAX_H,
+      })
+    );
+  };
 
   if (!src) {
     return (
@@ -50,8 +87,19 @@ function GalleryThumb({ item, onOpen }) {
   }
 
   return (
-    <button type="button" className="photo-gallery__cell" onClick={onOpen}>
-      <img src={src} alt={item.file_name || 'Фото'} loading="lazy" decoding="async" />
+    <button
+      type="button"
+      className={`photo-gallery__cell${single ? ' photo-gallery__cell--single' : ''}`}
+      onClick={onOpen}
+    >
+      <img
+        src={src}
+        alt={item.file_name || 'Фото'}
+        loading="lazy"
+        decoding="async"
+        onLoad={handleLoad}
+        style={single && sizeStyle ? sizeStyle : undefined}
+      />
     </button>
   );
 }
@@ -62,6 +110,7 @@ export function PhotoLightbox({ items, index, onClose, onChange }) {
   const remote = current?.content_url;
   const [src, setSrc] = useState(() => getCachedMediaSrc(key, remote));
   const [host, setHost] = useState(null);
+  const [sizeStyle, setSizeStyle] = useState(null);
 
   useEffect(() => {
     setHost(getLightboxHost());
@@ -71,6 +120,7 @@ export function PhotoLightbox({ items, index, onClose, onChange }) {
     let cancelled = false;
     const cached = getCachedMediaSrc(key, remote);
     setSrc(cached);
+    setSizeStyle(null);
     if (key && remote) {
       warmMediaCache(key, remote).then((url) => {
         if (!cancelled && url) setSrc(url);
@@ -80,6 +130,21 @@ export function PhotoLightbox({ items, index, onClose, onChange }) {
       cancelled = true;
     };
   }, [key, remote]);
+
+  const handleImageLoad = (event) => {
+    const { naturalWidth, naturalHeight } = event.currentTarget;
+    if (!naturalWidth || !naturalHeight) return;
+    const maxW = Math.min(920, Math.floor(window.innerWidth * 0.9));
+    const maxH = Math.floor(window.innerHeight * 0.82);
+    const minSide = Math.min(360, Math.floor(Math.min(maxW, maxH) * 0.55));
+    setSizeStyle(
+      fitPhotoSize(naturalWidth, naturalHeight, {
+        minSide,
+        maxW,
+        maxH,
+      })
+    );
+  };
 
   const go = useCallback(
     (delta) => {
@@ -139,7 +204,13 @@ export function PhotoLightbox({ items, index, onClose, onChange }) {
       )}
       <div className="photo-lightbox__stage" onClick={(e) => e.stopPropagation()}>
         {src ? (
-          <img src={src} alt={current.file_name || 'Фото'} className="photo-lightbox__image" />
+          <img
+            src={src}
+            alt={current.file_name || 'Фото'}
+            className="photo-lightbox__image"
+            onLoad={handleImageLoad}
+            style={sizeStyle || undefined}
+          />
         ) : (
           <div className="photo-lightbox__empty">Загрузка…</div>
         )}
@@ -184,6 +255,7 @@ export function PhotoGallery({ items }) {
             <GalleryThumb
               key={item.path || `${rowIdx}-${colIdx}`}
               item={item}
+              single={photos.length === 1}
               onOpen={() => setLightboxIndex(absoluteIndex)}
             />
           );

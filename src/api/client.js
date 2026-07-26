@@ -75,6 +75,18 @@ export const chatsApi = {
   files: (chatId) => api.get(`/chats/${chatId}/files/`),
   messages: (chatId, params) => api.get(`/chats/${chatId}/messages/`, { params }),
   start: (recipientId) => api.post('/chats/start/', { recipient_id: recipientId }),
+  createGroup: ({ title, member_ids }) =>
+    api.post('/chats/groups/', {
+      title,
+      member_ids: (member_ids || []).map((id) => String(id)),
+    }),
+  updateChat: (chatId, payload) => api.patch(`/chats/${chatId}/`, payload),
+  addMembers: (chatId, userIds) =>
+    api.post(`/chats/${chatId}/members/`, {
+      user_ids: (userIds || []).map((id) => String(id)),
+    }),
+  removeMember: (chatId, userId) =>
+    api.delete(`/chats/${chatId}/members/${userId}/`),
   searchUsers: (q) => api.get('/users/search/', { params: { q } }),
   uploadMessageFiles: (chatId, files, { onUploadProgress } = {}) => {
     const form = new FormData();

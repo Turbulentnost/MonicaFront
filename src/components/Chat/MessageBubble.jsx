@@ -4,9 +4,12 @@ import { VoiceMessagePlayer } from './VoiceMessagePlayer';
 import { EmojiPicker } from './EmojiPicker';
 import { ForwardedBundle } from './ForwardedBundle';
 import { LinkPreviewCard } from './LinkPreviewCard';
+import { StickerView } from './StickerView';
 import { getEditableMessageText, getPhotoCaption } from '../../utils/messageText';
 import { linkifyText } from '../../utils/linkifyText';
 import { canDeleteForEveryone, canEditMessage } from '../../utils/messageActions';
+import { isStickerMessageContent, parseStickerMessage } from '../../utils/stickerPayload';
+import { copyMessagePhoto, getMessagePhotoSource } from '../../utils/copyImage';
 import {
   claimReactionBar,
   releaseReactionBar,
@@ -197,11 +200,18 @@ function ChatMessageBubble({
   const [pickerSide, setPickerSide] = useState('up');
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState('');
+  const [copyBusy, setCopyBusy] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState('');
   const wrapperRef = useRef(null);
   const editInputRef = useRef(null);
 
+  const stickerPayload = message.message_type === 'text'
+    ? parseStickerMessage(message.content)
+    : null;
+  const isStickerMessage = Boolean(stickerPayload);
+  const canCopyPhoto = Boolean(getMessagePhotoSource(message));
   const showDeleteForAll = canDeleteForEveryone(message, isOwn);
-  const showEdit = canEditMessage(message, isOwn);
+  const showEdit = !isStickerMessage && canEditMessage(message, isOwn);
   const delivery = getDeliveryStatus(message, isOwn);
   const isPending = delivery?.key === 'sending';
   const showReactionUi = !isPending && !editing && !selectionMode;
@@ -391,11 +401,12 @@ function ChatMessageBubble({
     closeReactions();
 
     const menuWidth = 188;
-    const menuHeight = 220;
+    const menuHeight = canCopyPhoto ? 260 : 220;
     const pad = 8;
     const x = Math.min(event.clientX, window.innerWidth - menuWidth - pad);
     const y = Math.min(event.clientY, window.innerHeight - menuHeight - pad);
     setContextMenu({ x: Math.max(pad, x), y: Math.max(pad, y) });
+    setCopyFeedback('');
   };
 
   const handleReply = (event) => {
@@ -413,6 +424,24 @@ function ChatMessageBubble({
   const handleForwardFromMenu = () => {
     closeContextMenu();
     onQuickForward?.(message);
+  };
+
+  const handleCopyPhoto = async () => {
+    if (!canCopyPhoto || copyBusy) return;
+    setCopyBusy(true);
+    setCopyFeedback('');
+    try {
+      await copyMessagePhoto(message);
+      setCopyFeedback('Скопировано');
+      window.setTimeout(() => {
+        closeContextMenu();
+        setCopyFeedback('');
+      }, 650);
+    } catch {
+      setCopyFeedback('Не удалось скопировать');
+    } finally {
+      setCopyBusy(false);
+    }
   };
 
   const renderContent = () => {
@@ -454,6 +483,13 @@ function ChatMessageBubble({
     }
 
     if (message.message_type === 'text') {
+      if (stickerPayload) {
+        return (
+          <div className="message-sticker">
+            <StickerView sticker={stickerPayload} size="chat" />
+          </div>
+        );
+      }
       return (
         <>
           <div className="message-content">
@@ -531,6 +567,7 @@ function ChatMessageBubble({
       className={[
         'message-wrapper',
         isOwn ? 'own' : 'other',
+        isStickerMessage ? 'is-sticker' : '',
         reactions.length ? 'has-reactions' : '',
         highlighted ? 'is-highlighted' : '',
         selected ? 'is-selected' : '',
@@ -581,10 +618,19 @@ function ChatMessageBubble({
         </button>
       )}
 
-      <div className={`message ${isOwn ? 'own' : 'other'}${isPending ? ' pending' : ''}`}>
-        <div className="message-header">
-          <div className="message-meta">{message.sender?.nickname}</div>
-        </div>
+      <div
+        className={[
+          'message',
+          isOwn ? 'own' : 'other',
+          isPending ? 'pending' : '',
+          isStickerMessage ? 'message--sticker' : '',
+        ].filter(Boolean).join(' ')}
+      >
+        {!isStickerMessage && (
+          <div className="message-header">
+            <div className="message-meta">{message.sender?.nickname}</div>
+          </div>
+        )}
         {message.reply_to_summary && (
           <button
             type="button"
@@ -595,7 +641,11 @@ function ChatMessageBubble({
             }}
           >
             <strong>@{message.reply_to_summary.sender?.nickname || 'user'}</strong>
-            <span>{message.reply_to_summary.preview || 'Сообщение'}</span>
+            <span>
+              {isStickerMessageContent(message.reply_to_summary.preview)
+                ? 'Стикер'
+                : (message.reply_to_summary.preview || 'Сообщение')}
+            </span>
           </button>
         )}
         {renderContent()}
@@ -616,7 +666,6 @@ function ChatMessageBubble({
             </span>
           )}
         </div>
-
       </div>
 
       {showReactionUi && (
@@ -687,6 +736,7 @@ function ChatMessageBubble({
                 specialMode={specialMode}
                 backMode={backMode}
                 onSelect={handleReactionPick}
+                emojiOnly
                 className="emoji-picker--reaction"
               />
             </div>
@@ -723,6 +773,16 @@ function ChatMessageBubble({
           {showEdit && (
             <button type="button" role="menuitem" onClick={startEdit}>
               Редактировать
+            </button>
+          )}
+          {canCopyPhoto && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={handleCopyPhoto}
+              disabled={copyBusy}
+            >
+              {copyFeedback || (copyBusy ? 'Копирование…' : 'Скопировать')}
             </button>
           )}
           {onReply && (

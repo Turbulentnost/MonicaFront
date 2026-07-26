@@ -8,6 +8,9 @@ function previewFor(message) {
     const count = message.forward_bundle?.length || 0;
     return `${count} пересланных сообщений`;
   }
+  if (message.message_type === 'text' && String(message.content || '').startsWith('monica-sticker')) {
+    return 'Стикер';
+  }
   return message.content || 'Сообщение';
 }
 

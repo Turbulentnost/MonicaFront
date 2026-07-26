@@ -33,7 +33,7 @@ export function SendIconButton({
           <UploadProgressRing
             progress={uploadProgress ?? 0}
             indeterminate={indeterminate}
-            size={26}
+            size={20}
             showLabel={false}
           />
         ) : (

@@ -1,9 +1,17 @@
 import { UserAvatar } from './UserAvatar';
 import { formatChatListTime } from '../../utils/formatChatDate';
 import { getPhotoCaption } from '../../utils/messageText';
+import {
+  getChatListName,
+  getGroupAvatarUser,
+  isGroupChat,
+} from '../../utils/chatDisplay';
 
 function formatPreview(lastMessage) {
   if (!lastMessage) return 'Нет сообщений';
+  if (lastMessage.message_type === 'text' && String(lastMessage.content || '').startsWith('monica-sticker')) {
+    return 'Стикер';
+  }
   if (lastMessage.message_type === 'photo') {
     const caption = getPhotoCaption(lastMessage);
     if (caption) return caption;
@@ -59,7 +67,9 @@ export function ChatListItem({
   onAcceptCall,
   onRejectCall,
 }) {
-  const partner = chat.partner;
+  const group = isGroupChat(chat);
+  const avatarUser = getGroupAvatarUser(chat);
+  const name = getChatListName(chat);
   const preview = formatPreview(chat.last_message);
   const timeLabel = formatChatListTime(
     chat.last_message?.sent_at || chat.updated_at
@@ -68,27 +78,39 @@ export function ChatListItem({
     ? 'Входящий видеозвонок…'
     : 'Входящий звонок…';
   const showUnread = unread && !ringing;
+  const canRing = ringing && !group;
 
   return (
-    <li className={[active ? 'active' : '', ringing ? 'ringing' : '', showUnread ? 'has-unread' : ''].filter(Boolean).join(' ')}>
-      <div className={`chat-item-row ${ringing ? 'chat-item-row--ringing' : ''}`}>
+    <li className={[
+      active ? 'active' : '',
+      canRing ? 'ringing' : '',
+      showUnread ? 'has-unread' : '',
+      group ? 'is-group' : '',
+    ].filter(Boolean).join(' ')}>
+      <div className={`chat-item-row ${canRing ? 'chat-item-row--ringing' : ''}`}>
         <button type="button" className="chat-item-btn" onClick={() => onSelect(chat)}>
-          <UserAvatar user={partner} size={44} showOnline isOnline={isOnline} />
+          <UserAvatar
+            user={avatarUser}
+            size={44}
+            showOnline={!group}
+            isOnline={isOnline}
+            className={group ? 'chat-item-avatar--group' : ''}
+          />
           <span className="chat-item-text">
             <span className="chat-item-top">
-              <span className="chat-item-name">@{partner?.nickname || '—'}</span>
-              {!ringing && timeLabel && <span className="chat-item-time">{timeLabel}</span>}
+              <span className="chat-item-name">{name}</span>
+              {!canRing && timeLabel && <span className="chat-item-time">{timeLabel}</span>}
             </span>
             <span className="chat-item-preview">
-              {ringing && <span className="chat-ringing-dot" aria-hidden="true" />}
-              {ringing ? ringingLabel : preview}
+              {canRing && <span className="chat-ringing-dot" aria-hidden="true" />}
+              {canRing ? ringingLabel : preview}
             </span>
           </span>
           {showUnread && (
             <span className="chat-item-unread" aria-label="Есть непрочитанные сообщения" />
           )}
         </button>
-        {ringing && (
+        {canRing && (
           <div className="chat-item-call-actions" role="group" aria-label={ringingLabel}>
             <button
               type="button"
