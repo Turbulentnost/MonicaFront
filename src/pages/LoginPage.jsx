@@ -48,7 +48,7 @@ export default function LoginPage() {
       if (!err.response) {
         setError('Сервер недоступен. Проверьте, что бэкенд запущен.');
       } else if (err.response.status === 401 || err.response.status === 400) {
-        setError('Неверный телефон/никнейм или пароль');
+        setError('Неверный email/никнейм или пароль');
       } else {
         setError(`Ошибка входа (${err.response.status}). Попробуйте позже.`);
       }
@@ -73,7 +73,7 @@ export default function LoginPage() {
         <div className="login-page__body">
           <div className="login-page__field">
             <label className="visually-hidden" htmlFor="login-identifier">
-              Телефон или никнейм
+              Email или никнейм
             </label>
             <input
               id="login-identifier"
@@ -82,7 +82,7 @@ export default function LoginPage() {
               name="login"
               value={loginId}
               onChange={(e) => setLoginId(e.target.value)}
-              placeholder="Телефон или никнейм"
+              placeholder="Email или никнейм"
               autoComplete="username"
               required
               autoFocus

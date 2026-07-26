@@ -2,18 +2,9 @@ import { useState } from 'react';
 import { authApi } from '../../api/client';
 import { AuthInput, PrimaryButton } from '../auth';
 
-export default function CodeStep({
-  phone,
-  onNext,
-  setRegistrationToken,
-  debugCode,
-  telegramUrl,
-  botUsername,
-  onRefreshLink,
-}) {
+export default function CodeStep({ email, onNext, setRegistrationToken, debugCode }) {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = async (e) => {
@@ -21,7 +12,7 @@ export default function CodeStep({
     setError('');
     setLoading(true);
     try {
-      const { data } = await authApi.verifyCode(phone, code);
+      const { data } = await authApi.verifyCode(email, code);
       setRegistrationToken(data.registration_token);
       onNext();
     } catch (err) {
@@ -31,51 +22,20 @@ export default function CodeStep({
     }
   };
 
-  const handleRefresh = async () => {
-    if (!onRefreshLink) return;
-    setError('');
-    setRefreshing(true);
-    try {
-      await onRefreshLink();
-    } catch (err) {
-      const data = err?.response?.data;
-      setError(data?.phone?.[0] || data?.detail || 'Не удалось обновить ссылку');
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  const phoneLabel = phone?.startsWith('+') ? phone : (phone ? `+${phone}` : '');
-
   return (
     <form onSubmit={handleSubmit} className="auth-form-body" noValidate>
-      <h2 className="auth-title">Подтверждение номера</h2>
+      <h2 className="auth-title">Подтверждение email</h2>
       <p className="auth-helper">
-        Нажмите кнопку ниже — откроется бот со ссылкой
-        <br />
-        для номера {phoneLabel || ''} и сразу пришлёт код.
+        Код отправлен на {email}
       </p>
-
-      {telegramUrl ? (
-        <a
-          className="auth-primary-link"
-          href={telegramUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Перейти в Telegram{botUsername ? ` (@${botUsername})` : ''}
-        </a>
-      ) : null}
-
       {debugCode && (
         <p className="auth-helper auth-helper--compact">
-          Dev-режим (бот не настроен): код — <strong>{debugCode}</strong>
+          Dev-режим (SMTP не настроен): код — <strong>{debugCode}</strong>
         </p>
       )}
-
       <AuthInput
         id="register-code"
-        label="Код из Telegram"
+        label="Код из письма"
         type="text"
         inputMode="numeric"
         value={code}
@@ -95,17 +55,6 @@ export default function CodeStep({
       >
         Далее
       </PrimaryButton>
-
-      {onRefreshLink && (
-        <button
-          type="button"
-          className="auth-text-button"
-          onClick={handleRefresh}
-          disabled={refreshing}
-        >
-          {refreshing ? 'Обновление...' : 'Получить новую ссылку'}
-        </button>
-      )}
     </form>
   );
 }

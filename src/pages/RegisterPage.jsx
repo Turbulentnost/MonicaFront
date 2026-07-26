@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { authApi } from '../api/client';
 import {
   AuthLayout,
   AuthCard,
@@ -8,38 +7,20 @@ import {
   AuthFooter,
   RegistrationProgress,
 } from '../components/auth';
-import PhoneStep from '../components/RegisterSteps/PhoneStep';
+import EmailStep from '../components/RegisterSteps/EmailStep';
 import CodeStep from '../components/RegisterSteps/CodeStep';
 import ProfileStep from '../components/RegisterSteps/ProfileStep';
 import AvatarStep from '../components/RegisterSteps/AvatarStep';
 
-const STEPS = ['phone', 'code', 'profile', 'avatar'];
+const STEPS = ['email', 'code', 'profile', 'avatar'];
 
 export default function RegisterPage() {
   const [step, setStep] = useState(0);
-  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [registrationToken, setRegistrationToken] = useState('');
   const [debugCode, setDebugCode] = useState('');
-  const [telegramUrl, setTelegramUrl] = useState('');
-  const [botUsername, setBotUsername] = useState('');
 
   const stepIndex = step + 1;
-
-  const applyPhoneResult = (result = {}) => {
-    setDebugCode(result.debugCode || '');
-    setTelegramUrl(result.telegramUrl || '');
-    setBotUsername(result.botUsername || '');
-  };
-
-  const refreshTelegramLink = async () => {
-    const { data } = await authApi.registerPhone(phone);
-    if (data.phone) setPhone(data.phone);
-    applyPhoneResult({
-      debugCode: data.debug_code || '',
-      telegramUrl: data.telegram_url || '',
-      botUsername: data.bot_username || '',
-    });
-  };
 
   return (
     <AuthLayout>
@@ -48,23 +29,20 @@ export default function RegisterPage() {
         <RegistrationProgress currentStep={stepIndex} totalSteps={STEPS.length} />
 
         {step === 0 && (
-          <PhoneStep
-            phone={phone}
-            setPhone={setPhone}
-            onNext={(result) => {
-              applyPhoneResult(result);
+          <EmailStep
+            email={email}
+            setEmail={setEmail}
+            onNext={(code) => {
+              setDebugCode(code || '');
               setStep(1);
             }}
           />
         )}
         {step === 1 && (
           <CodeStep
-            phone={phone}
+            email={email}
             debugCode={debugCode}
-            telegramUrl={telegramUrl}
-            botUsername={botUsername}
             setRegistrationToken={setRegistrationToken}
-            onRefreshLink={refreshTelegramLink}
             onNext={() => setStep(2)}
           />
         )}
