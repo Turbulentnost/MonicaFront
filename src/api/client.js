@@ -75,11 +75,23 @@ export const chatsApi = {
   files: (chatId) => api.get(`/chats/${chatId}/files/`),
   messages: (chatId, params) => api.get(`/chats/${chatId}/messages/`, { params }),
   start: (recipientId) => api.post('/chats/start/', { recipient_id: recipientId }),
-  createGroup: ({ title, member_ids }) =>
-    api.post('/chats/groups/', {
+  createGroup: ({ title, member_ids, photo }) => {
+    const ids = (member_ids || []).map((id) => String(id));
+    if (photo) {
+      const form = new FormData();
+      form.append('title', title);
+      ids.forEach((id) => form.append('member_ids', id));
+      form.append('photo', photo);
+      return api.post('/chats/groups/', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 120000,
+      });
+    }
+    return api.post('/chats/groups/', {
       title,
-      member_ids: (member_ids || []).map((id) => String(id)),
-    }),
+      member_ids: ids,
+    });
+  },
   updateChat: (chatId, payload) => api.patch(`/chats/${chatId}/`, payload),
   addMembers: (chatId, userIds) =>
     api.post(`/chats/${chatId}/members/`, {

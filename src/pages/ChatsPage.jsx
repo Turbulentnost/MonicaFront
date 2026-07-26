@@ -1770,10 +1770,11 @@ export default function ChatsPage() {
     await handleSelectChat(chat);
   };
 
-  const handleCreateGroup = async ({ title, member_ids }) => {
+  const handleCreateGroup = async ({ title, member_ids, photo }) => {
     const { data } = await chatsApi.createGroup({
       title,
       member_ids: (member_ids || []).map((id) => String(id)),
+      photo: photo || null,
     });
     setCreateGroupOpen(false);
     let list = [];
