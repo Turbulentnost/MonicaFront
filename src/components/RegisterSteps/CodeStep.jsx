@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { authApi } from '../../api/client';
 import { AuthInput, PrimaryButton } from '../auth';
 
-export default function CodeStep({ email, onNext, setRegistrationToken, debugCode }) {
+export default function CodeStep({ phone, onNext, setRegistrationToken, debugCode }) {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -12,7 +12,7 @@ export default function CodeStep({ email, onNext, setRegistrationToken, debugCod
     setError('');
     setLoading(true);
     try {
-      const { data } = await authApi.verifyCode(email, code);
+      const { data } = await authApi.verifyCode(phone, code);
       setRegistrationToken(data.registration_token);
       onNext();
     } catch (err) {
@@ -22,20 +22,22 @@ export default function CodeStep({ email, onNext, setRegistrationToken, debugCod
     }
   };
 
+  const phoneLabel = phone?.startsWith('+') ? phone : (phone ? `+${phone}` : '');
+
   return (
     <form onSubmit={handleSubmit} className="auth-form-body" noValidate>
-      <h2 className="auth-title">Подтверждение email</h2>
+      <h2 className="auth-title">Подтверждение номера</h2>
       <p className="auth-helper">
-        Код отправлен на {email}
+        Код отправлен на {phoneLabel || 'ваш номер'}
       </p>
       {debugCode && (
         <p className="auth-helper auth-helper--compact">
-          Dev-режим (SMTP не настроен): код — <strong>{debugCode}</strong>
+          Dev-режим (SMSC не настроен): код — <strong>{debugCode}</strong>
         </p>
       )}
       <AuthInput
         id="register-code"
-        label="Код из письма"
+        label="Код из SMS"
         type="text"
         inputMode="numeric"
         value={code}

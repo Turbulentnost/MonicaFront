@@ -7,16 +7,16 @@ import {
   AuthFooter,
   RegistrationProgress,
 } from '../components/auth';
-import EmailStep from '../components/RegisterSteps/EmailStep';
+import PhoneStep from '../components/RegisterSteps/PhoneStep';
 import CodeStep from '../components/RegisterSteps/CodeStep';
 import ProfileStep from '../components/RegisterSteps/ProfileStep';
 import AvatarStep from '../components/RegisterSteps/AvatarStep';
 
-const STEPS = ['email', 'code', 'profile', 'avatar'];
+const STEPS = ['phone', 'code', 'profile', 'avatar'];
 
 export default function RegisterPage() {
   const [step, setStep] = useState(0);
-  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [registrationToken, setRegistrationToken] = useState('');
   const [debugCode, setDebugCode] = useState('');
 
@@ -29,9 +29,9 @@ export default function RegisterPage() {
         <RegistrationProgress currentStep={stepIndex} totalSteps={STEPS.length} />
 
         {step === 0 && (
-          <EmailStep
-            email={email}
-            setEmail={setEmail}
+          <PhoneStep
+            phone={phone}
+            setPhone={setPhone}
             onNext={(code) => {
               setDebugCode(code || '');
               setStep(1);
@@ -40,7 +40,7 @@ export default function RegisterPage() {
         )}
         {step === 1 && (
           <CodeStep
-            email={email}
+            phone={phone}
             debugCode={debugCode}
             setRegistrationToken={setRegistrationToken}
             onNext={() => setStep(2)}

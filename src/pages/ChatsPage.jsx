@@ -2146,7 +2146,7 @@ export default function ChatsPage() {
                 ? 'Искать… зачем?'
                 : isSpecialFavoritesOpen
                   ? 'Search chats…  ⌘K'
-                  : 'Имя, фамилия, email или ник...'
+                  : 'Поиск по никнейму...'
             }
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}

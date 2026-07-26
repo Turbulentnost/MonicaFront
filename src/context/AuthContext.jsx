@@ -12,8 +12,8 @@ export function AuthProvider({ children }) {
     localStorage.setItem('refresh_token', tokens.refresh);
   };
 
-  const login = useCallback(async (email, password) => {
-    const { data } = await authApi.login(email, password);
+  const login = useCallback(async (identifier, password) => {
+    const { data } = await authApi.login(identifier, password);
     saveTokens(data.tokens);
     setUser(data.user);
     return data.user;

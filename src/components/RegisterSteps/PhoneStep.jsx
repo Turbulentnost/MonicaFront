@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { authApi } from '../../api/client';
 import { AuthInput, PrimaryButton } from '../auth';
 
-export default function EmailStep({ email, setEmail, onNext }) {
+export default function PhoneStep({ phone, setPhone, onNext }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -11,10 +11,15 @@ export default function EmailStep({ email, setEmail, onNext }) {
     setError('');
     setLoading(true);
     try {
-      const { data } = await authApi.registerEmail(email);
+      const { data } = await authApi.registerPhone(phone);
+      if (data.phone) setPhone(data.phone);
       onNext(data.debug_code || '');
     } catch (err) {
-      setError(err.response?.data?.email?.[0] || err.response?.data?.detail || 'Ошибка отправки');
+      setError(
+        err.response?.data?.phone?.[0]
+        || err.response?.data?.detail
+        || 'Ошибка отправки SMS'
+      );
     } finally {
       setLoading(false);
     }
@@ -24,20 +29,20 @@ export default function EmailStep({ email, setEmail, onNext }) {
     <form onSubmit={handleSubmit} className="auth-form-body" noValidate>
       <h2 className="auth-title">Регистрация</h2>
       <p className="auth-helper">
-        Введите email, и мы отправим вам
+        Введите номер телефона — мы отправим
         <br />
-        код подтверждения.
+        SMS с кодом подтверждения.
       </p>
       <AuthInput
-        id="register-email"
-        label="Email"
-        icon="mail"
-        type="email"
-        name="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder="name@example.com"
-        autoComplete="email"
+        id="register-phone"
+        label="Телефон"
+        icon="phone"
+        type="tel"
+        name="phone"
+        value={phone}
+        onChange={(e) => setPhone(e.target.value)}
+        placeholder="+7 900 123-45-67"
+        autoComplete="tel"
         required
         autoFocus
         error={error || undefined}

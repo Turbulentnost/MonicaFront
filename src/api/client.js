@@ -45,8 +45,8 @@ api.interceptors.response.use(
 export default api;
 
 export const authApi = {
-  registerEmail: (email) => api.post('/auth/register/email/', { email }),
-  verifyCode: (email, code) => api.post('/auth/register/verify-code/', { email, code }),
+  registerPhone: (phone) => api.post('/auth/register/phone/', { phone }),
+  verifyCode: (phone, code) => api.post('/auth/register/verify-code/', { phone, code }),
   registerProfile: (data) => api.post('/auth/register/profile/', data),
   registerAvatar: (registrationToken, photo) => {
     const form = new FormData();
@@ -58,7 +58,7 @@ export const authApi = {
   },
   registerComplete: (registrationToken) =>
     api.post('/auth/register/complete/', { registration_token: registrationToken }),
-  login: (email, password) => api.post('/auth/login/', { email, password }),
+  login: (login, password) => api.post('/auth/login/', { login, password }),
   me: () => api.get('/auth/me/'),
   updateProfile: (data) => api.patch('/auth/me/', data),
   updateAvatar: (photo) => {

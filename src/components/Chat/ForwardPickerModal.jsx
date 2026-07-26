@@ -54,7 +54,7 @@ export function ForwardPickerModal({ chats, currentUserId, onSelect, onClose }) 
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Поиск пользователей"
+          placeholder="Поиск по никнейму"
           autoFocus
         />
         <div className="forward-picker__list">

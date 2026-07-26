@@ -16,6 +16,7 @@ export function AccountSettings({ user, onUserUpdated, onClose }) {
     last_name: '',
     city: '',
     birth_date: '',
+    email: '',
   });
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState('');
@@ -30,6 +31,7 @@ export function AccountSettings({ user, onUserUpdated, onClose }) {
       last_name: user?.last_name || '',
       city: user?.city || '',
       birth_date: user?.birth_date || '',
+      email: user?.email || '',
     });
   }, [user]);
 
@@ -119,7 +121,7 @@ export function AccountSettings({ user, onUserUpdated, onClose }) {
           </button>
           <div>
             <h2>@{user?.nickname}</h2>
-            <p>{user?.email}</p>
+            <p>{user?.phone_display || (user?.phone ? `+${user.phone}` : '—')}</p>
             <button
               type="button"
               className="account-settings__photo-link"
@@ -158,6 +160,18 @@ export function AccountSettings({ user, onUserUpdated, onClose }) {
               onChange={handleChange}
               maxLength={150}
               required
+            />
+          </label>
+          <label>
+            <span>Email (необязательно)</span>
+            <input
+              name="email"
+              type="email"
+              value={form.email}
+              onChange={handleChange}
+              maxLength={254}
+              placeholder="name@example.com"
+              autoComplete="email"
             />
           </label>
           <label>
