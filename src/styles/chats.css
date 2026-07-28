@@ -1128,6 +1128,56 @@
   background: transparent;
 }
 
+.chats-page .messages-area-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.chats-page .messages-area-wrap .messages-area {
+  flex: 1;
+}
+
+.chats-page .scroll-to-bottom-btn {
+  position: absolute;
+  right: max(18px, calc((100% - var(--chat-column-max)) / 2 + 18px));
+  bottom: 14px;
+  z-index: 30;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 1px solid rgba(135, 153, 190, 0.28);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #e8eaed;
+  background: rgba(16, 22, 36, 0.92);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: pointer;
+  transition: transform 140ms ease, background 140ms ease, border-color 140ms ease;
+}
+
+.chats-page .scroll-to-bottom-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+.chats-page .scroll-to-bottom-btn:hover {
+  transform: translateY(1px);
+  background: rgba(28, 36, 56, 0.96);
+  border-color: rgba(155, 172, 210, 0.42);
+}
+
+.chats-page .scroll-to-bottom-btn:active {
+  transform: translateY(2px);
+}
+
 .chats-page .chat-main.has-custom-bg .messages-area {
   background: transparent;
 }

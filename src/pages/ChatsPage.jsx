@@ -124,6 +124,7 @@ export default function ChatsPage() {
   const [replyTo, setReplyTo] = useState(null);
   const [forwardBusy, setForwardBusy] = useState(false);
   const [pendingOriginalJump, setPendingOriginalJump] = useState(null);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const messagesEndRef = useRef(null);
   const messagesAreaRef = useRef(null);
   const loadingOlderRef = useRef(false);
@@ -195,6 +196,7 @@ export default function ChatsPage() {
     shouldStickToBottomRef.current = true;
     suppressHistoryLoadRef.current = true;
     setHighlightedMessageId(null);
+    setShowScrollToBottom(false);
     setMessages([]);
     setHasMoreMessages(false);
     loadingOlderRef.current = false;
@@ -300,11 +302,30 @@ export default function ChatsPage() {
     const container = event.currentTarget;
     if (suppressHistoryLoadRef.current) return;
     const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
-    shouldStickToBottomRef.current = maxScroll - container.scrollTop < 96;
+    const distanceFromBottom = maxScroll - container.scrollTop;
+    const nearBottom = distanceFromBottom < 96;
+    shouldStickToBottomRef.current = nearBottom;
+    setShowScrollToBottom(!nearBottom && maxScroll > 120);
     if (container.scrollTop <= 80) {
       loadOlderMessages();
     }
   }, [loadOlderMessages]);
+
+  const scrollMessagesToBottom = useCallback((smooth = true) => {
+    const container = messagesAreaRef.current;
+    if (!container) return;
+    shouldStickToBottomRef.current = true;
+    setShowScrollToBottom(false);
+    if (smooth && typeof container.scrollTo === 'function') {
+      container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+    } else {
+      container.scrollTop = container.scrollHeight;
+    }
+    requestAnimationFrame(() => {
+      if (!messagesAreaRef.current) return;
+      messagesAreaRef.current.scrollTop = messagesAreaRef.current.scrollHeight;
+    });
+  }, []);
 
   const clearPendingAttachments = useCallback(() => {
     setPendingAttachments((prev) => {
@@ -2266,6 +2287,7 @@ export default function ChatsPage() {
               </div>
             )}
             </div>
+            <div className="messages-area-wrap">
             <div
               ref={messagesAreaRef}
               className="messages-area"
@@ -2318,6 +2340,26 @@ export default function ChatsPage() {
               )}
               <div ref={messagesEndRef} />
               </div>
+            </div>
+            {showScrollToBottom && (
+              <button
+                type="button"
+                className="scroll-to-bottom-btn"
+                onClick={() => scrollMessagesToBottom(true)}
+                aria-label="Вниз к новым сообщениям"
+                title="Вниз"
+              >
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path
+                    d="M6 10l6 6 6-6"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+            )}
             </div>
             <div className="chat-main__column chat-main__column--composer">
             {attachError && <div className="attachment-error">{attachError}</div>}
