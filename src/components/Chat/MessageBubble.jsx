@@ -6,7 +6,6 @@ import { EmojiPicker } from './EmojiPicker';
 import { ForwardedBundle } from './ForwardedBundle';
 import { LinkPreviewCard } from './LinkPreviewCard';
 import { StickerView } from './StickerView';
-import { Twemoji } from './Twemoji';
 import { getEditableMessageText, getPhotoCaption } from '../../utils/messageText';
 import { linkifyText } from '../../utils/linkifyText';
 import { canDeleteForEveryone, canEditMessage } from '../../utils/messageActions';
@@ -719,7 +718,7 @@ function ChatMessageBubble({
                 aria-expanded={false}
               >
                 <span className="message-reaction-bar__expand-icon" aria-hidden="true">
-                  <Twemoji emoji="😊" />
+                  <AppleEmoji emoji="😊" size={16} />
                 </span>
                 <PlusIcon />
               </button>

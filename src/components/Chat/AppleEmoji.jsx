@@ -1,23 +1,21 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import emojiRegex from 'emoji-regex';
+import { appleEmojiCandidateCount, twemojiUrl } from '../../utils/twemoji';
 
-const APPLE_EMOJI_VERSION = '15.1.2';
-
-export function emojiToAppleCodepoint(emoji) {
-  const parts = [];
-  for (const char of String(emoji || '')) {
-    const cp = char.codePointAt(0);
-    if (cp == null || cp === 0xfe0f) continue;
-    parts.push(cp.toString(16));
-  }
-  return parts.join('-');
+/**
+ * Apple Color Emoji via emoji-datasource-apple (64px CDN sheet only).
+ * Tries FE0F / stripped codepoint variants before falling back to native glyph.
+ */
+export function appleEmojiUrl(emoji, candidateIndex = 0) {
+  // Only /64/ exists on jsDelivr for emoji-datasource-apple@15.1.2
+  return twemojiUrl(emoji, candidateIndex, 'png');
 }
 
-export function appleEmojiUrl(emoji, sheetSize = 64) {
-  const codepoint = emojiToAppleCodepoint(emoji);
-  if (!codepoint) return '';
-  const size = sheetSize <= 20 ? 20 : sheetSize <= 32 ? 32 : 64;
-  return `https://cdn.jsdelivr.net/npm/emoji-datasource-apple@${APPLE_EMOJI_VERSION}/img/apple/${size}/${codepoint}.png`;
+export function emojiToAppleCodepoint(emoji) {
+  return twemojiUrl(emoji, 0, 'png')
+    .split('/')
+    .pop()
+    ?.replace(/\.png$/, '') || '';
 }
 
 export function AppleEmoji({
@@ -27,13 +25,19 @@ export function AppleEmoji({
   alt = '',
   ...rest
 }) {
-  const [failed, setFailed] = useState(false);
+  const [candidate, setCandidate] = useState(0);
+  const maxCandidates = useMemo(() => appleEmojiCandidateCount(emoji), [emoji]);
   const px = typeof size === 'number' ? size : 22;
-  const src = appleEmojiUrl(emoji, px <= 24 ? 32 : 64);
+  const src = useMemo(() => appleEmojiUrl(emoji, candidate), [emoji, candidate]);
+  const failed = !emoji || !src || candidate >= maxCandidates;
+
+  useEffect(() => {
+    setCandidate(0);
+  }, [emoji]);
 
   if (!emoji) return null;
 
-  if (failed || !src) {
+  if (failed) {
     return (
       <span
         className={`apple-emoji apple-emoji--fallback ${className}`.trim()}
@@ -56,7 +60,13 @@ export function AppleEmoji({
       loading="lazy"
       decoding="async"
       draggable={false}
-      onError={() => setFailed(true)}
+      onError={() => {
+        if (candidate + 1 < maxCandidates) {
+          setCandidate((n) => n + 1);
+          return;
+        }
+        setCandidate(maxCandidates);
+      }}
       {...rest}
     />
   );

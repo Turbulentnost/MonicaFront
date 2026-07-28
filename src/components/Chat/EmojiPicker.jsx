@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { EMOJI_CATEGORIES } from './emojiData';
 import { AppleEmoji } from './AppleEmoji';
 import { StickerView } from './StickerView';
-import { Twemoji } from './Twemoji';
 import { getInstalledStickerPacks } from '../../utils/stickerLibrary';
 
 export function EmojiPicker({
@@ -175,7 +174,7 @@ export function EmojiPicker({
                 tabIndex={visible ? 0 : -1}
               >
                 <span className="emoji-picker__tab-icon" aria-hidden="true">
-                  <Twemoji emoji={pack.cover} />
+                  <AppleEmoji emoji={pack.cover} size={18} />
                 </span>
               </button>
             ))}

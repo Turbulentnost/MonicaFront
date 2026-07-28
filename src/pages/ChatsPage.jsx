@@ -2553,39 +2553,43 @@ export default function ChatsPage() {
             />
           </div>
         </div>
-        <ChatFilters
-          active={chatFilter}
-          onChange={setChatFilter}
-          unreadCount={unreadChatCount}
-          specialMode={isSpecialFavoritesOpen}
-          backMode={isBackModeOpen}
-        />
-        <div className="search-box">
-          <input
-            type="text"
-            placeholder={
-              isBackModeOpen
-                ? 'Искать… зачем?'
-                : isSpecialFavoritesOpen
-                  ? 'Search chats…  ⌘K'
-                  : 'Поиск по никнейму...'
-            }
-            value={searchQuery}
-            onChange={(e) => handleSearch(e.target.value)}
-          />
-          {searchResults.length > 0 && (
-            <ul className="search-results">
-              {searchResults.map((u) => (
-                <UserSearchResult
-                  key={u.id}
-                  user={u}
-                  onSelect={startChat}
-                  isOnline={isOnline(u.id, u.is_online)}
-                />
-              ))}
-            </ul>
-          )}
-        </div>
+        {!chatSidebarCompact && (
+          <>
+            <ChatFilters
+              active={chatFilter}
+              onChange={setChatFilter}
+              unreadCount={unreadChatCount}
+              specialMode={isSpecialFavoritesOpen}
+              backMode={isBackModeOpen}
+            />
+            <div className="search-box">
+              <input
+                type="text"
+                placeholder={
+                  isBackModeOpen
+                    ? 'Искать… зачем?'
+                    : isSpecialFavoritesOpen
+                      ? 'Search chats…  ⌘K'
+                      : 'Поиск по никнейму...'
+                }
+                value={searchQuery}
+                onChange={(e) => handleSearch(e.target.value)}
+              />
+              {searchResults.length > 0 && (
+                <ul className="search-results">
+                  {searchResults.map((u) => (
+                    <UserSearchResult
+                      key={u.id}
+                      user={u}
+                      onSelect={startChat}
+                      isOnline={isOnline(u.id, u.is_online)}
+                    />
+                  ))}
+                </ul>
+              )}
+            </div>
+          </>
+        )}
         <ul className="chat-list">
           {filteredChats.map((chat) => (
             <ChatListItem
