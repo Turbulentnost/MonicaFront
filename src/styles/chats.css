@@ -2523,23 +2523,23 @@
 .chats-page .emoji-picker {
   position: absolute;
   bottom: calc(100% + 6px);
-  left: 50%;
+  left: 0;
   z-index: 60;
-  transform: translateX(-50%);
+  transform: none;
   /* layout from full picker styles below; visibility toggled via --visible / --open */
 }
 
 .chats-page .emoji-picker--visible,
 .chats-page .emoji-picker--open {
   opacity: 1;
-  transform: translateX(-50%);
+  transform: none;
   pointer-events: auto;
 }
 
 .chats-page .emoji-picker--closing:not(.emoji-picker--visible):not(.emoji-picker--open),
 .chats-page .emoji-picker[data-visible='false'] {
   opacity: 0;
-  transform: translateX(-50%);
+  transform: none;
   pointer-events: none;
 }
 
