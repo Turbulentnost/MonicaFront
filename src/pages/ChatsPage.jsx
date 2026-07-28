@@ -102,7 +102,7 @@ export default function ChatsPage() {
   const navigate = useNavigate();
   const { chatId: routeChatId } = useParams();
   const isMobileViewport = useMediaQuery(MOBILE_CHAT_QUERY);
-  const { themeId, theme, setThemeId } = useChatTheme();
+  const { themeId, theme } = useChatTheme();
   const {
     width: chatSidebarWidth,
     beginResize: beginChatSidebarResize,
@@ -575,7 +575,7 @@ export default function ChatsPage() {
     }
     setSelectedChat(target);
     persistSelectedChat(target);
-    setPartnerTyping(false);
+    setPartnerActivity(null);
     setSelectedMessageIds([]);
     setForwardPickerOpen(false);
     setPendingForward(null);

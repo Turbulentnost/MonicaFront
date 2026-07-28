@@ -131,20 +131,6 @@ function LightboxTile({ item, active = false, onClick }) {
   );
 }
 
-function ChevronIcon({ dir = 'prev' }) {
-  return (
-    <svg viewBox="0 0 24 24" width="28" height="28" fill="none" aria-hidden="true">
-      <path
-        d={dir === 'prev' ? 'M15 5L8 12l7 7' : 'M9 5l7 7-7 7'}
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 export function PhotoLightbox({ items, index, onClose, onChange }) {
   const current = items[index];
   const src = usePhotoSrc(current);
@@ -154,20 +140,6 @@ export function PhotoLightbox({ items, index, onClose, onChange }) {
   useEffect(() => {
     setHost(getLightboxHost());
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    const cached = getCachedMediaSrc(key, remote);
-    setSrc(cached);
-    if (key && remote) {
-      warmMediaCache(key, remote).then((url) => {
-        if (!cancelled && url) setSrc(url);
-      });
-    }
-    return () => {
-      cancelled = true;
-    };
-  }, [key, remote]);
 
   const go = useCallback(
     (delta) => {
@@ -185,8 +157,11 @@ export function PhotoLightbox({ items, index, onClose, onChange }) {
       if (e.key === 'ArrowRight') go(1);
     };
     window.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     return () => {
       window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
     };
   }, [go, onClose]);
 

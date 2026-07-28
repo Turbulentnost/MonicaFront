@@ -101,7 +101,7 @@ export function ChatListItem({
         <button type="button" className="chat-item-btn" onClick={() => onSelect(chat)}>
           <UserAvatar
             user={avatarUser}
-            size={44}
+            size={avatarSize}
             showOnline={!group}
             isOnline={isOnline}
             className={group ? 'chat-item-avatar--group' : ''}

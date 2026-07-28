@@ -20,8 +20,8 @@ export function EmojiPicker({
   const [activeId, setActiveId] = useState(EMOJI_CATEGORIES[0]?.id || 'smileys');
   const [packs, setPacks] = useState(() => getInstalledStickerPacks());
   const [activePackId, setActivePackId] = useState(() => getInstalledStickerPacks()[0]?.id || '');
-  const [scrollEdge, setScrollEdge] = useState({ top: false, bottom: true });
-  const [scrolling, setScrolling] = useState(false);
+  const [, setScrollEdge] = useState({ top: false, bottom: true });
+  const [, setScrolling] = useState(false);
   const gridRef = useRef(null);
   const scrollTimerRef = useRef(null);
 
