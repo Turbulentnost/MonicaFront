@@ -14,6 +14,7 @@ import { useNotifications } from '../hooks/usePresence';
 import { useCallContext, usePresenceHandlers } from '../context/CallContext';
 import { useSecretSequenceShortcut, FRONT_SEQUENCE, BACK_SEQUENCE } from '../hooks/useSecretFavoritesShortcut';
 import { useUserIdle } from '../hooks/useUserIdle';
+import { useAiComplete } from '../hooks/useAiComplete';
 import { MOBILE_CHAT_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { ChatHeader } from '../components/Chat/ChatHeader';
 import { ChatListItem } from '../components/Chat/ChatListItem';
@@ -110,6 +111,7 @@ export default function ChatsPage() {
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(true);
   const [chatBackground, setChatBackgroundState] = useState(null);
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
+  const [aiStyleRefreshKey, setAiStyleRefreshKey] = useState(0);
   const [stickerStoreOpen, setStickerStoreOpen] = useState(false);
   const [installedStickerPackIds, setInstalledStickerPackIds] = useState(() => getInstalledStickerPackIds());
   const [isFileDragOver, setIsFileDragOver] = useState(false);
@@ -152,6 +154,18 @@ export default function ChatsPage() {
   const [voiceLiveWaveform, setVoiceLiveWaveform] = useState([]);
   const [voiceBusy, setVoiceBusy] = useState(false);
   const callController = useCallContext();
+  const {
+    suggestion: aiSuggestion,
+    styleEnabled: aiStyleEnabled,
+    clearSuggestion: clearAiSuggestion,
+    acceptAll: acceptAiAll,
+    acceptWord: acceptAiWord,
+  } = useAiComplete({
+    draft: codeMode || voiceRecording ? '' : input,
+    chatId: selectedChat?.id,
+    enabled: Boolean(selectedChat) && !codeMode && !voiceRecording && !accountSettingsOpen,
+    refreshKey: aiStyleRefreshKey,
+  });
   const { isOnline, getLastSeen } = callController;
   const callChatId = callController.call?.chat_id
     || (typeof callController.call?.chat === 'object'
@@ -1312,6 +1326,7 @@ export default function ChatsPage() {
   const handleSend = async (e) => {
     e.preventDefault();
     if (!selectedChat || uploading || forwardBusy) return;
+    clearAiSuggestion();
 
     if (pendingForward) {
       setForwardBusy(true);
@@ -2218,7 +2233,10 @@ export default function ChatsPage() {
         <AccountSettings
           user={user}
           onUserUpdated={updateUser}
-          onClose={() => setAccountSettingsOpen(false)}
+          onClose={() => {
+            setAccountSettingsOpen(false);
+            setAiStyleRefreshKey((n) => n + 1);
+          }}
         />
       ) : stickerStoreOpen ? (
         <StickerStorePage
@@ -2630,7 +2648,14 @@ export default function ChatsPage() {
                       </div>
                     </>
                   ) : (
-                    <textarea
+                    <div className="message-input-ai">
+                      <div className="message-input-ai-ghost" aria-hidden="true">
+                        <span className="message-input-ai-ghost__typed">{input}</span>
+                        {aiSuggestion && aiStyleEnabled ? (
+                          <span className="message-input-ai-ghost__suggestion">{aiSuggestion}</span>
+                        ) : null}
+                      </div>
+                      <textarea
                       ref={messageInputRef}
                       className="message-input-textarea"
                       rows={1}
@@ -2638,8 +2663,39 @@ export default function ChatsPage() {
                       onChange={(e) => handleInputChange(e.target.value)}
                       onPaste={handlePasteFiles}
                       onKeyDown={(e) => {
+                        if (aiSuggestion && e.key === 'Tab') {
+                          e.preventDefault();
+                          const next = acceptAiAll();
+                          if (next) handleInputChange(next);
+                          return;
+                        }
+                        if (aiSuggestion && e.key === 'Escape') {
+                          e.preventDefault();
+                          clearAiSuggestion();
+                          return;
+                        }
+                        if (
+                          aiSuggestion
+                          && e.key === 'ArrowRight'
+                          && !e.shiftKey
+                          && !e.altKey
+                          && !e.ctrlKey
+                          && !e.metaKey
+                        ) {
+                          const el = e.currentTarget;
+                          if (
+                            el.selectionStart === el.value.length
+                            && el.selectionEnd === el.value.length
+                          ) {
+                            e.preventDefault();
+                            const next = acceptAiWord();
+                            if (next != null) handleInputChange(next);
+                            return;
+                          }
+                        }
                         if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault();
+                          clearAiSuggestion();
                           e.currentTarget.form?.requestSubmit();
                         }
                       }}
@@ -2654,9 +2710,15 @@ export default function ChatsPage() {
                               ? 'Напишите что-нибудь… это никого не спасёт'
                               : isSpecialFavoritesOpen
                                 ? "Let's ship this! 💪"
-                                : 'Сообщение...'
+                                : aiSuggestion
+                                  ? ''
+                                  : 'Сообщение...'
                       }
                     />
+                      {aiSuggestion && aiStyleEnabled ? (
+                        <div className="message-input-ai-hint">Tab — принять · Esc — отклонить</div>
+                      ) : null}
+                    </div>
                   )}
                 </div>
                 <SendIconButton

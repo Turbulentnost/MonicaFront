@@ -163,3 +163,9 @@ export const notificationsApi = {
   clear: () => api.delete('/notifications/clear/'),
   remove: (id) => api.delete(`/notifications/${id}/`),
 };
+
+export const aiApi = {
+  complete: (data, config) => api.post('/ai/complete/', data, config),
+  getStyle: () => api.get('/ai/style/'),
+  updateStyle: (data) => api.patch('/ai/style/', data),
+};

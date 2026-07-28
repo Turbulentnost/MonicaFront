@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { authApi } from '../api/client';
+import { aiApi, authApi } from '../api/client';
 import { UserAvatar } from './Chat/UserAvatar';
 
 function getErrorMessage(error) {
@@ -23,6 +23,9 @@ export function AccountSettings({ user, onUserUpdated, onClose }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
+  const [aiEnabled, setAiEnabled] = useState(true);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiSamplesCount, setAiSamplesCount] = useState(0);
   const photoInputRef = useRef(null);
 
   useEffect(() => {
@@ -34,6 +37,21 @@ export function AccountSettings({ user, onUserUpdated, onClose }) {
       email: user?.email || '',
     });
   }, [user]);
+
+  useEffect(() => {
+    let cancelled = false;
+    aiApi
+      .getStyle()
+      .then(({ data }) => {
+        if (cancelled) return;
+        setAiEnabled(data?.enabled !== false);
+        setAiSamplesCount(Number(data?.samples_count) || 0);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => () => {
     if (photoPreview) URL.revokeObjectURL(photoPreview);
@@ -61,6 +79,22 @@ export function AccountSettings({ user, onUserUpdated, onClose }) {
     const { name, value } = event.target;
     setForm((current) => ({ ...current, [name]: value }));
     setSaved(false);
+  };
+
+  const handleAiToggle = async (event) => {
+    const next = event.target.checked;
+    setAiEnabled(next);
+    setAiBusy(true);
+    try {
+      const { data } = await aiApi.updateStyle({ enabled: next });
+      setAiEnabled(data?.enabled !== false);
+      setAiSamplesCount(Number(data?.samples_count) || 0);
+    } catch (requestError) {
+      setAiEnabled(!next);
+      setError(getErrorMessage(requestError));
+    } finally {
+      setAiBusy(false);
+    }
   };
 
   const handleSubmit = async (event) => {
@@ -195,6 +229,26 @@ export function AccountSettings({ user, onUserUpdated, onClose }) {
             />
           </label>
         </div>
+
+        <div className="account-settings__divider" />
+
+        <section className="account-settings__ai">
+          <label className="account-settings__ai-toggle">
+            <input
+              type="checkbox"
+              checked={aiEnabled}
+              onChange={handleAiToggle}
+              disabled={aiBusy}
+            />
+            <span>
+              <strong>ИИ-дополнение текста</strong>
+              <small>
+                Подсказывает продолжение сообщения в вашем стиле (Tab — принять).
+                {aiSamplesCount > 0 ? ` Изучено фраз: ${aiSamplesCount}.` : ''}
+              </small>
+            </span>
+          </label>
+        </section>
 
         {error && <div className="account-settings__message error">{error}</div>}
         {saved && <div className="account-settings__message success">Изменения сохранены</div>}
