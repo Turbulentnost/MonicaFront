@@ -1,4 +1,5 @@
 import { UserAvatar } from './UserAvatar';
+import { renderTextWithAppleEmoji } from './AppleEmoji';
 import { formatChatListTime } from '../../utils/formatChatDate';
 import { getPhotoCaption } from '../../utils/messageText';
 import {
@@ -105,7 +106,7 @@ export function ChatListItem({
             </span>
             <span className="chat-item-preview">
               {canRing && <span className="chat-ringing-dot" aria-hidden="true" />}
-              {canRing ? ringingLabel : preview}
+              {canRing ? ringingLabel : renderTextWithAppleEmoji(preview)}
             </span>
           </span>
           {showUnread && (

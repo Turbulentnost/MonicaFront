@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MessageMedia } from './MessageMedia';
 import { VoiceMessagePlayer } from './VoiceMessagePlayer';
+import { AppleEmoji } from './AppleEmoji';
 import { EmojiPicker } from './EmojiPicker';
 import { ForwardedBundle } from './ForwardedBundle';
 import { LinkPreviewCard } from './LinkPreviewCard';
@@ -685,7 +686,9 @@ function ChatMessageBubble({
               aria-expanded={false}
               onClick={openReactions}
             >
-              <span className="message-react-trigger__emoji" aria-hidden="true">😊</span>
+              <span className="message-react-trigger__emoji" aria-hidden="true">
+                <AppleEmoji emoji="😊" size={16} />
+              </span>
               <span className="message-react-trigger__plus" aria-hidden="true">
                 <PlusIcon />
               </span>
@@ -710,7 +713,7 @@ function ChatMessageBubble({
                 onClick={() => handleReactionPick(emoji)}
                 aria-label={`Реакция ${emoji}`}
               >
-                {emoji}
+                <AppleEmoji emoji={emoji} size={20} />
               </button>
             ))}
             {/* Кнопка 😊+ только до раскрытия полного пикера */}
@@ -755,7 +758,9 @@ function ChatMessageBubble({
               aria-label={`${emoji}, ${count}${reactedByMe ? ', ваша реакция' : ''}`}
               aria-pressed={reactedByMe}
             >
-              <span className="message-reaction-chip__emoji">{emoji}</span>
+              <span className="message-reaction-chip__emoji">
+                <AppleEmoji emoji={emoji} size={16} />
+              </span>
               {count > 1 && <span className="message-reaction-chip__count">{count}</span>}
             </button>
           ))}

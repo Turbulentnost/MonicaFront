@@ -4391,6 +4391,42 @@
   font-size: 13px;
 }
 
+/* Apple emoji images (iPhone style) */
+
+.apple-emoji {
+  display: inline-block;
+  width: 1.15em;
+  height: 1.15em;
+  vertical-align: -0.2em;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.apple-emoji--fallback {
+  width: auto;
+  height: auto;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+}
+
+.emoji-picker__emoji .apple-emoji,
+.emoji-picker__tab-icon .apple-emoji {
+  width: 24px;
+  height: 24px;
+  vertical-align: middle;
+}
+
+.emoji-picker__tab-icon .apple-emoji {
+  width: 18px;
+  height: 18px;
+}
+
+.message-reaction-bar__emoji .apple-emoji,
+.message-reaction-chip__emoji .apple-emoji {
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.15em;
+}
+
 /* ??? Emoji picker ??? */
 
 .emoji-picker {

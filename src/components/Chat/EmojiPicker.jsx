@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { EMOJI_CATEGORIES } from './emojiData';
+import { AppleEmoji } from './AppleEmoji';
 import { StickerView } from './StickerView';
 import { getInstalledStickerPacks } from '../../utils/stickerLibrary';
 
@@ -103,7 +104,7 @@ export function EmojiPicker({
                 tabIndex={visible ? 0 : -1}
               >
                 <span className="emoji-picker__tab-icon" aria-hidden="true">
-                  {cat.icon}
+                  <AppleEmoji emoji={cat.icon} size={18} />
                 </span>
               </button>
             ))}
@@ -120,7 +121,7 @@ export function EmojiPicker({
                 aria-label={emoji}
                 tabIndex={visible ? 0 : -1}
               >
-                {emoji}
+                <AppleEmoji emoji={emoji} size={24} />
               </button>
             ))}
           </div>
