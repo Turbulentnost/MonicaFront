@@ -314,6 +314,10 @@ select:autofill {
   color: #95d5b2;
 }
 
+.chat-header-status.is-activity {
+  color: #95d5b2;
+}
+
 .chat-header-actions {
   display: flex;
   align-items: center;

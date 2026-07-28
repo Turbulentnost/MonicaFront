@@ -92,7 +92,7 @@ export default function ChatsPage() {
   const [input, setInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
-  const [partnerTyping, setPartnerTyping] = useState(false);
+  const [partnerActivity, setPartnerActivity] = useState(null);
   const [pendingAttachments, setPendingAttachments] = useState([]);
   const [attachError, setAttachError] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -315,16 +315,13 @@ export default function ChatsPage() {
     const container = messagesAreaRef.current;
     if (!container) return;
     shouldStickToBottomRef.current = true;
-    setShowScrollToBottom(false);
+    const targetTop = container.scrollHeight;
     if (smooth && typeof container.scrollTo === 'function') {
-      container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
-    } else {
-      container.scrollTop = container.scrollHeight;
+      container.scrollTo({ top: targetTop, behavior: 'smooth' });
+      return;
     }
-    requestAnimationFrame(() => {
-      if (!messagesAreaRef.current) return;
-      messagesAreaRef.current.scrollTop = messagesAreaRef.current.scrollHeight;
-    });
+    container.scrollTop = targetTop;
+    setShowScrollToBottom(false);
   }, []);
 
   const clearPendingAttachments = useCallback(() => {
@@ -365,7 +362,7 @@ export default function ChatsPage() {
     }
     setSelectedChat(chat);
     persistSelectedChat(chat);
-    setPartnerTyping(false);
+    setPartnerActivity(null);
     setSelectedMessageIds([]);
     setForwardPickerOpen(false);
     setPendingForward(null);
@@ -398,7 +395,7 @@ export default function ChatsPage() {
     setSelectedChat(null);
     setMessages([]);
     setHasMoreMessages(false);
-    setPartnerTyping(false);
+    setPartnerActivity(null);
     clearPendingAttachments();
     setDetailsPanelOpen(false);
     navigate('/chats');
@@ -412,7 +409,7 @@ export default function ChatsPage() {
         activeMessagesChatIdRef.current = null;
         setSelectedChat(null);
         setMessages([]);
-        setPartnerTyping(false);
+        setPartnerActivity(null);
       }
       return;
     }
@@ -467,7 +464,7 @@ export default function ChatsPage() {
         loadChats();
         return;
       }
-      setPartnerTyping(false);
+      setPartnerActivity(null);
       setMessages((prev) => {
         if (
           messageChatId
@@ -573,7 +570,11 @@ export default function ChatsPage() {
 
   const handleTyping = useCallback((data) => {
     if (data.user_id === user?.id) return;
-    setPartnerTyping(Boolean(data.is_typing));
+    if (!data.is_typing) {
+      setPartnerActivity(null);
+      return;
+    }
+    setPartnerActivity(data.activity === 'recording' ? 'recording' : 'typing');
   }, [user?.id]);
 
   const { connected, sendMessage, editMessage, sendTyping, markRead: markMessagesRead } = useWebSocket(selectedChat?.id, {
@@ -624,7 +625,7 @@ export default function ChatsPage() {
           clearPendingAttachments();
           setSelectedChat(chat);
           persistSelectedChat(chat);
-          setPartnerTyping(false);
+          setPartnerActivity(null);
           setInput('');
           setCodeMode(false);
           setAttachError('');
@@ -839,7 +840,7 @@ export default function ChatsPage() {
   };
 
   useEffect(() => {
-    setPartnerTyping(false);
+    setPartnerActivity(null);
     lastTypingSentRef.current = false;
   }, [selectedChat?.id]);
 
@@ -914,7 +915,7 @@ export default function ChatsPage() {
       messagesAreaRef.current.scrollTop = messagesAreaRef.current.scrollHeight;
       suppressHistoryLoadRef.current = false;
     });
-  }, [messages, partnerTyping]);
+  }, [messages, partnerActivity]);
 
   const jumpToMessage = useCallback(async (messageId) => {
     if (!selectedChat?.id || !messageId) return;
@@ -1176,6 +1177,8 @@ export default function ChatsPage() {
       setVoiceRecording(true);
       setVoiceElapsedMs(0);
       setVoiceLiveWaveform([]);
+      sendTyping(true, 'recording');
+      lastTypingSentRef.current = true;
     } catch (err) {
       voiceRecorderRef.current = null;
       setVoiceRecording(false);
@@ -1190,6 +1193,7 @@ export default function ChatsPage() {
     setVoiceRecording(false);
     setVoiceElapsedMs(0);
     setVoiceLiveWaveform([]);
+    stopTyping();
     if (recorder) {
       await recorder.cancel();
     }
@@ -1233,6 +1237,7 @@ export default function ChatsPage() {
       setVoiceRecording(false);
       setVoiceElapsedMs(0);
       setVoiceLiveWaveform([]);
+      stopTyping();
 
       if (!result) {
         setAttachError('Запись слишком короткая');
@@ -2261,6 +2266,7 @@ export default function ChatsPage() {
                   selectedChat.partner?.id,
                   selectedChat.partner?.last_seen_at
                 )}
+                partnerActivity={partnerActivity}
                 onInvitePrivate={handleInvitePrivate}
                 privateBusy={privateBusy || invitePending || Boolean(privateSessionId)}
                 onOpenDetails={() => setDetailsPanelOpen((open) => !open)}
@@ -2328,12 +2334,12 @@ export default function ChatsPage() {
                   ))}
                 </div>
               ))}
-              {partnerTyping && !isGroupChat(selectedChat) && (
+              {partnerActivity === 'typing' && !isGroupChat(selectedChat) && (
                 <div className="typing-indicator">
                   @{selectedChat.partner?.nickname} печатает...
                 </div>
               )}
-              {partnerTyping && isGroupChat(selectedChat) && (
+              {partnerActivity === 'typing' && isGroupChat(selectedChat) && (
                 <div className="typing-indicator">
                   Печатают...
                 </div>
@@ -2341,25 +2347,25 @@ export default function ChatsPage() {
               <div ref={messagesEndRef} />
               </div>
             </div>
-            {showScrollToBottom && (
-              <button
-                type="button"
-                className="scroll-to-bottom-btn"
-                onClick={() => scrollMessagesToBottom(true)}
-                aria-label="Вниз к новым сообщениям"
-                title="Вниз"
-              >
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path
-                    d="M6 10l6 6 6-6"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </button>
-            )}
+            <button
+              type="button"
+              className={`scroll-to-bottom-btn${showScrollToBottom ? ' is-visible' : ''}`}
+              onClick={() => scrollMessagesToBottom(true)}
+              aria-label="Вниз к новым сообщениям"
+              title="Вниз"
+              tabIndex={showScrollToBottom ? 0 : -1}
+              aria-hidden={!showScrollToBottom}
+            >
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M6 10l6 6 6-6"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
             </div>
             <div className="chat-main__column chat-main__column--composer">
             {attachError && <div className="attachment-error">{attachError}</div>}
