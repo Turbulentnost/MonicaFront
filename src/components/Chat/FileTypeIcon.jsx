@@ -14,6 +14,7 @@ import iconDmg from '../../design-references/icons/dmg-svgrepo-com.svg';
 import iconDoc from '../../design-references/icons/doc-svgrepo-com.svg';
 import iconDocker from '../../design-references/icons/docker-svgrepo-com.svg';
 import iconEps from '../../design-references/icons/eps-svgrepo-com.svg';
+import iconExcel from '../../design-references/icons/excel-svgrepo-com.svg';
 import iconFla from '../../design-references/icons/fla-svgrepo-com.svg';
 import iconFlv from '../../design-references/icons/flv-svgrepo-com.svg';
 import iconGif from '../../design-references/icons/gif-svgrepo-com.svg';
@@ -83,6 +84,11 @@ const EXT_ICON = {
   doc: iconDoc,
   docx: iconDoc,
   odt: iconDoc,
+  xls: iconExcel,
+  xlsx: iconExcel,
+  xlsm: iconExcel,
+  xlsb: iconExcel,
+  ods: iconExcel,
   // Images
   png: iconPng,
   jpg: iconPng,
@@ -185,6 +191,7 @@ export function resolveFileIconSrc(fileName = '', mimeType = '', language = '') 
   if (mime.startsWith('audio/')) return iconAac;
   if (mime.includes('android') || mime.includes('apk')) return iconAndroid;
   if (mime.includes('msword') || mime.includes('wordprocessing')) return iconDoc;
+  if (mime.includes('excel') || mime.includes('spreadsheet') || mime.includes('sheet')) return iconExcel;
   if (mime.startsWith('text/')) return iconTxt;
 
   return null;

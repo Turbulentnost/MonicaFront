@@ -54,6 +54,7 @@ export function ChatHeader({
   onStartCall,
   onStartVideoCall,
   callDisabled,
+  incomingInvitePending = false,
   onBack,
 }) {
   const [, setTick] = useState(0);
@@ -92,7 +93,13 @@ export function ChatHeader({
   }
 
   return (
-    <div className={`chat-header${group ? ' chat-header--group' : ''}`}>
+    <div
+      className={[
+        'chat-header',
+        group ? 'chat-header--group' : '',
+        incomingInvitePending ? 'chat-header--incoming-invite' : '',
+      ].filter(Boolean).join(' ')}
+    >
       {onBack && (
         <button
           type="button"
@@ -152,7 +159,11 @@ export function ChatHeader({
             className="chat-header-icon-btn"
             onClick={onStartCall}
             disabled={callDisabled}
-            title={callDisabled ? 'Звонок уже выполняется' : 'Аудиозвонок'}
+            title={
+              incomingInvitePending
+                ? 'Звонки недоступны во время приглашения в приватный чат'
+                : (callDisabled ? 'Звонок уже выполняется' : 'Аудиозвонок')
+            }
             aria-label="Начать аудиозвонок"
           >
             <IconPhone />
@@ -162,7 +173,11 @@ export function ChatHeader({
             className="chat-header-icon-btn"
             onClick={onStartVideoCall}
             disabled={callDisabled}
-            title={callDisabled ? 'Звонок уже выполняется' : 'Видеозвонок'}
+            title={
+              incomingInvitePending
+                ? 'Звонки недоступны во время приглашения в приватный чат'
+                : (callDisabled ? 'Звонок уже выполняется' : 'Видеозвонок')
+            }
             aria-label="Начать видеозвонок"
           >
             <IconVideo />

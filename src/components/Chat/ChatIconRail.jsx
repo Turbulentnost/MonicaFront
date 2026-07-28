@@ -22,6 +22,7 @@ export function ChatIconRail({
   settingsActive = false,
   specialMode = false,
   backMode = false,
+  privateMode = false,
 }) {
   const railClass = [
     'chat-rail',
@@ -44,8 +45,8 @@ export function ChatIconRail({
         ) : (
           <img
             className="chat-rail__logo-image"
-            src="/monica-logo.png"
-            alt="Monica"
+            src={privateMode ? '/monica-private.png' : '/monica-logo.png'}
+            alt={privateMode ? 'Monica Private' : 'Monica'}
           />
         )}
       </div>

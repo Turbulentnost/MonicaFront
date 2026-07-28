@@ -619,6 +619,18 @@ export default function ChatsPage() {
     clearAll,
   } = useNotifications(Boolean(user));
 
+  const incomingInviteForOpenChat = useMemo(() => {
+    if (!selectedChat?.id || isGroupChat(selectedChat)) return null;
+    return notifications.find(
+      (notification) => (
+        notification.notification_type === 'private_invite'
+        && notification.payload?.session_id
+        && !notification.payload?.resolved
+        && String(notification.payload?.chat_id) === String(selectedChat.id)
+      )
+    ) || null;
+  }, [notifications, selectedChat]);
+
   const openPrivateSession = useCallback(
     async (sessionId, chatId) => {
       // Сначала открываем панель — не блокируемся на загрузке чата
@@ -2087,6 +2099,26 @@ export default function ChatsPage() {
     return () => { document.title = prevTitle || 'Monica'; };
   }, [isBackModeOpen, isSpecialFavoritesOpen, agedUnreadUserCount, openChatTitle]);
 
+  useEffect(() => {
+    const iconLinks = Array.from(document.querySelectorAll('link[rel~="icon"]'));
+    const defaultIcon = `${process.env.PUBLIC_URL || ''}/monica-logo.png`;
+    const activeIcon = privateSessionId
+      ? `${process.env.PUBLIC_URL || ''}/monica-private.png`
+      : defaultIcon;
+
+    iconLinks.forEach((link) => {
+      link.href = activeIcon;
+      link.type = 'image/png';
+    });
+
+    return () => {
+      iconLinks.forEach((link) => {
+        link.href = defaultIcon;
+        link.type = 'image/png';
+      });
+    };
+  }, [privateSessionId]);
+
   return (
     <div
       className={[
@@ -2143,6 +2175,7 @@ export default function ChatsPage() {
         settingsActive={accountSettingsOpen || stickerStoreOpen}
         specialMode={isSpecialFavoritesOpen}
         backMode={isBackModeOpen}
+        privateMode={Boolean(privateSessionId)}
       />
       <aside className="chat-sidebar">
         <div className="sidebar-header">
@@ -2264,7 +2297,13 @@ export default function ChatsPage() {
                 <span>Отпустите файлы, чтобы прикрепить</span>
               </div>
             )}
-            <div className="chat-main__column chat-main__column--header">
+            <div
+              className={[
+                'chat-main__column',
+                'chat-main__column--header',
+                isGroupChat(selectedChat) ? 'chat-main__column--header--group' : '',
+              ].filter(Boolean).join(' ')}
+            >
             {selectionMode ? (
               <SelectionHeader
                 count={selectedMessageIds.length}
@@ -2287,6 +2326,7 @@ export default function ChatsPage() {
                 partnerActivity={partnerActivity}
                 onInvitePrivate={handleInvitePrivate}
                 privateBusy={privateBusy || invitePending || Boolean(privateSessionId)}
+                incomingInvitePending={Boolean(incomingInviteForOpenChat)}
                 onOpenDetails={() => setDetailsPanelOpen((open) => !open)}
                 onStartCall={handleStartCall}
                 onStartVideoCall={handleStartVideoCall}
@@ -2294,6 +2334,7 @@ export default function ChatsPage() {
                   isGroupChat(selectedChat)
                   || !selectedChat?.partner
                   || !['idle', 'ended'].includes(callController.status)
+                  || Boolean(incomingInviteForOpenChat)
                 }
                 onBack={isMobileViewport ? handleBackToChatList : undefined}
               />
