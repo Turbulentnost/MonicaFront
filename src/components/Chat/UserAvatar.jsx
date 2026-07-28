@@ -34,7 +34,7 @@ export function UserAvatar({ user, size = 40, className = '', showOnline = false
   }, [photoKey, remoteUrl]);
 
   const online = showOnline && Boolean(isOnline);
-  const dotSize = Math.max(8, Math.round(size * 0.22));
+  const dotSize = Math.max(10, Math.round(size * 0.26));
 
   return (
     <div className={`user-avatar-wrap ${className}`} style={wrapStyle}>
@@ -56,6 +56,7 @@ export function UserAvatar({ user, size = 40, className = '', showOnline = false
           className="user-online-dot"
           style={{ width: dotSize, height: dotSize }}
           title="В сети"
+          aria-hidden="true"
         />
       )}
     </div>

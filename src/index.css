@@ -166,8 +166,8 @@ select:autofill {
   position: relative;
   flex-shrink: 0;
   display: inline-block;
-  overflow: hidden;
-  border-radius: 50%;
+  overflow: visible;
+  border-radius: 0;
   box-sizing: border-box;
 }
 
@@ -180,6 +180,7 @@ select:autofill {
   flex-shrink: 0;
   background: #3c4048;
   display: block;
+  overflow: hidden;
 }
 
 .user-avatar-fallback {
@@ -192,16 +193,20 @@ select:autofill {
   color: #e8eaed;
   background: linear-gradient(135deg, #5b7fff, #7c9cff);
   box-sizing: border-box;
+  border-radius: 50%;
+  overflow: hidden;
 }
 
 .user-online-dot {
   position: absolute;
   right: 0;
   bottom: 0;
+  z-index: 2;
   background: #34a853;
   border: 2px solid #151821;
   border-radius: 50%;
   box-sizing: border-box;
+  pointer-events: none;
 }
 
 .chat-list {
