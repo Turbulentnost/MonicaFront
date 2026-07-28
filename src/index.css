@@ -612,10 +612,12 @@ select:autofill {
   padding: 8px 10px;
   background: rgba(0, 0, 0, 0.15);
   border-radius: 8px;
+  min-width: min(280px, 70vw);
+  max-width: 100%;
 }
 
 .message-file:hover {
-  text-decoration: underline;
+  text-decoration: none;
 }
 
 .message-file-icon {
@@ -633,8 +635,43 @@ select:autofill {
 }
 
 .message-file-name {
-  word-break: break-all;
+  flex: 1 1 auto;
+  min-width: 0;
+  word-break: break-word;
   font-size: 14px;
+  line-height: 1.35;
+}
+
+.message-file-download {
+  flex-shrink: 0;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  cursor: pointer;
+  transition: background 140ms ease, opacity 140ms ease;
+}
+
+.message-file-download:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.message-file-download:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
+.message-code-download-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
 }
 
 .voice-message {

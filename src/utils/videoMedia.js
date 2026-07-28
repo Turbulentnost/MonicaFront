@@ -45,13 +45,16 @@ export function formatVideoDuration(seconds) {
 
 export async function downloadMediaFile(url, fileName = 'video.mp4') {
   if (!url) throw new Error('Нет ссылки для скачивания');
+  const safeName = String(fileName || 'file')
+    .replace(/[\\/:*?"<>|]+/g, '_')
+    .trim() || 'file';
   const response = await fetch(url, { mode: 'cors', credentials: 'omit' });
   if (!response.ok) throw new Error('Не удалось скачать файл');
   const blob = await response.blob();
   const objectUrl = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = objectUrl;
-  link.download = fileName || 'video.mp4';
+  link.download = safeName;
   document.body.appendChild(link);
   link.click();
   link.remove();
