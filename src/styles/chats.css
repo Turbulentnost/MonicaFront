@@ -5205,50 +5205,84 @@
   inset: 0;
   z-index: 1200;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.92);
-  padding: 56px 64px 32px;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: stretch;
+  background: rgba(0, 0, 0, 0.94);
+  padding: 0;
   box-sizing: border-box;
 }
 
 /* Поверх колонки чата (не в панели деталей / не в пузыре) */
 .photo-lightbox--chat {
   position: absolute;
+  inset: 0;
   z-index: 80;
 }
 
 .photo-lightbox__toolbar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  position: relative;
+  flex: 0 0 auto;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 18px;
+  gap: 12px;
+  min-height: 52px;
+  padding: 10px 14px;
   color: #f1f3f4;
   font-size: 14px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0) 100%);
 }
 
+.photo-lightbox__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.photo-lightbox__download,
 .photo-lightbox__close {
   border: 0;
   background: transparent;
   color: inherit;
-  font-size: 28px;
   line-height: 1;
   cursor: pointer;
+  padding: 8px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.photo-lightbox__download:hover:not(:disabled),
+.photo-lightbox__close:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.photo-lightbox__download:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
+.photo-lightbox__close {
+  font-size: 28px;
   padding: 4px 10px;
 }
 
 .photo-lightbox__stage {
-  width: min(920px, 90vw);
-  height: min(82vh, 900px);
-  max-width: 100%;
-  max-height: 100%;
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 8px 56px 24px;
+  box-sizing: border-box;
 }
 
 .photo-lightbox__image {
@@ -5257,18 +5291,17 @@
   height: auto;
   max-width: 100%;
   max-height: 100%;
-  min-width: min(280px, 70%);
-  min-height: min(280px, 70%);
   object-fit: contain;
-  border-radius: 6px;
+  border-radius: 4px;
   image-rendering: auto;
+  user-select: none;
 }
 
 .photo-lightbox--chat .photo-lightbox__stage {
-  width: min(920px, 90%);
-  height: min(82%, 900px);
-  max-width: 100%;
-  max-height: 100%;
+  width: 100%;
+  height: auto;
+  max-width: none;
+  max-height: none;
 }
 
 .photo-lightbox--chat .photo-lightbox__image {
@@ -5285,6 +5318,7 @@
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
+  z-index: 2;
   border: 0;
   background: rgba(255, 255, 255, 0.08);
   color: #fff;

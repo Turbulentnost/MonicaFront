@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getCachedMediaSrc, warmMediaCache } from '../../utils/mediaCache';
+import { downloadMediaFile } from '../../utils/videoMedia';
 
 function getLightboxHost() {
   if (typeof document === 'undefined') return null;
@@ -110,7 +111,7 @@ export function PhotoLightbox({ items, index, onClose, onChange }) {
   const remote = current?.content_url;
   const [src, setSrc] = useState(() => getCachedMediaSrc(key, remote));
   const [host, setHost] = useState(null);
-  const [sizeStyle, setSizeStyle] = useState(null);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     setHost(getLightboxHost());
@@ -120,7 +121,6 @@ export function PhotoLightbox({ items, index, onClose, onChange }) {
     let cancelled = false;
     const cached = getCachedMediaSrc(key, remote);
     setSrc(cached);
-    setSizeStyle(null);
     if (key && remote) {
       warmMediaCache(key, remote).then((url) => {
         if (!cancelled && url) setSrc(url);
@@ -130,21 +130,6 @@ export function PhotoLightbox({ items, index, onClose, onChange }) {
       cancelled = true;
     };
   }, [key, remote]);
-
-  const handleImageLoad = (event) => {
-    const { naturalWidth, naturalHeight } = event.currentTarget;
-    if (!naturalWidth || !naturalHeight) return;
-    const maxW = Math.min(920, Math.floor(window.innerWidth * 0.9));
-    const maxH = Math.floor(window.innerHeight * 0.82);
-    const minSide = Math.min(360, Math.floor(Math.min(maxW, maxH) * 0.55));
-    setSizeStyle(
-      fitPhotoSize(naturalWidth, naturalHeight, {
-        minSide,
-        maxW,
-        maxH,
-      })
-    );
-  };
 
   const go = useCallback(
     (delta) => {
@@ -170,6 +155,20 @@ export function PhotoLightbox({ items, index, onClose, onChange }) {
     };
   }, [go, onClose]);
 
+  const handleDownload = async (e) => {
+    e.stopPropagation();
+    if (!src || downloading) return;
+    setDownloading(true);
+    try {
+      const name = current?.file_name || 'photo.jpg';
+      await downloadMediaFile(src, name);
+    } catch {
+      // ignore — browser may block; user can still open image
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   if (!current || !host) return null;
 
   const inChat = host !== document.body;
@@ -185,9 +184,29 @@ export function PhotoLightbox({ items, index, onClose, onChange }) {
         <span className="photo-lightbox__counter">
           {index + 1} / {items.length}
         </span>
-        <button type="button" className="photo-lightbox__close" onClick={onClose} aria-label="Закрыть">
-          ×
-        </button>
+        <div className="photo-lightbox__actions">
+          <button
+            type="button"
+            className="photo-lightbox__download"
+            onClick={handleDownload}
+            disabled={!src || downloading}
+            aria-label="Скачать"
+            title={downloading ? 'Скачивание…' : 'Скачать'}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M12 4v10m0 0 4-4m-4 4-4-4M5 18h14"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+          <button type="button" className="photo-lightbox__close" onClick={onClose} aria-label="Закрыть">
+            ×
+          </button>
+        </div>
       </div>
       {items.length > 1 && (
         <button
@@ -208,8 +227,7 @@ export function PhotoLightbox({ items, index, onClose, onChange }) {
             src={src}
             alt={current.file_name || 'Фото'}
             className="photo-lightbox__image"
-            onLoad={handleImageLoad}
-            style={sizeStyle || undefined}
+            draggable={false}
           />
         ) : (
           <div className="photo-lightbox__empty">Загрузка…</div>
