@@ -96,6 +96,11 @@ export function useAiComplete({
         lastFetchedDraftRef.current = text;
         if (data?.disabled || data?.rate_limited || data?.error) {
           setSuggestion('');
+          if (data?.detail === 'llm_unavailable') {
+            // Soft signal in console for debugging; UI stays calm.
+            // eslint-disable-next-line no-console
+            console.warn('[ai] LLM unavailable — check OPENAI_BASE_URL / LM Studio network');
+          }
         } else {
           setSuggestion(String(data?.suggestion || ''));
         }
