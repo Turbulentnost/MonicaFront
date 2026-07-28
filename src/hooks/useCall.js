@@ -124,6 +124,34 @@ export function useCall(currentUser) {
   const allowSignalingReconnectRef = useRef(false);
   const clientInstanceIdRef = useRef(getClientInstanceId());
   const audioOutputModeRef = useRef('earpiece');
+  const ringtoneRef = useRef(null);
+
+  const stopRingtone = useCallback(() => {
+    const audio = ringtoneRef.current;
+    if (!audio) return;
+    try {
+      audio.pause();
+      audio.currentTime = 0;
+    } catch {
+      // ignore
+    }
+    ringtoneRef.current = null;
+  }, []);
+
+  const startRingtone = useCallback(() => {
+    if (typeof Audio === 'undefined') return;
+    stopRingtone();
+    const audio = new Audio(`${process.env.PUBLIC_URL || ''}/sounds/incoming-call.mp3`);
+    audio.loop = true;
+    audio.preload = 'auto';
+    ringtoneRef.current = audio;
+    const play = audio.play();
+    if (play?.catch) {
+      play.catch(() => {
+        // Autoplay may be blocked until a user gesture; ignore.
+      });
+    }
+  }, [stopRingtone]);
 
   const isPolite = useCallback(() => {
     const current = callRef.current;
@@ -278,6 +306,7 @@ export function useCall(currentUser) {
   }, [stopTimer]);
 
   const finish = useCallback((message = '') => {
+    stopRingtone();
     closeMedia();
     callRef.current = null;
     if (mountedRef.current) {
@@ -293,7 +322,7 @@ export function useCall(currentUser) {
     setAudioOutputMode('earpiece');
     audioOutputModeRef.current = 'earpiece';
     setElapsedSeconds(0);
-  }, [closeMedia, updateStatus]);
+  }, [closeMedia, stopRingtone, updateStatus]);
 
   const failCall = useCallback((message, reason = 'connection_failed') => {
     const callId = callRef.current?.id;
@@ -841,6 +870,16 @@ export function useCall(currentUser) {
     return () => mediaDevices?.removeEventListener?.('devicechange', refreshDevices);
   }, [refreshDevices]);
 
+  // Incoming call ringtone (Тихий входящий.mp3).
+  useEffect(() => {
+    if (status === 'incoming') {
+      startRingtone();
+      return () => stopRingtone();
+    }
+    stopRingtone();
+    return undefined;
+  }, [startRingtone, status, stopRingtone]);
+
   // Auto-dismiss call errors; return to idle after a failed start/end.
   useEffect(() => {
     if (!error) return undefined;
@@ -895,8 +934,9 @@ export function useCall(currentUser) {
 
   useEffect(() => () => {
     mountedRef.current = false;
+    stopRingtone();
     closeMedia();
-  }, [closeMedia]);
+  }, [closeMedia, stopRingtone]);
 
   const bluetoothAvailable = devices.some((d) => classifyOutputDevice(d) === 'bluetooth');
 

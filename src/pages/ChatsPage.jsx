@@ -14,6 +14,7 @@ import { useNotifications } from '../hooks/usePresence';
 import { useCallContext, usePresenceHandlers } from '../context/CallContext';
 import { useSecretSequenceShortcut, FRONT_SEQUENCE, BACK_SEQUENCE } from '../hooks/useSecretFavoritesShortcut';
 import { useUserIdle } from '../hooks/useUserIdle';
+import { useAiComplete } from '../hooks/useAiComplete';
 import { MOBILE_CHAT_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
 import { useResizableWidth } from '../hooks/useResizableWidth';
 import { useChatTheme } from '../hooks/useChatTheme';
@@ -127,7 +128,7 @@ export default function ChatsPage() {
   const [input, setInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
-  const [partnerTyping, setPartnerTyping] = useState(false);
+  const [partnerActivity, setPartnerActivity] = useState(null);
   const [pendingAttachments, setPendingAttachments] = useState([]);
   const [attachError, setAttachError] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -147,6 +148,7 @@ export default function ChatsPage() {
   const [chatSearchFocusSeq, setChatSearchFocusSeq] = useState(0);
   const [chatBackground, setChatBackgroundState] = useState(null);
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
+  const [aiStyleRefreshKey, setAiStyleRefreshKey] = useState(0);
   const [stickerStoreOpen, setStickerStoreOpen] = useState(false);
   const [installedStickerPackIds, setInstalledStickerPackIds] = useState(() => getInstalledStickerPackIds());
   const [isFileDragOver, setIsFileDragOver] = useState(false);
@@ -161,6 +163,7 @@ export default function ChatsPage() {
   const [replyTo, setReplyTo] = useState(null);
   const [forwardBusy, setForwardBusy] = useState(false);
   const [pendingOriginalJump, setPendingOriginalJump] = useState(null);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const messagesEndRef = useRef(null);
   const messagesAreaRef = useRef(null);
   const loadingOlderRef = useRef(false);
@@ -192,6 +195,18 @@ export default function ChatsPage() {
   const [voiceLiveWaveform, setVoiceLiveWaveform] = useState([]);
   const [voiceBusy, setVoiceBusy] = useState(false);
   const callController = useCallContext();
+  const {
+    suggestion: aiSuggestion,
+    styleEnabled: aiStyleEnabled,
+    clearSuggestion: clearAiSuggestion,
+    acceptAll: acceptAiAll,
+    acceptWord: acceptAiWord,
+  } = useAiComplete({
+    draft: codeMode || voiceRecording ? '' : input,
+    chatId: selectedChat?.id,
+    enabled: Boolean(selectedChat) && !codeMode && !voiceRecording && !accountSettingsOpen,
+    refreshKey: aiStyleRefreshKey,
+  });
   const { isOnline, getLastSeen } = callController;
   const callChatId = callController.call?.chat_id
     || (typeof callController.call?.chat === 'object'
@@ -245,6 +260,7 @@ export default function ChatsPage() {
     shouldStickToBottomRef.current = true;
     suppressHistoryLoadRef.current = true;
     setHighlightedMessageId(null);
+    setShowScrollToBottom(false);
     setMessages([]);
     setHasMoreMessages(false);
     loadingOlderRef.current = false;
@@ -429,11 +445,27 @@ export default function ChatsPage() {
     const container = event.currentTarget;
     if (suppressHistoryLoadRef.current) return;
     const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
-    shouldStickToBottomRef.current = maxScroll - container.scrollTop < 96;
+    const distanceFromBottom = maxScroll - container.scrollTop;
+    const nearBottom = distanceFromBottom < 96;
+    shouldStickToBottomRef.current = nearBottom;
+    setShowScrollToBottom(!nearBottom && maxScroll > 120);
     if (container.scrollTop <= 80) {
       loadOlderMessages();
     }
   }, [loadOlderMessages]);
+
+  const scrollMessagesToBottom = useCallback((smooth = true) => {
+    const container = messagesAreaRef.current;
+    if (!container) return;
+    shouldStickToBottomRef.current = true;
+    const targetTop = container.scrollHeight;
+    if (smooth && typeof container.scrollTo === 'function') {
+      container.scrollTo({ top: targetTop, behavior: 'smooth' });
+      return;
+    }
+    container.scrollTop = targetTop;
+    setShowScrollToBottom(false);
+  }, []);
 
   const clearPendingAttachments = useCallback(() => {
     setPendingAttachments((prev) => {
@@ -508,9 +540,9 @@ export default function ChatsPage() {
     if (typeof window !== 'undefined' && window.matchMedia(MOBILE_CHAT_QUERY).matches) {
       setDetailsPanelOpen(false);
     }
-    setSelectedChat(target);
-    persistSelectedChat(target);
-    setPartnerTyping(false);
+    setSelectedChat(chat);
+    persistSelectedChat(chat);
+    setPartnerActivity(null);
     setSelectedMessageIds([]);
     setForwardPickerOpen(false);
     setPendingForward(null);
@@ -641,7 +673,7 @@ export default function ChatsPage() {
     setSelectedChat(null);
     setMessages([]);
     setHasMoreMessages(false);
-    setPartnerTyping(false);
+    setPartnerActivity(null);
     clearPendingAttachments();
     setDetailsPanelOpen(false);
     navigate('/chats');
@@ -656,7 +688,7 @@ export default function ChatsPage() {
         pendingSelectIdRef.current = null;
         setSelectedChat(null);
         setMessages([]);
-        setPartnerTyping(false);
+        setPartnerActivity(null);
       }
       return;
     }
@@ -743,7 +775,7 @@ export default function ChatsPage() {
         loadChats();
         return;
       }
-      setPartnerTyping(false);
+      setPartnerActivity(null);
       setMessages((prev) => {
         if (
           messageChatId
@@ -849,7 +881,11 @@ export default function ChatsPage() {
 
   const handleTyping = useCallback((data) => {
     if (data.user_id === user?.id) return;
-    setPartnerTyping(Boolean(data.is_typing));
+    if (!data.is_typing) {
+      setPartnerActivity(null);
+      return;
+    }
+    setPartnerActivity(data.activity === 'recording' ? 'recording' : 'typing');
   }, [user?.id]);
 
   const { connected, sendMessage, editMessage, sendTyping, markRead: markMessagesRead } = useWebSocket(selectedChat?.id, {
@@ -902,7 +938,7 @@ export default function ChatsPage() {
           clearPendingAttachments();
           setSelectedChat(chat);
           persistSelectedChat(chat);
-          setPartnerTyping(false);
+          setPartnerActivity(null);
           setInput('');
           setCodeMode(false);
           setAttachError('');
@@ -1117,7 +1153,7 @@ export default function ChatsPage() {
   };
 
   useEffect(() => {
-    setPartnerTyping(false);
+    setPartnerActivity(null);
     lastTypingSentRef.current = false;
   }, [selectedChat?.id]);
 
@@ -1192,7 +1228,7 @@ export default function ChatsPage() {
       messagesAreaRef.current.scrollTop = messagesAreaRef.current.scrollHeight;
       suppressHistoryLoadRef.current = false;
     });
-  }, [messages, partnerTyping]);
+  }, [messages, partnerActivity]);
 
   const jumpToMessage = useCallback(async (messageId) => {
     if (!selectedChat?.id || !messageId) return;
@@ -1454,6 +1490,8 @@ export default function ChatsPage() {
       setVoiceRecording(true);
       setVoiceElapsedMs(0);
       setVoiceLiveWaveform([]);
+      sendTyping(true, 'recording');
+      lastTypingSentRef.current = true;
     } catch (err) {
       voiceRecorderRef.current = null;
       setVoiceRecording(false);
@@ -1468,6 +1506,7 @@ export default function ChatsPage() {
     setVoiceRecording(false);
     setVoiceElapsedMs(0);
     setVoiceLiveWaveform([]);
+    stopTyping();
     if (recorder) {
       await recorder.cancel();
     }
@@ -1511,6 +1550,7 @@ export default function ChatsPage() {
       setVoiceRecording(false);
       setVoiceElapsedMs(0);
       setVoiceLiveWaveform([]);
+      stopTyping();
 
       if (!result) {
         setAttachError('Запись слишком короткая');
@@ -1585,6 +1625,7 @@ export default function ChatsPage() {
   const handleSend = async (e) => {
     e.preventDefault();
     if (!selectedChat || uploading || forwardBusy) return;
+    clearAiSuggestion();
 
     // Pending stub: resolve chat first; send after WS binds to the real id.
     if (user && isPendingFavoritesId(selectedChat.id)) {
@@ -2091,10 +2132,11 @@ export default function ChatsPage() {
     await handleSelectChat(chat);
   };
 
-  const handleCreateGroup = async ({ title, member_ids }) => {
+  const handleCreateGroup = async ({ title, member_ids, photo }) => {
     const { data } = await chatsApi.createGroup({
       title,
       member_ids: (member_ids || []).map((id) => String(id)),
+      photo: photo || null,
     });
     setCreateGroupOpen(false);
     let list = [];
@@ -2511,43 +2553,39 @@ export default function ChatsPage() {
             />
           </div>
         </div>
-        {!chatSidebarCompact && (
-          <>
-            <ChatFilters
-              active={chatFilter}
-              onChange={setChatFilter}
-              unreadCount={unreadChatCount}
-              specialMode={isSpecialFavoritesOpen}
-              backMode={isBackModeOpen}
-            />
-            <div className="search-box">
-              <input
-                type="text"
-                placeholder={
-                  isBackModeOpen
-                    ? 'Искать… зачем?'
-                    : isSpecialFavoritesOpen
-                      ? 'Search chats…  ⌘K'
-                      : 'Имя, фамилия, email или ник...'
-                }
-                value={searchQuery}
-                onChange={(e) => handleSearch(e.target.value)}
-              />
-              {searchResults.length > 0 && (
-                <ul className="search-results">
-                  {searchResults.map((u) => (
-                    <UserSearchResult
-                      key={u.id}
-                      user={u}
-                      onSelect={startChat}
-                      isOnline={isOnline(u.id, u.is_online)}
-                    />
-                  ))}
-                </ul>
-              )}
-            </div>
-          </>
-        )}
+        <ChatFilters
+          active={chatFilter}
+          onChange={setChatFilter}
+          unreadCount={unreadChatCount}
+          specialMode={isSpecialFavoritesOpen}
+          backMode={isBackModeOpen}
+        />
+        <div className="search-box">
+          <input
+            type="text"
+            placeholder={
+              isBackModeOpen
+                ? 'Искать… зачем?'
+                : isSpecialFavoritesOpen
+                  ? 'Search chats…  ⌘K'
+                  : 'Поиск по никнейму...'
+            }
+            value={searchQuery}
+            onChange={(e) => handleSearch(e.target.value)}
+          />
+          {searchResults.length > 0 && (
+            <ul className="search-results">
+              {searchResults.map((u) => (
+                <UserSearchResult
+                  key={u.id}
+                  user={u}
+                  onSelect={startChat}
+                  isOnline={isOnline(u.id, u.is_online)}
+                />
+              ))}
+            </ul>
+          )}
+        </div>
         <ul className="chat-list">
           {filteredChats.map((chat) => (
             <ChatListItem
@@ -2590,9 +2628,10 @@ export default function ChatsPage() {
         <AccountSettings
           user={user}
           onUserUpdated={updateUser}
-          onClose={() => setAccountSettingsOpen(false)}
-          themeId={themeId}
-          onThemeChange={setThemeId}
+          onClose={() => {
+            setAccountSettingsOpen(false);
+            setAiStyleRefreshKey((n) => n + 1);
+          }}
         />
       ) : stickerStoreOpen ? (
         <StickerStorePage
@@ -2640,6 +2679,7 @@ export default function ChatsPage() {
                   selectedChat.partner?.id,
                   selectedChat.partner?.last_seen_at
                 )}
+                partnerActivity={partnerActivity}
                 onInvitePrivate={handleInvitePrivate}
                 privateBusy={privateBusy || invitePending || Boolean(privateSessionId)}
                 onOpenDetails={() => setDetailsPanelOpen((open) => !open)}
@@ -2668,6 +2708,7 @@ export default function ChatsPage() {
               </div>
             )}
             </div>
+            <div className="messages-area-wrap">
             <div
               ref={messagesAreaRef}
               className="messages-area"
@@ -2708,18 +2749,38 @@ export default function ChatsPage() {
                   ))}
                 </div>
               ))}
-              {partnerTyping && !isGroupChat(selectedChat) && (
+              {partnerActivity === 'typing' && !isGroupChat(selectedChat) && (
                 <div className="typing-indicator">
                   @{selectedChat.partner?.nickname} печатает...
                 </div>
               )}
-              {partnerTyping && isGroupChat(selectedChat) && (
+              {partnerActivity === 'typing' && isGroupChat(selectedChat) && (
                 <div className="typing-indicator">
                   Печатают...
                 </div>
               )}
               <div ref={messagesEndRef} />
               </div>
+            </div>
+            <button
+              type="button"
+              className={`scroll-to-bottom-btn${showScrollToBottom ? ' is-visible' : ''}`}
+              onClick={() => scrollMessagesToBottom(true)}
+              aria-label="Вниз к новым сообщениям"
+              title="Вниз"
+              tabIndex={showScrollToBottom ? 0 : -1}
+              aria-hidden={!showScrollToBottom}
+            >
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M6 10l6 6 6-6"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
             </div>
             <div className="chat-main__column chat-main__column--composer">
             {attachError && <div className="attachment-error">{attachError}</div>}
@@ -2984,7 +3045,14 @@ export default function ChatsPage() {
                       </div>
                     </>
                   ) : (
-                    <textarea
+                    <div className="message-input-ai">
+                      <div className="message-input-ai-ghost" aria-hidden="true">
+                        <span className="message-input-ai-ghost__typed">{input}</span>
+                        {aiSuggestion && aiStyleEnabled ? (
+                          <span className="message-input-ai-ghost__suggestion">{aiSuggestion}</span>
+                        ) : null}
+                      </div>
+                      <textarea
                       ref={messageInputRef}
                       className="message-input-textarea"
                       rows={1}
@@ -2992,8 +3060,39 @@ export default function ChatsPage() {
                       onChange={(e) => handleInputChange(e.target.value)}
                       onPaste={handlePasteFiles}
                       onKeyDown={(e) => {
+                        if (aiSuggestion && e.key === 'Tab') {
+                          e.preventDefault();
+                          const next = acceptAiAll();
+                          if (next) handleInputChange(next);
+                          return;
+                        }
+                        if (aiSuggestion && e.key === 'Escape') {
+                          e.preventDefault();
+                          clearAiSuggestion();
+                          return;
+                        }
+                        if (
+                          aiSuggestion
+                          && e.key === 'ArrowRight'
+                          && !e.shiftKey
+                          && !e.altKey
+                          && !e.ctrlKey
+                          && !e.metaKey
+                        ) {
+                          const el = e.currentTarget;
+                          if (
+                            el.selectionStart === el.value.length
+                            && el.selectionEnd === el.value.length
+                          ) {
+                            e.preventDefault();
+                            const next = acceptAiWord();
+                            if (next != null) handleInputChange(next);
+                            return;
+                          }
+                        }
                         if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault();
+                          clearAiSuggestion();
                           e.currentTarget.form?.requestSubmit();
                         }
                       }}
@@ -3008,9 +3107,15 @@ export default function ChatsPage() {
                               ? 'Напишите что-нибудь… это никого не спасёт'
                               : isSpecialFavoritesOpen
                                 ? "Let's ship this! 💪"
-                                : 'Сообщение...'
+                                : aiSuggestion
+                                  ? ''
+                                  : 'Сообщение...'
                       }
                     />
+                      {aiSuggestion && aiStyleEnabled ? (
+                        <div className="message-input-ai-hint">Tab — принять · Esc — отклонить</div>
+                      ) : null}
+                    </div>
                   )}
                 </div>
                 <SendIconButton

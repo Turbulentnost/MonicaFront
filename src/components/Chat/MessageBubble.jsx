@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MessageMedia } from './MessageMedia';
 import { VoiceMessagePlayer } from './VoiceMessagePlayer';
+import { AppleEmoji } from './AppleEmoji';
 import { EmojiPicker } from './EmojiPicker';
 import { ForwardedBundle } from './ForwardedBundle';
 import { LinkPreviewCard } from './LinkPreviewCard';
@@ -679,7 +680,7 @@ function ChatMessageBubble({
               onClick={openReactions}
             >
               <span className="message-react-trigger__emoji" aria-hidden="true">
-                <Twemoji emoji="😊" />
+                <AppleEmoji emoji="😊" size={16} />
               </span>
               <span className="message-react-trigger__plus" aria-hidden="true">
                 <PlusIcon />
@@ -705,7 +706,7 @@ function ChatMessageBubble({
                 onClick={() => handleReactionPick(emoji)}
                 aria-label={`Реакция ${emoji}`}
               >
-                <Twemoji emoji={emoji} />
+                <AppleEmoji emoji={emoji} size={20} />
               </button>
             ))}
             {/* Кнопка 😊+ только до раскрытия полного пикера */}
@@ -751,7 +752,7 @@ function ChatMessageBubble({
               aria-pressed={reactedByMe}
             >
               <span className="message-reaction-chip__emoji">
-                <Twemoji emoji={emoji} />
+                <AppleEmoji emoji={emoji} size={16} />
               </span>
               {count > 1 && <span className="message-reaction-chip__count">{count}</span>}
             </button>

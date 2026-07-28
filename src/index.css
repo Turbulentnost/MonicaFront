@@ -225,8 +225,8 @@ img.twemoji {
   position: relative;
   flex-shrink: 0;
   display: inline-block;
-  overflow: hidden;
-  border-radius: 50%;
+  overflow: visible;
+  border-radius: 0;
   box-sizing: border-box;
 }
 
@@ -239,6 +239,7 @@ img.twemoji {
   flex-shrink: 0;
   background: #3c4048;
   display: block;
+  overflow: hidden;
 }
 
 .user-avatar-fallback {
@@ -251,16 +252,20 @@ img.twemoji {
   color: #e8eaed;
   background: linear-gradient(135deg, #5b7fff, #7c9cff);
   box-sizing: border-box;
+  border-radius: 50%;
+  overflow: hidden;
 }
 
 .user-online-dot {
   position: absolute;
   right: 0;
   bottom: 0;
+  z-index: 2;
   background: #34a853;
   border: 2px solid #151821;
   border-radius: 50%;
   box-sizing: border-box;
+  pointer-events: none;
 }
 
 .chat-list {
@@ -365,6 +370,10 @@ img.twemoji {
 }
 
 .chat-header-status.is-online {
+  color: #95d5b2;
+}
+
+.chat-header-status.is-activity {
   color: #95d5b2;
 }
 
@@ -671,10 +680,12 @@ img.twemoji {
   padding: 8px 10px;
   background: rgba(0, 0, 0, 0.15);
   border-radius: 8px;
+  min-width: min(280px, 70vw);
+  max-width: 100%;
 }
 
 .message-file:hover {
-  text-decoration: underline;
+  text-decoration: none;
 }
 
 .message-file-icon {
@@ -692,8 +703,43 @@ img.twemoji {
 }
 
 .message-file-name {
-  word-break: break-all;
+  flex: 1 1 auto;
+  min-width: 0;
+  word-break: break-word;
   font-size: 14px;
+  line-height: 1.35;
+}
+
+.message-file-download {
+  flex-shrink: 0;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  cursor: pointer;
+  transition: background 140ms ease, opacity 140ms ease;
+}
+
+.message-file-download:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.message-file-download:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
+.message-code-download-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
 }
 
 .voice-message {

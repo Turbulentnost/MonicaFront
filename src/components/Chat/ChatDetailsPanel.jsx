@@ -190,6 +190,11 @@ function getSearchPreview(message) {
     return caption || 'Фото';
   }
   if (message.message_type === 'file') {
+    const mime = String(message.mime_type || '').toLowerCase();
+    const name = String(message.file_name || '').toLowerCase();
+    if (mime.startsWith('video/') || /\.(mp4|webm|mov|mkv|m4v|avi|ogv|3gp)$/.test(name)) {
+      return 'Видео';
+    }
     return message.file_name || 'Файл';
   }
   if (message.message_type === 'voice') return 'Голосовое сообщение';

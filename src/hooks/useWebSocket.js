@@ -146,11 +146,16 @@ export function useWebSocket(chatId, { onMessage, onTyping, onDeleted, onEdited,
     }
   }, []);
 
-  const sendTyping = useCallback((isTyping) => {
+  const sendTyping = useCallback((isTyping, activity = 'typing') => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(
-        JSON.stringify({ action: isTyping ? 'typing.start' : 'typing.stop' })
-      );
+      if (isTyping) {
+        const nextActivity = activity === 'recording' ? 'recording' : 'typing';
+        wsRef.current.send(
+          JSON.stringify({ action: 'typing.start', activity: nextActivity })
+        );
+      } else {
+        wsRef.current.send(JSON.stringify({ action: 'typing.stop' }));
+      }
     }
   }, []);
 

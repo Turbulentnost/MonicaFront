@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getCachedMediaSrc, warmMediaCache } from '../../utils/mediaCache';
+import { downloadMediaFile } from '../../utils/videoMedia';
 
 function getLightboxHost() {
   if (typeof document === 'undefined') return null;
@@ -148,30 +149,25 @@ export function PhotoLightbox({ items, index, onClose, onChange }) {
   const current = items[index];
   const src = usePhotoSrc(current);
   const [host, setHost] = useState(null);
-  const [sizeStyle, setSizeStyle] = useState(null);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     setHost(getLightboxHost());
   }, []);
 
   useEffect(() => {
-    setSizeStyle(null);
-  }, [src, index]);
-
-  const handleImageLoad = (event) => {
-    const { naturalWidth, naturalHeight } = event.currentTarget;
-    if (!naturalWidth || !naturalHeight) return;
-    const maxW = Math.min(760, Math.floor(window.innerWidth * 0.72));
-    const maxH = Math.floor(window.innerHeight * 0.62);
-    const minSide = Math.min(240, Math.floor(Math.min(maxW, maxH) * 0.4));
-    setSizeStyle(
-      fitPhotoSize(naturalWidth, naturalHeight, {
-        minSide,
-        maxW,
-        maxH,
-      })
-    );
-  };
+    let cancelled = false;
+    const cached = getCachedMediaSrc(key, remote);
+    setSrc(cached);
+    if (key && remote) {
+      warmMediaCache(key, remote).then((url) => {
+        if (!cancelled && url) setSrc(url);
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [key, remote]);
 
   const go = useCallback(
     (delta) => {
@@ -194,6 +190,20 @@ export function PhotoLightbox({ items, index, onClose, onChange }) {
     };
   }, [go, onClose]);
 
+  const handleDownload = async (e) => {
+    e.stopPropagation();
+    if (!src || downloading) return;
+    setDownloading(true);
+    try {
+      const name = current?.file_name || 'photo.jpg';
+      await downloadMediaFile(src, name);
+    } catch {
+      // ignore — browser may block; user can still open image
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   if (!current || !host) return null;
 
   const inChat = host !== document.body;
@@ -209,48 +219,53 @@ export function PhotoLightbox({ items, index, onClose, onChange }) {
         <span className="photo-lightbox__counter">
           {index + 1} / {items.length}
         </span>
-        <button type="button" className="photo-lightbox__close" onClick={onClose} aria-label="Закрыть">
-          ×
-        </button>
-      </div>
-
-      <div className="photo-lightbox__body" onClick={(e) => e.stopPropagation()}>
-        {items.length > 1 && (
+        <div className="photo-lightbox__actions">
           <button
             type="button"
-            className="photo-lightbox__nav photo-lightbox__nav--prev"
-            onClick={() => go(-1)}
-            aria-label="Предыдущее"
+            className="photo-lightbox__download"
+            onClick={handleDownload}
+            disabled={!src || downloading}
+            aria-label="Скачать"
+            title={downloading ? 'Скачивание…' : 'Скачать'}
           >
-            <ChevronIcon dir="prev" />
-          </button>
-        )}
-
-        <div className="photo-lightbox__stage">
-          <div className="photo-lightbox__slide">
-            {src ? (
-              <img
-                src={src}
-                alt={current.file_name || 'Фото'}
-                className="photo-lightbox__image"
-                onLoad={handleImageLoad}
-                style={sizeStyle || undefined}
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M12 4v10m0 0 4-4m-4 4-4-4M5 18h14"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               />
-            ) : (
-              <div className="photo-lightbox__empty">Загрузка…</div>
-            )}
-          </div>
-        </div>
-
-        {items.length > 1 && (
-          <button
-            type="button"
-            className="photo-lightbox__nav photo-lightbox__nav--next"
-            onClick={() => go(1)}
-            aria-label="Следующее"
-          >
-            <ChevronIcon dir="next" />
+            </svg>
           </button>
+          <button type="button" className="photo-lightbox__close" onClick={onClose} aria-label="Закрыть">
+            ×
+          </button>
+        </div>
+      </div>
+      {items.length > 1 && (
+        <button
+          type="button"
+          className="photo-lightbox__nav photo-lightbox__nav--prev"
+          onClick={(e) => {
+            e.stopPropagation();
+            go(-1);
+          }}
+          aria-label="Предыдущее"
+        >
+          ‹
+        </button>
+      )}
+      <div className="photo-lightbox__stage" onClick={(e) => e.stopPropagation()}>
+        {src ? (
+          <img
+            src={src}
+            alt={current.file_name || 'Фото'}
+            className="photo-lightbox__image"
+            draggable={false}
+          />
+        ) : (
+          <div className="photo-lightbox__empty">Загрузка…</div>
         )}
       </div>
 

@@ -5,11 +5,59 @@ import pythonLang from 'react-syntax-highlighter/dist/esm/languages/prism/python
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { chatsApi } from '../../api/client';
 import { getCachedMediaSrc, warmMediaCache } from '../../utils/mediaCache';
+import { downloadMediaFile, isVideoMessage } from '../../utils/videoMedia';
 import { FileTypeIcon } from './FileTypeIcon';
 import { PhotoGallery } from './PhotoGallery';
+import { VideoMessage } from './VideoMessage';
 
 SyntaxHighlighter.registerLanguage('python', pythonLang);
 SyntaxHighlighter.registerLanguage('javascript', javascriptLang);
+
+function DownloadIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12 4v10m0 0 4-4m-4 4-4-4M5 18h14"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function FileDownloadButton({ url, fileName, className = '' }) {
+  const [downloading, setDownloading] = useState(false);
+
+  const handleClick = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!url || downloading) return;
+    setDownloading(true);
+    try {
+      await downloadMediaFile(url, fileName || 'file');
+    } catch {
+      // fallback: open in new tab if blob download fails
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      className={`message-file-download ${className}`.trim()}
+      onClick={handleClick}
+      disabled={!url || downloading}
+      aria-label="Скачать файл"
+      title={downloading ? 'Скачивание…' : 'Скачать'}
+    >
+      <DownloadIcon />
+    </button>
+  );
+}
 
 const codeTextCache = new Map();
 
@@ -168,15 +216,11 @@ export function MessageMedia({ message, chatId }) {
           />
           <span className="message-code-name">{label}</span>
           <span className="message-code-lang">{langLabel}</span>
-          <a
-            href={remoteUrl || '#'}
-            className="message-code-download"
-            target="_blank"
-            rel="noopener noreferrer"
-            download={message.file_name || undefined}
-          >
-            Скачать
-          </a>
+          <FileDownloadButton
+            url={remoteUrl}
+            fileName={message.file_name || label}
+            className="message-code-download-btn"
+          />
           <button
             type="button"
             className="message-code-run"
@@ -254,18 +298,15 @@ export function MessageMedia({ message, chatId }) {
   }
 
   if (message.message_type === 'file') {
+    if (isVideoMessage(message)) {
+      return <VideoMessage message={message} />;
+    }
     const label = message.file_name || 'Файл';
     const sizeLabel = message.file_size
       ? ` (${Math.round(message.file_size / 1024)} КБ)`
       : '';
     return (
-      <a
-        href={remoteUrl || '#'}
-        className="message-file"
-        target="_blank"
-        rel="noopener noreferrer"
-        download={message.file_name || undefined}
-      >
+      <div className="message-file">
         <FileTypeIcon
           className="message-file-icon"
           fileName={label}
@@ -276,7 +317,8 @@ export function MessageMedia({ message, chatId }) {
           {label}
           {sizeLabel}
         </span>
-      </a>
+        <FileDownloadButton url={remoteUrl} fileName={label} />
+      </div>
     );
   }
 

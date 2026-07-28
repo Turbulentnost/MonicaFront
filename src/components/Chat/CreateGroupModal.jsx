@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { chatsApi } from '../../api/client';
 import { getDirectChatPartners } from '../../utils/chatDisplay';
 import { UserAvatar } from './UserAvatar';
 
 const TITLE_MAX = 64;
+const AVATAR_MAX_BYTES = 10 * 1024 * 1024;
 
 function getErrorMessage(error) {
   const data = error?.response?.data;
@@ -38,6 +39,8 @@ export function CreateGroupModal({
 }) {
   const [step, setStep] = useState('name');
   const [title, setTitle] = useState('');
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState('');
   const [query, setQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [selectedUsers, setSelectedUsers] = useState(() => new Map());
@@ -45,6 +48,11 @@ export function CreateGroupModal({
   const [searchLoading, setSearchLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const photoInputRef = useRef(null);
+
+  useEffect(() => () => {
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+  }, [photoPreview]);
 
   const partners = useMemo(
     () => getDirectChatPartners(chats, currentUserId),
@@ -144,6 +152,29 @@ export function CreateGroupModal({
     });
   };
 
+  const handlePhotoPick = (file) => {
+    if (!file) return;
+    if (!file.type?.startsWith('image/')) {
+      setError('Нужно изображение (JPG, PNG, WEBP или GIF)');
+      return;
+    }
+    if (file.size > AVATAR_MAX_BYTES) {
+      setError('Изображение больше 10 МБ');
+      return;
+    }
+    setError('');
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  };
+
+  const clearPhoto = () => {
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPhotoFile(null);
+    setPhotoPreview('');
+    if (photoInputRef.current) photoInputRef.current.value = '';
+  };
+
   const handleCreate = async () => {
     if (!canCreate) return;
     setSubmitting(true);
@@ -153,6 +184,7 @@ export function CreateGroupModal({
       await onCreate?.({
         title: trimmedTitle,
         member_ids: Array.from(selectedIds),
+        photo: photoFile || null,
       });
     } catch (err) {
       setError(getErrorMessage(err));
@@ -183,6 +215,56 @@ export function CreateGroupModal({
 
         {step === 'name' ? (
           <div className="create-group-modal__body">
+            <div className="create-group-modal__avatar-row">
+              <button
+                type="button"
+                className="create-group-modal__avatar"
+                onClick={() => photoInputRef.current?.click()}
+                aria-label="Выбрать изображение группы"
+                title="Выбрать изображение"
+              >
+                {photoPreview ? (
+                  <img src={photoPreview} alt="" className="create-group-modal__avatar-img" />
+                ) : (
+                  <span className="create-group-modal__avatar-placeholder" aria-hidden="true">
+                    +
+                  </span>
+                )}
+              </button>
+              <div className="create-group-modal__avatar-meta">
+                <strong>Изображение группы</strong>
+                <span>Необязательно · JPG, PNG, WEBP, GIF</span>
+                <div className="create-group-modal__avatar-actions">
+                  <button
+                    type="button"
+                    className="create-group-modal__link"
+                    onClick={() => photoInputRef.current?.click()}
+                  >
+                    {photoPreview ? 'Заменить' : 'Загрузить'}
+                  </button>
+                  {photoPreview ? (
+                    <button
+                      type="button"
+                      className="create-group-modal__link muted"
+                      onClick={clearPhoto}
+                    >
+                      Убрать
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = '';
+                  if (file) handlePhotoPick(file);
+                }}
+              />
+            </div>
             <label className="create-group-modal__label" htmlFor="create-group-name">
               Название группы
             </label>
@@ -205,6 +287,7 @@ export function CreateGroupModal({
             <div className="create-group-modal__hint">
               {trimmedTitle.length}/{TITLE_MAX}
             </div>
+            {error && step === 'name' ? <p className="create-group-modal__error">{error}</p> : null}
             <div className="create-group-modal__actions">
               <button type="button" className="create-group-modal__btn ghost" onClick={onClose}>
                 Отмена
@@ -213,7 +296,10 @@ export function CreateGroupModal({
                 type="button"
                 className="create-group-modal__btn primary"
                 disabled={!canNext}
-                onClick={() => setStep('members')}
+                onClick={() => {
+                  setError('');
+                  setStep('members');
+                }}
               >
                 Далее
               </button>
@@ -221,7 +307,16 @@ export function CreateGroupModal({
           </div>
         ) : (
           <div className="create-group-modal__body">
-            <p className="create-group-modal__group-name">{trimmedTitle}</p>
+            <div className="create-group-modal__summary">
+              <div className="create-group-modal__summary-avatar" aria-hidden="true">
+                {photoPreview ? (
+                  <img src={photoPreview} alt="" />
+                ) : (
+                  <span>{(trimmedTitle || 'Г').slice(0, 2).toUpperCase()}</span>
+                )}
+              </div>
+              <p className="create-group-modal__group-name">{trimmedTitle}</p>
+            </div>
             <input
               type="search"
               className="create-group-modal__input"

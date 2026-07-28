@@ -1,6 +1,5 @@
 import { Fragment } from 'react';
-import { Twemoji } from '../components/Chat/Twemoji';
-import { splitTextAndEmoji } from './twemoji';
+import { renderTextWithAppleEmoji } from '../components/Chat/AppleEmoji';
 
 /** Rough WEB_URL-like matcher (http(s), www., bare domains with path). */
 const URL_RE =
@@ -39,21 +38,25 @@ export function firstUrl(text) {
   return extractUrls(text)[0] || null;
 }
 
-function renderPlainWithEmoji(text, keyPrefix) {
-  return splitTextAndEmoji(text).map((part, index) => {
-    if (part.type === 'emoji') {
-      return <Twemoji key={`${keyPrefix}-e-${index}`} emoji={part.value} />;
-    }
-    return <Fragment key={`${keyPrefix}-t-${index}`}>{part.value}</Fragment>;
-  });
+function pushText(parts, text, keyPrefix, keyRef) {
+  if (!text) return;
+  const rendered = renderTextWithAppleEmoji(text, `${keyPrefix}-${keyRef.current}`);
+  if (rendered == null) return;
+  if (Array.isArray(rendered)) {
+    parts.push(<Fragment key={`t-${keyRef.current++}`}>{rendered}</Fragment>);
+  } else if (typeof rendered === 'string') {
+    parts.push(<Fragment key={`t-${keyRef.current++}`}>{rendered}</Fragment>);
+  } else {
+    parts.push(<Fragment key={`t-${keyRef.current++}`}>{rendered}</Fragment>);
+  }
 }
 
 export function linkifyText(text) {
   if (text == null || text === '') return null;
   const source = String(text);
   const parts = [];
+  const keyRef = { current: 0 };
   let cursor = 0;
-  let key = 0;
   URL_RE.lastIndex = 0;
   let match = URL_RE.exec(source);
   while (match) {
@@ -62,12 +65,12 @@ export function linkifyText(text) {
     const trimmed = raw.replace(TRAILING_PUNCT, '');
     const punct = raw.slice(trimmed.length);
     if (start > cursor) {
-      parts.push(...renderPlainWithEmoji(source.slice(cursor, start), `t-${key++}`));
+      pushText(parts, source.slice(cursor, start), 'pre', keyRef);
     }
     const href = normalizeUrl(trimmed);
     parts.push(
       <a
-        key={`a-${key++}`}
+        key={`a-${keyRef.current++}`}
         href={href}
         target="_blank"
         rel="noopener noreferrer"
@@ -78,13 +81,13 @@ export function linkifyText(text) {
       </a>,
     );
     if (punct) {
-      parts.push(<Fragment key={`p-${key++}`}>{punct}</Fragment>);
+      pushText(parts, punct, 'punct', keyRef);
     }
     cursor = start + raw.length;
     match = URL_RE.exec(source);
   }
   if (cursor < source.length) {
-    parts.push(...renderPlainWithEmoji(source.slice(cursor), `t-${key++}`));
+    pushText(parts, source.slice(cursor), 'tail', keyRef);
   }
   return parts.length ? parts : source;
 }

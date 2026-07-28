@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { EMOJI_CATEGORIES } from './emojiData';
+import { AppleEmoji } from './AppleEmoji';
 import { StickerView } from './StickerView';
 import { Twemoji } from './Twemoji';
 import { getInstalledStickerPacks } from '../../utils/stickerLibrary';
@@ -136,40 +137,26 @@ export function EmojiPicker({
                 tabIndex={visible ? 0 : -1}
               >
                 <span className="emoji-picker__tab-icon" aria-hidden="true">
-                  <Twemoji emoji={cat.icon} />
+                  <AppleEmoji emoji={cat.icon} size={18} />
                 </span>
               </button>
             ))}
           </div>
-          <div
-            className={[
-              'emoji-picker__grid-wrap',
-              scrollEdge.top ? 'has-top-fade' : '',
-              scrollEdge.bottom ? 'has-bottom-fade' : '',
-              scrolling ? 'is-scrolling' : '',
-            ].filter(Boolean).join(' ')}
-          >
-            <div
-              ref={gridRef}
-              className="emoji-picker__grid"
-              role="listbox"
-              aria-label={activeCategory?.label}
-            >
-              {activeCategory?.emojis.map((emoji) => (
-                <button
-                  key={`${activeCategory.id}-${emoji}`}
-                  type="button"
-                  role="option"
-                  aria-selected="false"
-                  className="emoji-picker__emoji"
-                  onClick={() => onSelect?.(emoji)}
-                  aria-label={emoji}
-                  tabIndex={visible ? 0 : -1}
-                >
-                  <Twemoji emoji={emoji} />
-                </button>
-              ))}
-            </div>
+          <div className="emoji-picker__grid" role="listbox" aria-label={activeCategory?.label}>
+            {activeCategory?.emojis.map((emoji) => (
+              <button
+                key={`${activeCategory.id}-${emoji}`}
+                type="button"
+                role="option"
+                aria-selected="false"
+                className="emoji-picker__emoji"
+                onClick={() => onSelect?.(emoji)}
+                aria-label={emoji}
+                tabIndex={visible ? 0 : -1}
+              >
+                <AppleEmoji emoji={emoji} size={24} />
+              </button>
+            ))}
           </div>
         </>
       ) : (

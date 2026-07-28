@@ -49,6 +49,7 @@ export function ChatHeader({
   partner,
   isOnline,
   lastSeenAt,
+  partnerActivity = null,
   onInvitePrivate,
   privateBusy,
   onOpenDetails,
@@ -62,12 +63,15 @@ export function ChatHeader({
   const group = isGroupChat(chat);
   const favorites = isFavoritesChat(chat, currentUserId);
   const displayPartner = group ? getGroupAvatarUser(chat) : (partner || chat?.partner);
+  const activity = !group && (partnerActivity === 'typing' || partnerActivity === 'recording')
+    ? partnerActivity
+    : null;
 
   useEffect(() => {
-    if (group || favorites || isOnline || !lastSeenAt) return undefined;
+    if (group || activity || isOnline || !lastSeenAt) return undefined;
     const id = setInterval(() => setTick((n) => n + 1), 60000);
     return () => clearInterval(id);
-  }, [group, favorites, isOnline, lastSeenAt]);
+  }, [group, activity, isOnline, lastSeenAt]);
 
   const title = chat
     ? getChatTitle(chat, currentUserId)
@@ -75,13 +79,22 @@ export function ChatHeader({
       || displayPartner?.nickname
       || '—');
 
-  const statusText = chat
+  let statusText = chat
     ? getChatSubtitle(chat, {
       isOnline,
       lastSeenText: formatLastSeen(lastSeenAt),
       currentUserId,
     })
     : (isOnline ? 'в сети' : formatLastSeen(lastSeenAt));
+  let statusClass = !group && isOnline ? 'is-online' : 'is-offline';
+
+  if (activity === 'typing') {
+    statusText = 'печатает...';
+    statusClass = 'is-activity';
+  } else if (activity === 'recording') {
+    statusText = 'записывает голосовое...';
+    statusClass = 'is-activity';
+  }
 
   return (
     <div className={`chat-header${group ? ' chat-header--group' : ''}`}>
@@ -125,7 +138,7 @@ export function ChatHeader({
         )}
         <div className="chat-header-info">
           <h3 className="chat-header-name">{title}</h3>
-          <span className={`chat-header-status ${!group && !favorites && isOnline ? 'is-online' : 'is-offline'}`}>
+          <span className={`chat-header-status ${statusClass}`}>
             {statusText}
           </span>
         </div>

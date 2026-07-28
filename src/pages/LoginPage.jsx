@@ -26,7 +26,7 @@ function EyeOffIcon() {
 }
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
+  const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [error, setError] = useState('');
@@ -34,7 +34,7 @@ export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const canSubmit = !loading && email.trim() && password;
+  const canSubmit = !loading && loginId.trim() && password;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -42,13 +42,13 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      await login(email.trim(), password);
+      await login(loginId.trim(), password);
       navigate('/chats');
     } catch (err) {
       if (!err.response) {
         setError('Сервер недоступен. Проверьте, что бэкенд запущен.');
       } else if (err.response.status === 401 || err.response.status === 400) {
-        setError('Неверный email или пароль');
+        setError('Неверный email/никнейм или пароль');
       } else {
         setError(`Ошибка входа (${err.response.status}). Попробуйте позже.`);
       }
@@ -72,18 +72,18 @@ export default function LoginPage() {
 
         <div className="login-page__body">
           <div className="login-page__field">
-            <label className="visually-hidden" htmlFor="login-email">
-              Логин / Email
+            <label className="visually-hidden" htmlFor="login-identifier">
+              Email или никнейм
             </label>
             <input
-              id="login-email"
+              id="login-identifier"
               className="login-page__input"
-              type="email"
-              name="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Логин / Email"
-              autoComplete="email"
+              type="text"
+              name="login"
+              value={loginId}
+              onChange={(e) => setLoginId(e.target.value)}
+              placeholder="Email или никнейм"
+              autoComplete="username"
               required
               autoFocus
               disabled={loading}
