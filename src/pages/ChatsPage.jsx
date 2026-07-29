@@ -141,6 +141,7 @@ export default function ChatsPage() {
   const [privateBusy, setPrivateBusy] = useState(false);
   const [invitePending, setInvitePending] = useState(false);
   const [pendingInviteSessionId, setPendingInviteSessionId] = useState(null);
+  const [blockBusy, setBlockBusy] = useState(false);
   const [chatFilter, setChatFilter] = useState('all');
   const [isSpecialFavoritesOpen, setIsSpecialFavoritesOpen] = useState(false);
   const [isBackModeOpen, setIsBackModeOpen] = useState(false);
@@ -1160,6 +1161,53 @@ export default function ChatsPage() {
       // ignore — при выходе presence/leave добьёт
     }
   };
+
+  const applyBlockFlags = useCallback((chatId, flags) => {
+    const patch = {
+      is_blocked: Boolean(flags?.is_blocked),
+      is_blocked_by_partner: Boolean(flags?.is_blocked_by_partner),
+    };
+    setChats((prev) => prev.map((chat) => (
+      String(chat.id) === String(chatId) ? { ...chat, ...patch } : chat
+    )));
+    setSelectedChat((prev) => (
+      prev && String(prev.id) === String(chatId) ? { ...prev, ...patch } : prev
+    ));
+  }, []);
+
+  const handleBlockToggle = useCallback(async (shouldBlock) => {
+    const partnerId = selectedChat?.partner?.id;
+    const chatId = selectedChat?.id;
+    if (!partnerId || !chatId || blockBusy) return;
+    setBlockBusy(true);
+    setAttachError('');
+    try {
+      const { data } = shouldBlock
+        ? await chatsApi.blockUser(partnerId)
+        : await chatsApi.unblockUser(partnerId);
+      applyBlockFlags(chatId, data);
+      if (shouldBlock) {
+        setInvitePending(false);
+        setPendingInviteSessionId(null);
+        setPrivateSessionId(null);
+        setReplyTo(null);
+        setPendingForward(null);
+      }
+    } catch (err) {
+      setAttachError(err.response?.data?.detail || (shouldBlock
+        ? 'Не удалось заблокировать пользователя'
+        : 'Не удалось разблокировать пользователя'));
+    } finally {
+      setBlockBusy(false);
+    }
+  }, [applyBlockFlags, blockBusy, selectedChat?.id, selectedChat?.partner?.id]);
+
+  const interactionBlocked = Boolean(
+    selectedChat
+    && !isGroupChat(selectedChat)
+    && !isFavoritesChat(selectedChat, user?.id)
+    && (selectedChat.is_blocked || selectedChat.is_blocked_by_partner)
+  );
 
   const handleLogout = async () => {
     stopTyping();
@@ -2889,8 +2937,13 @@ export default function ChatsPage() {
                 )}
                 partnerActivity={partnerActivity}
                 onInvitePrivate={handleInvitePrivate}
-                privateBusy={privateBusy || invitePending || Boolean(privateSessionId)}
-                incomingInvitePending={Boolean(incomingInviteForOpenChat)}
+                privateBusy={
+                  privateBusy
+                  || invitePending
+                  || Boolean(privateSessionId)
+                  || interactionBlocked
+                }
+                incomingInvitePending={Boolean(incomingInviteForOpenChat) && !interactionBlocked}
                 onAcceptPrivateInvite={() => handleAcceptInvite(incomingInviteForOpenChat)}
                 onDeclinePrivateInvite={() => handleDeclineInvite(incomingInviteForOpenChat)}
                 onOpenDetails={() => setDetailsPanelOpen((open) => !open)}
@@ -2902,6 +2955,7 @@ export default function ChatsPage() {
                   || !selectedChat?.partner
                   || !['idle', 'ended'].includes(callController.status)
                   || Boolean(incomingInviteForOpenChat)
+                  || interactionBlocked
                 }
                 onBack={isMobileViewport ? handleBackToChatList : undefined}
                 currentUserId={user?.id}
@@ -2993,6 +3047,31 @@ export default function ChatsPage() {
                 onReply={beginReply}
                 onForward={() => setForwardPickerOpen(true)}
               />
+            ) : interactionBlocked ? (
+              <div className="message-input message-input--blocked" role="status">
+                <div className="blocked-composer-banner">
+                  <strong>
+                    {selectedChat.is_blocked
+                      ? 'Вы заблокировали этого пользователя'
+                      : 'Пользователь вас заблокировал'}
+                  </strong>
+                  <span>
+                    {selectedChat.is_blocked
+                      ? 'Сообщения, звонки и приватный чат недоступны. История сохранена.'
+                      : 'Вы не можете писать, звонить или открывать приватный чат. История сохранена.'}
+                  </span>
+                  {selectedChat.is_blocked && (
+                    <button
+                      type="button"
+                      className="btn-text"
+                      disabled={blockBusy}
+                      onClick={() => handleBlockToggle(false)}
+                    >
+                      Разблокировать
+                    </button>
+                  )}
+                </div>
+              </div>
             ) : (
             <form
               className={[
@@ -3448,6 +3527,8 @@ export default function ChatsPage() {
               searchFocusSeq={chatSearchFocusSeq}
               onSearchOpenChange={setChatSearchOpen}
               onCloseSearch={closeChatSearch}
+              onBlockToggle={handleBlockToggle}
+              blockBusy={blockBusy}
               onBackgroundChange={(url) => {
                 setChatBackgroundState(url);
                 const chatId = selectedChat?.id;

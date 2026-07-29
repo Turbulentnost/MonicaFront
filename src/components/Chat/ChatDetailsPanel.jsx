@@ -229,6 +229,8 @@ export function ChatDetailsPanel({
   searchFocusSeq = 0,
   onSearchOpenChange,
   onCloseSearch,
+  onBlockToggle,
+  blockBusy = false,
 }) {
   const group = isGroupChat(chat);
   const favorites = isFavoritesChat(chat, currentUserId);
@@ -509,6 +511,23 @@ export function ChatDetailsPanel({
                     <img src={pngIcon} alt="" className="chat-details__menu-icon" draggable={false} />
                     <span>Изменить фон</span>
                   </button>
+                  {!group && !favorites && partner?.id && onBlockToggle && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className={`chat-details__menu-item${chat?.is_blocked ? '' : ' chat-details__menu-item--danger'}`}
+                      disabled={blockBusy}
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onBlockToggle(!chat?.is_blocked);
+                      }}
+                    >
+                      <span className="chat-details__menu-icon chat-details__menu-icon--text" aria-hidden="true">
+                        {chat?.is_blocked ? '✓' : '⊘'}
+                      </span>
+                      <span>{chat?.is_blocked ? 'Разблокировать' : 'Заблокировать'}</span>
+                    </button>
+                  )}
                 </div>
               )}
             </>

@@ -103,6 +103,8 @@ export const chatsApi = {
   removeMember: (chatId, userId) =>
     api.delete(`/chats/${chatId}/members/${userId}/`),
   searchUsers: (q) => api.get('/users/search/', { params: { q } }),
+  blockUser: (userId) => api.post(`/users/${userId}/block/`),
+  unblockUser: (userId) => api.delete(`/users/${userId}/block/`),
   uploadMessageFiles: (chatId, files, { onUploadProgress } = {}) => {
     const form = new FormData();
     files.forEach((file) => form.append('files', file));
