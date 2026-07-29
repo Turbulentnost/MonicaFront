@@ -199,16 +199,19 @@ export default function ChatsPage() {
   const callController = useCallContext();
   const {
     suggestion: aiSuggestion,
+    loading: aiLoading,
     styleEnabled: aiStyleEnabled,
     clearSuggestion: clearAiSuggestion,
     acceptAll: acceptAiAll,
     acceptWord: acceptAiWord,
+    requestComplete: requestAiComplete,
   } = useAiComplete({
     draft: codeMode || voiceRecording ? '' : input,
     chatId: selectedChat?.id,
     enabled: Boolean(selectedChat) && !codeMode && !voiceRecording && !accountSettingsOpen,
     refreshKey: aiStyleRefreshKey,
   });
+  const aiGhostRef = useRef(null);
   const { isOnline, getLastSeen } = callController;
   const callChatId = callController.call?.chat_id
     || (typeof callController.call?.chat === 'object'
@@ -2027,15 +2030,26 @@ export default function ChatsPage() {
   const resizeMessageInput = useCallback(() => {
     const el = messageInputRef.current;
     if (!el) return;
-    el.style.height = '0px';
     const styles = window.getComputedStyle(el);
-    const lineHeight = Number.parseFloat(styles.lineHeight) || 24;
+    const lineHeight = Number.parseFloat(styles.lineHeight) || 22;
     const paddingY =
       (Number.parseFloat(styles.paddingTop) || 0) + (Number.parseFloat(styles.paddingBottom) || 0);
     const minHeight = lineHeight + paddingY;
-    const maxHeight = lineHeight * 2 + paddingY;
-    const nextHeight = Math.min(Math.max(el.scrollHeight, minHeight), maxHeight);
+    // Grow with multi-line draft / ghost suggestion, but cap height.
+    const maxHeight = lineHeight * 6 + paddingY;
+
+    el.style.height = '0px';
+    let needed = Math.max(el.scrollHeight, minHeight);
+
+    const ghost = aiGhostRef.current;
+    if (ghost) {
+      // Ghost is height:auto overlay — its scrollHeight tracks typed + suggestion.
+      needed = Math.max(needed, ghost.scrollHeight, minHeight);
+    }
+
+    const nextHeight = Math.min(needed, maxHeight);
     el.style.height = `${nextHeight}px`;
+    el.style.overflowY = needed > maxHeight ? 'auto' : 'hidden';
   }, []);
 
   const handleInputChange = (value) => {
@@ -2061,8 +2075,10 @@ export default function ChatsPage() {
 
   useEffect(() => {
     if (codeMode) return;
-    resizeMessageInput();
-  }, [input, codeMode, selectedChat?.id, resizeMessageInput]);
+    // After ghost paints, remeasure so the bar grows/shrinks with suggestion.
+    const id = requestAnimationFrame(() => resizeMessageInput());
+    return () => cancelAnimationFrame(id);
+  }, [input, aiSuggestion, codeMode, selectedChat?.id, resizeMessageInput]);
 
   const clearEmojiHideTimeout = useCallback(() => {
     if (emojiHideTimeoutRef.current) {
@@ -3327,7 +3343,7 @@ export default function ChatsPage() {
                     </>
                   ) : (
                     <div className="message-input-ai">
-                      <div className="message-input-ai-ghost" aria-hidden="true">
+                      <div ref={aiGhostRef} className="message-input-ai-ghost" aria-hidden="true">
                         {input ? (
                           <span className="message-input-ai-ghost__typed is-visible">
                             {renderTextWithAppleEmoji(input, 'composer-input', 18)}
@@ -3420,6 +3436,47 @@ export default function ChatsPage() {
                     </div>
                   )}
                 </div>
+                {!codeMode && aiStyleEnabled ? (
+                  <button
+                    type="button"
+                    className={`btn-ai-reason${aiLoading ? ' is-loading' : ''}${aiSuggestion ? ' has-suggestion' : ''}`}
+                    title={
+                      String(input || '').trim().length < 8
+                        ? 'Наберите минимум 8 символов для автодополнения'
+                        : aiLoading
+                          ? 'Думаю…'
+                          : 'Reason — предложить продолжение'
+                    }
+                    aria-label="Reason — автодополнение"
+                    disabled={
+                      voiceRecording
+                      || uploading
+                      || forwardBusy
+                      || aiLoading
+                      || String(input || '').trim().length < 8
+                    }
+                    onClick={() => {
+                      requestAiComplete().then(() => {
+                        requestAnimationFrame(() => resizeMessageInput());
+                      });
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+                      <path
+                        d="M12 3l1.2 3.8L17 8l-3.8 1.2L12 13l-1.2-3.8L7 8l3.8-1.2L12 3z"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M18.5 13.5l.7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7.7-2.1z"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M5.5 14.5l.55 1.65L7.7 16.7l-1.65.55L5.5 18.9l-.55-1.65L3.3 16.7l1.65-.55L5.5 14.5z"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </button>
+                ) : null}
                 <SendIconButton
                   busy={uploading || forwardBusy}
                   uploadProgress={uploading ? uploadProgress : null}

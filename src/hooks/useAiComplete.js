@@ -140,6 +140,40 @@ export function useAiComplete({
     return next;
   }, [acceptAll, draft, suggestion]);
 
+  const requestComplete = useCallback(async () => {
+    if (!enabled || !styleEnabled) return false;
+    const text = String(draft || '');
+    if (text.trim().length < MIN_DRAFT_LEN) return false;
+
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const seq = ++requestSeqRef.current;
+    setLoading(true);
+    try {
+      const { data } = await aiApi.complete(
+        { draft: text, chat_id: chatId || undefined },
+        { signal: controller.signal, timeout: 30000 }
+      );
+      if (seq !== requestSeqRef.current) return false;
+      lastFetchedDraftRef.current = text;
+      if (data?.disabled || data?.rate_limited || data?.error) {
+        setSuggestion('');
+        return false;
+      }
+      const next = String(data?.suggestion || '');
+      setSuggestion(next);
+      return Boolean(next);
+    } catch (err) {
+      if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return false;
+      if (seq !== requestSeqRef.current) return false;
+      setSuggestion('');
+      return false;
+    } finally {
+      if (seq === requestSeqRef.current) setLoading(false);
+    }
+  }, [enabled, styleEnabled, draft, chatId]);
+
   return {
     suggestion,
     loading,
@@ -148,5 +182,6 @@ export function useAiComplete({
     clearSuggestion,
     acceptAll,
     acceptWord,
+    requestComplete,
   };
 }
