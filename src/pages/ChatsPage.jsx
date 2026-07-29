@@ -2039,6 +2039,14 @@ export default function ChatsPage() {
     // Grow with multi-line draft / ghost suggestion, but cap height.
     const maxHeight = lineHeight * 6 + paddingY;
 
+    // An empty composer must always collapse immediately, regardless of the
+    // previous textarea/ghost scroll height retained by the browser.
+    if (!el.value) {
+      el.style.height = `${minHeight}px`;
+      el.style.overflowY = 'hidden';
+      return;
+    }
+
     el.style.height = '0px';
     let needed = Math.max(el.scrollHeight, minHeight);
 
@@ -2055,6 +2063,7 @@ export default function ChatsPage() {
 
   const handleInputChange = (value) => {
     setInput(value);
+    if (!value) clearAiSuggestion();
     if (!selectedChat) return;
 
     if (!value.trim()) {

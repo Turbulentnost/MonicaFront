@@ -2752,16 +2752,35 @@ body.is-resizing-panels * {
 }
 
 .chats-page .btn-ai-reason.is-loading {
-  opacity: 0.7;
+  color: #b9c9ff;
+  background: rgba(111, 141, 255, 0.2);
+  box-shadow:
+    0 0 0 1px rgba(151, 174, 255, 0.18),
+    0 0 14px rgba(111, 141, 255, 0.28);
 }
 
 .chats-page .btn-ai-reason.is-loading svg {
-  animation: ai-reason-pulse 0.9s ease-in-out infinite;
+  transform-origin: center;
+  will-change: transform, opacity, filter;
+  animation: ai-reason-generating 1.05s linear infinite;
 }
 
-@keyframes ai-reason-pulse {
-  0%, 100% { opacity: 0.45; transform: scale(0.96); }
-  50% { opacity: 1; transform: scale(1); }
+@keyframes ai-reason-generating {
+  0% {
+    opacity: 0.5;
+    transform: rotate(0deg) scale(0.86);
+    filter: drop-shadow(0 0 1px rgba(185, 201, 255, 0.2));
+  }
+  50% {
+    opacity: 1;
+    transform: rotate(180deg) scale(1.12);
+    filter: drop-shadow(0 0 5px rgba(185, 201, 255, 0.85));
+  }
+  100% {
+    opacity: 0.5;
+    transform: rotate(360deg) scale(0.86);
+    filter: drop-shadow(0 0 1px rgba(185, 201, 255, 0.2));
+  }
 }
 
 .chats-page .btn-ai-reason:disabled {
