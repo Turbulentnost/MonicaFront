@@ -279,19 +279,6 @@ export function ChatDetailsPanel({
   }, [searchOpen, searchFocusSeq, chatId]);
 
   useEffect(() => {
-    if (!searchOpen) return undefined;
-    const onKey = (event) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      event.stopPropagation();
-      onCloseSearch?.();
-      onSearchOpenChange?.(false);
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [onCloseSearch, onSearchOpenChange, searchOpen]);
-
-  useEffect(() => {
     if (!menuOpen) return undefined;
     const onPointerDown = (event) => {
       if (!menuRef.current?.contains(event.target)) setMenuOpen(false);

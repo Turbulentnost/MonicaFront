@@ -664,6 +664,13 @@ export default function ChatsPage() {
       navigate(`/chats/${targetId}`);
     }
 
+    // Autofocus composer after the textarea mounts (code mode is cleared above).
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        messageInputRef.current?.focus({ preventScroll: true });
+      });
+    });
+
     await loadMessages(targetId);
   };
 
@@ -1291,18 +1298,35 @@ export default function ChatsPage() {
     }
   }, [sendTyping]);
 
-  const toggleCodeMode = () => {
+  const toggleCodeMode = useCallback(() => {
     setCodeMode((prev) => {
       const next = !prev;
       if (next) {
         clearPendingAttachments();
-        if (!codeLanguage) setCodeLanguage('python');
-        if (!codeFileName) setCodeFileName('script.py');
+        setCodeLanguage((lang) => lang || 'python');
+        setCodeFileName((name) => name || 'script.py');
       }
       setAttachError('');
       return next;
     });
-  };
+  }, [clearPendingAttachments]);
+
+  const closeCodeMode = useCallback(() => {
+    setCodeMode(false);
+    setAttachError('');
+    requestAnimationFrame(() => messageInputRef.current?.focus());
+  }, []);
+
+  const openCodeMode = useCallback(() => {
+    clearPendingAttachments();
+    setCodeLanguage((lang) => lang || 'python');
+    setCodeFileName((name) => {
+      if (name) return name;
+      return 'script.py';
+    });
+    setAttachError('');
+    setCodeMode(true);
+  }, [clearPendingAttachments]);
 
   const handleCodeLanguageChange = (lang) => {
     setCodeLanguage(lang);
@@ -2263,6 +2287,27 @@ export default function ChatsPage() {
     setRequestEditMessageId(messageId);
   }, [selectionCanEdit, selectedMessages, clearMessageSelection]);
 
+  const beginEditLastOwnMessage = useCallback(() => {
+    if (!user?.id || codeMode || voiceRecording || uploading) return false;
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const message = messages[i];
+      if (!message) continue;
+      const isOwn = String(message.sender?.id) === String(user.id);
+      if (!canEditMessage(message, isOwn)) continue;
+      if (
+        message.message_type === 'text'
+        && isStickerMessageContent(message.content)
+      ) {
+        continue;
+      }
+      const messageId = String(message.id);
+      setRequestEditMessageId(messageId);
+      jumpToMessage(messageId);
+      return true;
+    }
+    return false;
+  }, [codeMode, jumpToMessage, messages, uploading, user?.id, voiceRecording]);
+
   const handleSelectionDelete = useCallback(async (scope) => {
     if (!selectedMessages.length) return;
     const ids = selectedMessages.map((message) => message.id);
@@ -2386,17 +2431,23 @@ export default function ChatsPage() {
   useSecretSequenceShortcut(FRONT_SEQUENCE, unlockFront);
   useSecretSequenceShortcut(BACK_SEQUENCE, unlockBack);
 
-  useEffect(() => {
-    if (!isSpecialFavoritesOpen && !isBackModeOpen) return undefined;
-    function onKeyDown(e) {
-      if (e.key === 'Escape') {
-        setIsSpecialFavoritesOpen(false);
-        setIsBackModeOpen(false);
-      }
+  const filteredChatsRef = useRef([]);
+  filteredChatsRef.current = filteredChats;
+
+  const switchChatByOffset = useCallback((delta) => {
+    const list = filteredChatsRef.current;
+    if (!list.length) return;
+    const currentId = String(selectedChatRef.current?.id || '');
+    let index = list.findIndex((chat) => String(chat.id) === currentId);
+    if (index < 0) {
+      index = delta > 0 ? -1 : 0;
     }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isSpecialFavoritesOpen, isBackModeOpen]);
+    const nextIndex = (index + delta + list.length * 10) % list.length;
+    const next = list[nextIndex];
+    if (next && String(next.id) !== currentId) {
+      handleSelectChat(next);
+    }
+  }, [handleSelectChat]);
 
   const openChatSearch = useCallback(() => {
     if (!selectedChat || accountSettingsOpen || stickerStoreOpen || callScreenVisible) return;
@@ -2425,20 +2476,133 @@ export default function ChatsPage() {
 
   useEffect(() => {
     function onKeyDown(event) {
-      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
-      if (event.code !== 'KeyF') return;
-      if (!selectedChat || accountSettingsOpen || stickerStoreOpen || callScreenVisible) return;
-      event.preventDefault();
-      openChatSearch();
+      const mod = event.ctrlKey || event.metaKey;
+      const inBlockedOverlay = accountSettingsOpen || stickerStoreOpen || callScreenVisible
+        || forwardPickerOpen || createGroupOpen;
+      const isTabKey = event.key === 'Tab' || event.code === 'Tab';
+
+      // Next / previous chat.
+      // Prefer Ctrl+Arrow — browsers reserve Ctrl+Tab for tab switching and often
+      // never deliver it (or ignore preventDefault). Still handle Ctrl+Tab when we get it.
+      const chatSwitchDelta = (() => {
+        if (inBlockedOverlay) return 0;
+        if (mod && !event.altKey && isTabKey) {
+          return event.shiftKey ? -1 : 1;
+        }
+        if (mod && !event.altKey && !event.shiftKey && event.key === 'ArrowDown') return 1;
+        if (mod && !event.altKey && !event.shiftKey && event.key === 'ArrowUp') return -1;
+        return 0;
+      })();
+
+      if (chatSwitchDelta) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === 'function') {
+          event.stopImmediatePropagation();
+        }
+        switchChatByOffset(chatSwitchDelta);
+        return;
+      }
+
+      // Ctrl+/ — open / toggle code composer
+      if (
+        mod
+        && !event.altKey
+        && (event.key === '/' || event.code === 'Slash' || event.code === 'NumpadDivide')
+      ) {
+        if (
+          !selectedChatRef.current
+          || inBlockedOverlay
+          || replyTo
+          || pendingForward
+          || uploading
+          || voiceRecording
+        ) {
+          return;
+        }
+        event.preventDefault();
+        if (codeMode) closeCodeMode();
+        else openCodeMode();
+        return;
+      }
+
+      // Ctrl+F — search in chat details (existing)
+      if (mod && !event.altKey && !event.shiftKey && event.code === 'KeyF') {
+        if (!selectedChat || inBlockedOverlay) return;
+        event.preventDefault();
+        openChatSearch();
+        return;
+      }
+
+      if (event.key !== 'Escape') return;
+      if (event.defaultPrevented) return;
+
+      // Message edit first — do not leave the chat while a bubble is being edited
+      if (document.querySelector('.chats-page .message-edit')) {
+        return;
+      }
+
+      // Code mode first: hide editor and focus message input
+      if (codeMode) {
+        event.preventDefault();
+        closeCodeMode();
+        return;
+      }
+
+      if (emojiPickerVisible) {
+        event.preventDefault();
+        setEmojiPickerVisible(false);
+        return;
+      }
+
+      if (isSpecialFavoritesOpen || isBackModeOpen) {
+        event.preventDefault();
+        setIsSpecialFavoritesOpen(false);
+        setIsBackModeOpen(false);
+        return;
+      }
+
+      if (selectionMode) {
+        event.preventDefault();
+        clearMessageSelection();
+        return;
+      }
+
+      // Exit open chat (details stay open only via their own close control)
+      if (selectedChatRef.current && !inBlockedOverlay) {
+        event.preventDefault();
+        handleBackToChatList();
+      }
     }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+
+    // Capture phase so we run before focused inputs where possible.
+    // Note: Chrome/Edge still reserve Ctrl+Tab for browser tabs; Ctrl+Arrow is the reliable binding.
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown, true);
+    };
   }, [
     accountSettingsOpen,
     callScreenVisible,
+    clearMessageSelection,
+    closeCodeMode,
+    codeMode,
+    createGroupOpen,
+    emojiPickerVisible,
+    forwardPickerOpen,
+    handleBackToChatList,
+    isBackModeOpen,
+    isSpecialFavoritesOpen,
     openChatSearch,
+    openCodeMode,
+    pendingForward,
+    replyTo,
     selectedChat,
+    selectionMode,
     stickerStoreOpen,
+    switchChatByOffset,
+    uploading,
+    voiceRecording,
   ]);
 
   useEffect(() => {
@@ -3093,6 +3257,21 @@ export default function ChatsPage() {
                             if (next != null) handleInputChange(next);
                             return;
                           }
+                        }
+                        if (
+                          e.key === 'ArrowUp'
+                          && !e.shiftKey
+                          && !e.altKey
+                          && !e.ctrlKey
+                          && !e.metaKey
+                          && !String(input || '').trim()
+                          && pendingAttachments.length === 0
+                          && !pendingForward
+                          && !replyTo
+                        ) {
+                          e.preventDefault();
+                          beginEditLastOwnMessage();
+                          return;
                         }
                         if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault();

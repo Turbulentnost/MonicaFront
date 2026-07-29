@@ -193,6 +193,7 @@ function ChatMessageBubble({
   onRequestEditHandled,
 }) {
   const [contextMenu, setContextMenu] = useState(null);
+  const [contextMenuLeaving, setContextMenuLeaving] = useState(false);
   const [barOpen, setBarOpen] = useState(false);
   const [pickerExpanded, setPickerExpanded] = useState(false);
   /** Реакции всегда ниже сообщения */
@@ -205,6 +206,7 @@ function ChatMessageBubble({
   const [copyFeedback, setCopyFeedback] = useState('');
   const wrapperRef = useRef(null);
   const editInputRef = useRef(null);
+  const contextMenuCloseTimerRef = useRef(null);
 
   const stickerPayload = message.message_type === 'text'
     ? parseStickerMessage(message.content)
@@ -228,9 +230,50 @@ function ChatMessageBubble({
     setPickerExpanded(false);
   }, [message.id]);
 
-  const closeContextMenu = useCallback(() => {
-    setContextMenu(null);
+  const closeContextMenu = useCallback((animated = true) => {
+    if (contextMenuCloseTimerRef.current) {
+      window.clearTimeout(contextMenuCloseTimerRef.current);
+      contextMenuCloseTimerRef.current = null;
+    }
+
+    if (!animated) {
+      setContextMenuLeaving(false);
+      setContextMenu(null);
+      return;
+    }
+
+    setContextMenuLeaving(true);
+    contextMenuCloseTimerRef.current = window.setTimeout(() => {
+      contextMenuCloseTimerRef.current = null;
+      setContextMenu(null);
+      setContextMenuLeaving(false);
+    }, 160);
   }, []);
+
+  useEffect(() => () => {
+    if (contextMenuCloseTimerRef.current) {
+      window.clearTimeout(contextMenuCloseTimerRef.current);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!contextMenu || contextMenuLeaving) return undefined;
+    const area = wrapperRef.current?.closest('.messages-area');
+    if (!area) return undefined;
+
+    const onScrollAway = () => {
+      closeContextMenu(true);
+    };
+
+    area.addEventListener('scroll', onScrollAway, { passive: true });
+    area.addEventListener('wheel', onScrollAway, { passive: true });
+    area.addEventListener('touchmove', onScrollAway, { passive: true });
+    return () => {
+      area.removeEventListener('scroll', onScrollAway);
+      area.removeEventListener('wheel', onScrollAway);
+      area.removeEventListener('touchmove', onScrollAway);
+    };
+  }, [contextMenu, contextMenuLeaving, closeContextMenu]);
 
   const updateReactionLayout = useCallback((expanded = pickerExpanded) => {
     const node = wrapperRef.current;
@@ -295,6 +338,8 @@ function ChatMessageBubble({
 
     const onKeyDown = (event) => {
       if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
       closeReactions();
       closeContextMenu();
     };
@@ -336,10 +381,23 @@ function ChatMessageBubble({
     onRequestEditHandled?.();
   }, [requestEdit, message, isOwn, startEdit, onRequestEditHandled]);
 
-  const cancelEdit = () => {
+  const cancelEdit = useCallback(() => {
     setEditing(false);
     setEditText('');
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!editing) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      cancelEdit();
+    };
+    // Capture: run after ChatsPage skips exit-chat when .message-edit is open
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+  }, [editing, cancelEdit]);
 
   const saveEdit = () => {
     const next = editText.trim();
@@ -398,6 +456,11 @@ function ChatMessageBubble({
     const pad = 8;
     const x = Math.min(event.clientX, window.innerWidth - menuWidth - pad);
     const y = Math.min(event.clientY, window.innerHeight - menuHeight - pad);
+    if (contextMenuCloseTimerRef.current) {
+      window.clearTimeout(contextMenuCloseTimerRef.current);
+      contextMenuCloseTimerRef.current = null;
+    }
+    setContextMenuLeaving(false);
     setContextMenu({ x: Math.max(pad, x), y: Math.max(pad, y) });
     setCopyFeedback('');
   };
@@ -450,6 +513,7 @@ function ChatMessageBubble({
             onKeyDown={(e) => {
               if (e.key === 'Escape') {
                 e.preventDefault();
+                e.stopPropagation();
                 cancelEdit();
               }
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -761,7 +825,7 @@ function ChatMessageBubble({
 
       {contextMenu && (
         <div
-          className="message-context-menu"
+          className={`message-context-menu${contextMenuLeaving ? ' is-leaving' : ' is-open'}`}
           style={{ left: contextMenu.x, top: contextMenu.y }}
           role="menu"
           onClick={(event) => event.stopPropagation()}

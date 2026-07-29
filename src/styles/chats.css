@@ -6517,6 +6517,24 @@ body.is-resizing-panels * {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  opacity: 0;
+  transform: translateY(-4px) scale(0.98);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+  pointer-events: none;
+}
+
+.message-context-menu.is-open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.message-context-menu.is-leaving {
+  opacity: 0;
+  transform: translateY(-4px) scale(0.98);
+  pointer-events: none;
 }
 
 .message-context-menu button {
