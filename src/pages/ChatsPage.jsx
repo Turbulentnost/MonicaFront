@@ -16,6 +16,8 @@ import { useSecretSequenceShortcut, FRONT_SEQUENCE, BACK_SEQUENCE } from '../hoo
 import { useUserIdle } from '../hooks/useUserIdle';
 import { useAiComplete } from '../hooks/useAiComplete';
 import { MOBILE_CHAT_QUERY, useMediaQuery } from '../hooks/useMediaQuery';
+import { useResizableWidth } from '../hooks/useResizableWidth';
+import { useChatTheme } from '../hooks/useChatTheme';
 import { ChatHeader } from '../components/Chat/ChatHeader';
 import { ChatListItem } from '../components/Chat/ChatListItem';
 import { ChatIconRail } from '../components/Chat/ChatIconRail';
@@ -51,13 +53,28 @@ import {
   dataUrlToBackgroundFile,
   getChatBackground,
 } from '../utils/chatBackground';
-import { getChatTitle, isGroupChat } from '../utils/chatDisplay';
+import {
+  getChatTitle,
+  isFavoritesChat,
+  isGroupChat,
+  sortChatsWithFavoritesFirst,
+} from '../utils/chatDisplay';
+import {
+  clearStoredFavoritesChatId,
+  ensureFavoritesChat,
+  findFavoritesInList,
+  invalidateFavoritesEnsureCache,
+  isPendingFavoritesId,
+  withFavoritesChat,
+} from '../utils/favoritesChat';
 import { API_URL } from '../config';
 import { VoiceRecorder, canUseMicrophone } from '../utils/voiceRecorder';
 
 const MAX_ATTACHMENTS = 10;
 const MAX_FILE_SIZE_BYTES = 300 * 1024 * 1024;
 const CHAT_IDLE_MS = 60_000;
+/** Below this width the chat list collapses to avatars + unread badges. */
+const CHAT_SIDEBAR_COMPACT_AT = 112;
 const lastChatStorageKey = (userId) => (userId ? `monica_last_chat_id:${userId}` : null);
 
 function leavePrivateSessionsBestEffort() {
@@ -85,6 +102,24 @@ export default function ChatsPage() {
   const navigate = useNavigate();
   const { chatId: routeChatId } = useParams();
   const isMobileViewport = useMediaQuery(MOBILE_CHAT_QUERY);
+  const { themeId, theme } = useChatTheme();
+  const {
+    width: chatSidebarWidth,
+    beginResize: beginChatSidebarResize,
+  } = useResizableWidth('monica_chat_sidebar_width', {
+    defaultWidth: 340,
+    min: 72,
+    max: 480,
+  }, 1);
+  const {
+    width: detailsPanelWidth,
+    beginResize: beginDetailsPanelResize,
+  } = useResizableWidth('monica_details_panel_width', {
+    defaultWidth: 400,
+    min: 280,
+    max: 560,
+  }, -1);
+  const chatSidebarCompact = !isMobileViewport && chatSidebarWidth <= CHAT_SIDEBAR_COMPACT_AT;
   const [chats, setChats] = useState([]);
   const [selectedChat, setSelectedChat] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -109,6 +144,8 @@ export default function ChatsPage() {
   const [isSpecialFavoritesOpen, setIsSpecialFavoritesOpen] = useState(false);
   const [isBackModeOpen, setIsBackModeOpen] = useState(false);
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(true);
+  const [chatSearchOpen, setChatSearchOpen] = useState(false);
+  const [chatSearchFocusSeq, setChatSearchFocusSeq] = useState(0);
   const [chatBackground, setChatBackgroundState] = useState(null);
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [aiStyleRefreshKey, setAiStyleRefreshKey] = useState(0);
@@ -144,6 +181,10 @@ export default function ChatsPage() {
   const didRestoreChatRef = useRef(false);
   const messagesRequestSeqRef = useRef(0);
   const activeMessagesChatIdRef = useRef(null);
+  const selectedChatRef = useRef(null);
+  const routeChatIdRef = useRef(routeChatId);
+  /** Protects against route-sync yanking selection back while navigate() catches up. */
+  const pendingSelectIdRef = useRef(null);
   const lastImagePasteAtRef = useRef(0);
   const emojiHideTimeoutRef = useRef(null);
   const voiceRecorderRef = useRef(null);
@@ -174,6 +215,8 @@ export default function ChatsPage() {
   const callScreenVisible = ['outgoing', 'connecting', 'active'].includes(callController.status);
   const isIdle = useUserIdle(CHAT_IDLE_MS);
   isIdleRef.current = isIdle;
+  selectedChatRef.current = selectedChat;
+  routeChatIdRef.current = routeChatId;
 
   const persistSelectedChat = useCallback((chat) => {
     const key = lastChatStorageKey(user?.id);
@@ -183,7 +226,8 @@ export default function ChatsPage() {
 
   const loadChats = useCallback(async () => {
     const { data } = await chatsApi.list();
-    const list = Array.isArray(data) ? data : [];
+    const raw = Array.isArray(data) ? data : [];
+    const list = user ? withFavoritesChat(raw, user, findFavoritesInList(raw, user.id)) : raw;
     setChats(list);
     setSelectedChat((prev) => {
       if (!prev?.id) return prev;
@@ -191,7 +235,7 @@ export default function ChatsPage() {
       return fresh || prev;
     });
     return list;
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     loadChats();
@@ -203,8 +247,14 @@ export default function ChatsPage() {
     return undefined;
   }, [callScreenVisible, isMobileViewport, navigate]);
 
-  const loadMessages = useCallback(async (chatId) => {
-    if (!chatId) return;
+  const loadMessages = useCallback(async (chatId, { favoritesRetry = true } = {}) => {
+    if (!chatId || isPendingFavoritesId(chatId)) {
+      if (isPendingFavoritesId(chatId)) {
+        setMessages([]);
+        setAttachError('');
+      }
+      return;
+    }
     const requestSeq = ++messagesRequestSeqRef.current;
     activeMessagesChatIdRef.current = String(chatId);
     shouldStickToBottomRef.current = true;
@@ -225,6 +275,7 @@ export default function ChatsPage() {
       ) {
         return;
       }
+      setAttachError('');
       setMessages(Array.isArray(data) ? data : []);
       setHasMoreMessages(Array.isArray(data) && data.length === 100);
       (Array.isArray(data) ? data : []).forEach((msg) => {
@@ -238,14 +289,92 @@ export default function ChatsPage() {
       });
     } catch {
       if (
-        requestSeq === messagesRequestSeqRef.current
-        && String(activeMessagesChatIdRef.current) === String(chatId)
+        requestSeq !== messagesRequestSeqRef.current
+        || String(activeMessagesChatIdRef.current) !== String(chatId)
       ) {
-        setMessages([]);
-        setAttachError('Не удалось загрузить сообщения');
+        return;
       }
+
+      const current = selectedChatRef.current;
+      const favoritesFailed = favoritesRetry
+        && user?.id
+        && current
+        && String(current.id) === String(chatId)
+        && (isFavoritesChat(current, user.id) || isPendingFavoritesId(current.id));
+
+      if (favoritesFailed) {
+        clearStoredFavoritesChatId(user.id);
+        try {
+          const fav = await ensureFavoritesChat(user);
+          if (
+            fav?.id
+            && String(fav.id) !== String(chatId)
+            && requestSeq === messagesRequestSeqRef.current
+            && (
+              !pendingSelectIdRef.current
+              || String(pendingSelectIdRef.current) === String(chatId)
+              || String(pendingSelectIdRef.current) === String(fav.id)
+            )
+          ) {
+            const next = { ...fav, is_favorites: true };
+            pendingSelectIdRef.current = String(fav.id);
+            setChats((prev) => withFavoritesChat(prev, user, next));
+            setSelectedChat(next);
+            persistSelectedChat(next);
+            if (String(routeChatIdRef.current) !== String(fav.id)) {
+              navigate(`/chats/${fav.id}`, { replace: true });
+            }
+            await loadMessages(fav.id, { favoritesRetry: false });
+            return;
+          }
+        } catch {
+          /* fall through to error */
+        }
+      }
+
+      setMessages([]);
+      setAttachError('Не удалось загрузить сообщения');
     }
-  }, []);
+  }, [user, navigate, persistSelectedChat]);
+
+  // Warm up real Избранное chat in the background (do not fight user selection).
+  useEffect(() => {
+    if (!user?.id) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const fav = await ensureFavoritesChat(user);
+        if (cancelled) return;
+        if (!fav) {
+          setChats((prev) => withFavoritesChat(prev, user, null));
+          return;
+        }
+        setChats((prev) => withFavoritesChat(prev, user, fav));
+        // Upgrade pending stub only — never yank the user back into Избранное.
+        const current = selectedChatRef.current;
+        if (current && isPendingFavoritesId(current.id)) {
+          const next = { ...fav, is_favorites: true };
+          pendingSelectIdRef.current = String(fav.id);
+          setSelectedChat(next);
+          persistSelectedChat(next);
+          if (String(routeChatIdRef.current) !== String(fav.id)) {
+            navigate(`/chats/${fav.id}`, { replace: true });
+          }
+          setAttachError('');
+          await loadMessages(fav.id);
+        }
+      } catch {
+        if (!cancelled) {
+          setChats((prev) => withFavoritesChat(prev, user, null));
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Intentionally only on user id — loadMessages/navigate are stable enough via refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const loadOlderMessages = useCallback(async () => {
     const chatId = selectedChat?.id;
@@ -360,14 +489,51 @@ export default function ChatsPage() {
 
   const applySelectedChat = useCallback(async (chat) => {
     if (!chat?.id) return;
-    // Same chat already loaded — skip reload (avoids flicker / races).
-    if (
-      String(activeMessagesChatIdRef.current) === String(chat.id)
-      && String(selectedChat?.id) === String(chat.id)
-    ) {
-      persistSelectedChat(chat);
+
+    let target = chat;
+    // Pending stub: resolve to a real chat before loading messages.
+    if (user && isPendingFavoritesId(chat.id)) {
+      try {
+        let fav = await ensureFavoritesChat(user);
+        if (!fav?.id) {
+          invalidateFavoritesEnsureCache(user.id);
+          fav = await ensureFavoritesChat(user, { force: true });
+        }
+        if (!fav?.id) {
+          setAttachError('Не удалось открыть Избранное');
+          return;
+        }
+        target = { ...fav, is_favorites: true };
+        setChats((prev) => withFavoritesChat(prev, user, target));
+      } catch (err) {
+        const detail = err?.response?.data?.detail;
+        setAttachError(
+          typeof detail === 'string' && detail.trim()
+            ? detail
+            : 'Не удалось открыть Избранное'
+        );
+        return;
+      }
+    }
+
+    const targetId = String(target.id);
+
+    // A newer click already won — drop this stale apply.
+    if (pendingSelectIdRef.current && pendingSelectIdRef.current !== targetId) {
       return;
     }
+
+    // Same chat already loaded — skip reload.
+    if (
+      String(activeMessagesChatIdRef.current) === targetId
+      && String(selectedChatRef.current?.id) === targetId
+      && !isPendingFavoritesId(target.id)
+    ) {
+      persistSelectedChat(target);
+      return;
+    }
+
+    pendingSelectIdRef.current = targetId;
     clearPendingAttachments();
     setAccountSettingsOpen(false);
     setStickerStoreOpen(false);
@@ -385,22 +551,127 @@ export default function ChatsPage() {
     setCodeMode(false);
     setAttachError('');
     setMessageReactions({});
-    setSelectedMessageIds([]);
-    setReplyTo(null);
-    setPendingForward(null);
-    await loadMessages(chat.id);
-  }, [clearPendingAttachments, loadMessages, persistSelectedChat, selectedChat?.id]);
+    await loadMessages(target.id);
+  }, [clearPendingAttachments, loadMessages, persistSelectedChat, user]);
 
   const handleSelectChat = async (chat) => {
     if (!chat?.id) return;
-    if (String(routeChatId) !== String(chat.id)) {
-      navigate(`/chats/${chat.id}`);
+
+    const favoritesClick = Boolean(user && (
+      isPendingFavoritesId(chat.id) || isFavoritesChat(chat, user.id)
+    ));
+    let target = favoritesClick
+      ? { ...chat, is_favorites: true }
+      : { ...chat };
+    const clickedId = String(chat.id);
+
+    // Lock selection immediately so route-sync cannot revert to the previous chat.
+    pendingSelectIdRef.current = clickedId;
+    clearPendingAttachments();
+    setAccountSettingsOpen(false);
+    setStickerStoreOpen(false);
+    if (typeof window !== 'undefined' && window.matchMedia(MOBILE_CHAT_QUERY).matches) {
+      setDetailsPanelOpen(false);
     }
-    if (String(selectedChat?.id) !== String(chat.id)) {
-      await applySelectedChat(chat);
-    } else {
-      persistSelectedChat(chat);
+    setSelectedChat(target);
+    persistSelectedChat(target);
+    setPartnerActivity(null);
+    setSelectedMessageIds([]);
+    setForwardPickerOpen(false);
+    setPendingForward(null);
+    setReplyTo(null);
+    setInput('');
+    setCodeMode(false);
+    setAttachError('');
+    setMessageReactions({});
+    // Drop previous thread immediately (cancel in-flight loads).
+    messagesRequestSeqRef.current += 1;
+    activeMessagesChatIdRef.current = isPendingFavoritesId(clickedId) ? null : clickedId;
+    setMessages([]);
+    setHasMoreMessages(false);
+
+    if (favoritesClick && (isPendingFavoritesId(target.id) || !target.id)) {
+      const stillSelectingFavorites = () => {
+        const pending = pendingSelectIdRef.current;
+        return pending === clickedId
+          || (pending && !isPendingFavoritesId(pending) && isFavoritesChat(
+            { id: pending, is_favorites: true },
+            user.id
+          ));
+      };
+
+      try {
+        let fav = await ensureFavoritesChat(user);
+        if (!fav?.id) {
+          invalidateFavoritesEnsureCache(user.id);
+          fav = await ensureFavoritesChat(user, { force: true });
+        }
+
+        if (!stillSelectingFavorites()) return;
+
+        // Parallel ensure may have already upgraded selection.
+        if (!fav?.id) {
+          const current = selectedChatRef.current;
+          if (
+            current
+            && !isPendingFavoritesId(current.id)
+            && isFavoritesChat(current, user.id)
+          ) {
+            fav = current;
+          }
+        }
+
+        if (!fav?.id || isPendingFavoritesId(fav.id)) {
+          setAttachError('Не удалось открыть Избранное');
+          return;
+        }
+
+        target = { ...fav, is_favorites: true };
+        setChats((prev) => withFavoritesChat(prev, user, target));
+        setSelectedChat(target);
+        persistSelectedChat(target);
+      } catch (err) {
+        if (!stillSelectingFavorites()) return;
+        const current = selectedChatRef.current;
+        if (
+          current
+          && !isPendingFavoritesId(current.id)
+          && isFavoritesChat(current, user.id)
+        ) {
+          target = { ...current, is_favorites: true };
+        } else {
+          const detail = err?.response?.data?.detail;
+          setAttachError(
+            typeof detail === 'string' && detail.trim()
+              ? detail
+              : 'Не удалось открыть Избранное'
+          );
+          return;
+        }
+      }
     }
+
+    const targetId = String(target.id);
+    if (isPendingFavoritesId(targetId)) {
+      setAttachError('Не удалось открыть Избранное');
+      return;
+    }
+
+    pendingSelectIdRef.current = targetId;
+    activeMessagesChatIdRef.current = targetId;
+
+    if (String(routeChatIdRef.current) !== targetId) {
+      navigate(`/chats/${targetId}`);
+    }
+
+    // Autofocus composer after the textarea mounts (code mode is cleared above).
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        messageInputRef.current?.focus({ preventScroll: true });
+      });
+    });
+
+    await loadMessages(targetId);
   };
 
   const handleBackToChatList = useCallback(() => {
@@ -415,24 +686,57 @@ export default function ChatsPage() {
     navigate('/chats');
   }, [clearPendingAttachments, navigate]);
 
-  // Mobile: /chats = list, /chats/:id = conversation. Desktop keeps split view.
+  // Sync selection FROM the URL. Never yank back to an old route while a click is in flight.
   useEffect(() => {
     if (!routeChatId) {
-      if (isMobileViewport && selectedChat) {
+      if (isMobileViewport && selectedChatRef.current) {
         messagesRequestSeqRef.current += 1;
         activeMessagesChatIdRef.current = null;
+        pendingSelectIdRef.current = null;
         setSelectedChat(null);
         setMessages([]);
         setPartnerActivity(null);
       }
       return;
     }
-    if (String(selectedChat?.id) === String(routeChatId)) return;
+
+    // navigate() not applied yet — keep the optimistic selection.
+    if (
+      pendingSelectIdRef.current
+      && String(pendingSelectIdRef.current) !== String(routeChatId)
+    ) {
+      return;
+    }
+
+    if (
+      pendingSelectIdRef.current
+      && String(pendingSelectIdRef.current) === String(routeChatId)
+    ) {
+      pendingSelectIdRef.current = null;
+    }
+
+    if (
+      String(selectedChatRef.current?.id) === String(routeChatId)
+      && !isPendingFavoritesId(routeChatId)
+    ) {
+      return;
+    }
+
+    if (isPendingFavoritesId(routeChatId)) {
+      const stub = chats.find((item) => String(item.id) === String(routeChatId))
+        || chats.find((item) => isFavoritesChat(item, user?.id));
+      if (stub) {
+        applySelectedChat(stub);
+      }
+      return;
+    }
+
     const chat = chats.find((item) => String(item.id) === String(routeChatId));
     if (chat) {
       applySelectedChat(chat);
     }
-  }, [routeChatId, chats, isMobileViewport, selectedChat?.id, applySelectedChat]);
+    // Intentionally omit selectedChat?.id — that dependency caused A→B→A→B flicker.
+  }, [routeChatId, chats, isMobileViewport, applySelectedChat, user?.id]);
 
   useEffect(() => {
     if (!callScreenVisible || !callChatId) return;
@@ -644,8 +948,10 @@ export default function ChatsPage() {
         let chat = chats.find((c) => String(c.id) === String(chatId));
         if (!chat) {
           const { data } = await chatsApi.list();
-          setChats(data);
-          chat = data.find((c) => String(c.id) === String(chatId));
+          const raw = Array.isArray(data) ? data : [];
+          const list = user ? withFavoritesChat(raw, user, findFavoritesInList(raw, user.id)) : raw;
+          setChats(list);
+          chat = list.find((c) => String(c.id) === String(chatId));
         }
         if (chat && String(selectedChat?.id) !== String(chat.id)) {
           clearPendingAttachments();
@@ -1004,18 +1310,35 @@ export default function ChatsPage() {
     }
   }, [sendTyping]);
 
-  const toggleCodeMode = () => {
+  const toggleCodeMode = useCallback(() => {
     setCodeMode((prev) => {
       const next = !prev;
       if (next) {
         clearPendingAttachments();
-        if (!codeLanguage) setCodeLanguage('python');
-        if (!codeFileName) setCodeFileName('script.py');
+        setCodeLanguage((lang) => lang || 'python');
+        setCodeFileName((name) => name || 'script.py');
       }
       setAttachError('');
       return next;
     });
-  };
+  }, [clearPendingAttachments]);
+
+  const closeCodeMode = useCallback(() => {
+    setCodeMode(false);
+    setAttachError('');
+    requestAnimationFrame(() => messageInputRef.current?.focus());
+  }, []);
+
+  const openCodeMode = useCallback(() => {
+    clearPendingAttachments();
+    setCodeLanguage((lang) => lang || 'python');
+    setCodeFileName((name) => {
+      if (name) return name;
+      return 'script.py';
+    });
+    setAttachError('');
+    setCodeMode(true);
+  }, [clearPendingAttachments]);
 
   const handleCodeLanguageChange = (lang) => {
     setCodeLanguage(lang);
@@ -1339,6 +1662,28 @@ export default function ChatsPage() {
     e.preventDefault();
     if (!selectedChat || uploading || forwardBusy) return;
     clearAiSuggestion();
+
+    // Pending stub: resolve chat first; send after WS binds to the real id.
+    if (user && isPendingFavoritesId(selectedChat.id)) {
+      try {
+        const fav = await ensureFavoritesChat(user);
+        if (!fav?.id) {
+          setAttachError('Не удалось открыть Избранное');
+          return;
+        }
+        const next = { ...fav, is_favorites: true };
+        setChats((prev) => withFavoritesChat(prev, user, next));
+        setSelectedChat(next);
+        persistSelectedChat(next);
+        if (String(routeChatId) !== String(fav.id)) {
+          navigate(`/chats/${fav.id}`, { replace: true });
+        }
+        await loadMessages(fav.id);
+      } catch {
+        setAttachError('Не удалось открыть Избранное');
+      }
+      return;
+    }
 
     if (pendingForward) {
       setForwardBusy(true);
@@ -1833,7 +2178,8 @@ export default function ChatsPage() {
     let list = [];
     try {
       const listed = await chatsApi.list();
-      list = Array.isArray(listed.data) ? listed.data : [];
+      const raw = Array.isArray(listed.data) ? listed.data : [];
+      list = user ? withFavoritesChat(raw, user, findFavoritesInList(raw, user.id)) : raw;
       setChats(list);
     } catch {
       await loadChats();
@@ -1892,7 +2238,8 @@ export default function ChatsPage() {
 
   const openChatTitle = useMemo(() => {
     if (!selectedChat) return 'Monica';
-    if (isGroupChat(selectedChat)) return getChatTitle(selectedChat) || 'Monica';
+    if (isFavoritesChat(selectedChat, user?.id)) return 'Избранное';
+    if (isGroupChat(selectedChat)) return getChatTitle(selectedChat, user?.id) || 'Monica';
     const partner = selectedChat.partner;
     if (!partner) return 'Monica';
     if (partner.nickname) return `@${partner.nickname}`;
@@ -1907,6 +2254,8 @@ export default function ChatsPage() {
     else if (chatFilter === 'mentions') list = [];
     else list = chats;
 
+    list = sortChatsWithFavoritesFirst(list, user?.id);
+
     // Keep the ringing chat visible even under filters.
     if (
       callController.status === 'incoming'
@@ -1917,7 +2266,7 @@ export default function ChatsPage() {
       if (ringingChat) list = [ringingChat, ...list];
     }
     return list;
-  }, [chats, chatFilter, isSpecialFavoritesOpen, isBackModeOpen, isChatUnread, callController.status, callChatId]);
+  }, [chats, chatFilter, isSpecialFavoritesOpen, isBackModeOpen, isChatUnread, callController.status, callChatId, user?.id]);
 
   const selectedMessages = useMemo(() => {
     const byId = new Map(messages.map((message) => [String(message.id), message]));
@@ -1949,6 +2298,27 @@ export default function ChatsPage() {
     clearMessageSelection();
     setRequestEditMessageId(messageId);
   }, [selectionCanEdit, selectedMessages, clearMessageSelection]);
+
+  const beginEditLastOwnMessage = useCallback(() => {
+    if (!user?.id || codeMode || voiceRecording || uploading) return false;
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const message = messages[i];
+      if (!message) continue;
+      const isOwn = String(message.sender?.id) === String(user.id);
+      if (!canEditMessage(message, isOwn)) continue;
+      if (
+        message.message_type === 'text'
+        && isStickerMessageContent(message.content)
+      ) {
+        continue;
+      }
+      const messageId = String(message.id);
+      setRequestEditMessageId(messageId);
+      jumpToMessage(messageId);
+      return true;
+    }
+    return false;
+  }, [codeMode, jumpToMessage, messages, uploading, user?.id, voiceRecording]);
 
   const handleSelectionDelete = useCallback(async (scope) => {
     if (!selectedMessages.length) return;
@@ -2036,8 +2406,10 @@ export default function ChatsPage() {
       let target = chats.find((chat) => String(chat.id) === String(chatId));
       if (!target) {
         const { data } = await chatsApi.list();
-        setChats(Array.isArray(data) ? data : []);
-        target = (Array.isArray(data) ? data : []).find((chat) => String(chat.id) === String(chatId));
+        const raw = Array.isArray(data) ? data : [];
+        const list = user ? withFavoritesChat(raw, user, findFavoritesInList(raw, user.id)) : raw;
+        setChats(list);
+        target = list.find((chat) => String(chat.id) === String(chatId));
       }
       if (!target) {
         setAttachError('Оригинал сообщения недоступен');
@@ -2071,17 +2443,179 @@ export default function ChatsPage() {
   useSecretSequenceShortcut(FRONT_SEQUENCE, unlockFront);
   useSecretSequenceShortcut(BACK_SEQUENCE, unlockBack);
 
+  const filteredChatsRef = useRef([]);
+  filteredChatsRef.current = filteredChats;
+
+  const switchChatByOffset = useCallback((delta) => {
+    const list = filteredChatsRef.current;
+    if (!list.length) return;
+    const currentId = String(selectedChatRef.current?.id || '');
+    let index = list.findIndex((chat) => String(chat.id) === currentId);
+    if (index < 0) {
+      index = delta > 0 ? -1 : 0;
+    }
+    const nextIndex = (index + delta + list.length * 10) % list.length;
+    const next = list[nextIndex];
+    if (next && String(next.id) !== currentId) {
+      handleSelectChat(next);
+    }
+  }, [handleSelectChat]);
+
+  const openChatSearch = useCallback(() => {
+    if (!selectedChat || accountSettingsOpen || stickerStoreOpen || callScreenVisible) return;
+    setDetailsPanelOpen(true);
+    setChatSearchOpen(true);
+    setChatSearchFocusSeq((n) => n + 1);
+  }, [
+    accountSettingsOpen,
+    callScreenVisible,
+    selectedChat,
+    stickerStoreOpen,
+  ]);
+
+  const closeChatSearch = useCallback(() => {
+    setChatSearchOpen(false);
+  }, []);
+
+  const closeDetailsPanel = useCallback(() => {
+    setChatSearchOpen(false);
+    setDetailsPanelOpen(false);
+  }, []);
+
   useEffect(() => {
-    if (!isSpecialFavoritesOpen && !isBackModeOpen) return undefined;
-    function onKeyDown(e) {
-      if (e.key === 'Escape') {
+    if (!selectedChat) setChatSearchOpen(false);
+  }, [selectedChat?.id]);
+
+  useEffect(() => {
+    function onKeyDown(event) {
+      const mod = event.ctrlKey || event.metaKey;
+      const inBlockedOverlay = accountSettingsOpen || stickerStoreOpen || callScreenVisible
+        || forwardPickerOpen || createGroupOpen;
+      const isTabKey = event.key === 'Tab' || event.code === 'Tab';
+
+      // Next / previous chat.
+      // Prefer Ctrl+Arrow — browsers reserve Ctrl+Tab for tab switching and often
+      // never deliver it (or ignore preventDefault). Still handle Ctrl+Tab when we get it.
+      const chatSwitchDelta = (() => {
+        if (inBlockedOverlay) return 0;
+        if (mod && !event.altKey && isTabKey) {
+          return event.shiftKey ? -1 : 1;
+        }
+        if (mod && !event.altKey && !event.shiftKey && event.key === 'ArrowDown') return 1;
+        if (mod && !event.altKey && !event.shiftKey && event.key === 'ArrowUp') return -1;
+        return 0;
+      })();
+
+      if (chatSwitchDelta) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === 'function') {
+          event.stopImmediatePropagation();
+        }
+        switchChatByOffset(chatSwitchDelta);
+        return;
+      }
+
+      // Ctrl+/ — open / toggle code composer
+      if (
+        mod
+        && !event.altKey
+        && (event.key === '/' || event.code === 'Slash' || event.code === 'NumpadDivide')
+      ) {
+        if (
+          !selectedChatRef.current
+          || inBlockedOverlay
+          || replyTo
+          || pendingForward
+          || uploading
+          || voiceRecording
+        ) {
+          return;
+        }
+        event.preventDefault();
+        if (codeMode) closeCodeMode();
+        else openCodeMode();
+        return;
+      }
+
+      // Ctrl+F — search in chat details (existing)
+      if (mod && !event.altKey && !event.shiftKey && event.code === 'KeyF') {
+        if (!selectedChat || inBlockedOverlay) return;
+        event.preventDefault();
+        openChatSearch();
+        return;
+      }
+
+      if (event.key !== 'Escape') return;
+      if (event.defaultPrevented) return;
+
+      // Message edit first — do not leave the chat while a bubble is being edited
+      if (document.querySelector('.chats-page .message-edit')) {
+        return;
+      }
+
+      // Code mode first: hide editor and focus message input
+      if (codeMode) {
+        event.preventDefault();
+        closeCodeMode();
+        return;
+      }
+
+      if (emojiPickerVisible) {
+        event.preventDefault();
+        setEmojiPickerVisible(false);
+        return;
+      }
+
+      if (isSpecialFavoritesOpen || isBackModeOpen) {
+        event.preventDefault();
         setIsSpecialFavoritesOpen(false);
         setIsBackModeOpen(false);
+        return;
+      }
+
+      if (selectionMode) {
+        event.preventDefault();
+        clearMessageSelection();
+        return;
+      }
+
+      // Exit open chat (details stay open only via their own close control)
+      if (selectedChatRef.current && !inBlockedOverlay) {
+        event.preventDefault();
+        handleBackToChatList();
       }
     }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isSpecialFavoritesOpen, isBackModeOpen]);
+
+    // Capture phase so we run before focused inputs where possible.
+    // Note: Chrome/Edge still reserve Ctrl+Tab for browser tabs; Ctrl+Arrow is the reliable binding.
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown, true);
+    };
+  }, [
+    accountSettingsOpen,
+    callScreenVisible,
+    clearMessageSelection,
+    closeCodeMode,
+    codeMode,
+    createGroupOpen,
+    emojiPickerVisible,
+    forwardPickerOpen,
+    handleBackToChatList,
+    isBackModeOpen,
+    isSpecialFavoritesOpen,
+    openChatSearch,
+    openCodeMode,
+    pendingForward,
+    replyTo,
+    selectedChat,
+    selectionMode,
+    stickerStoreOpen,
+    switchChatByOffset,
+    uploading,
+    voiceRecording,
+  ]);
 
   useEffect(() => {
     const prevTitle = document.title;
@@ -2123,6 +2657,7 @@ export default function ChatsPage() {
     <div
       className={[
         'chats-page',
+        `chats-page--theme-${themeId}`,
         privateSessionId ? 'with-private' : '',
         isSpecialFavoritesOpen ? 'chats-page--special' : '',
         isBackModeOpen ? 'chats-page--back' : '',
@@ -2137,6 +2672,8 @@ export default function ChatsPage() {
       ]
         .filter(Boolean)
         .join(' ')}
+      data-theme={themeId}
+      style={theme?.vars}
     >
       {callController.status === 'incoming' && (
         <IncomingCallOverlay
@@ -2177,9 +2714,17 @@ export default function ChatsPage() {
         backMode={isBackModeOpen}
         privateMode={Boolean(privateSessionId)}
       />
-      <aside className="chat-sidebar">
+      <aside
+        className={[
+          'chat-sidebar',
+          chatSidebarCompact ? 'chat-sidebar--compact' : '',
+        ].filter(Boolean).join(' ')}
+        style={isMobileViewport ? undefined : { width: chatSidebarWidth }}
+      >
         <div className="sidebar-header">
-          <h2>{isBackModeOpen ? 'Пустота' : isSpecialFavoritesOpen ? 'Chats' : 'Чаты'}</h2>
+          {!chatSidebarCompact && (
+            <h2>{isBackModeOpen ? 'Пустота' : isSpecialFavoritesOpen ? 'Chats' : 'Чаты'}</h2>
+          )}
           <div className="sidebar-header-actions">
             <button
               type="button"
@@ -2205,39 +2750,43 @@ export default function ChatsPage() {
             />
           </div>
         </div>
-        <ChatFilters
-          active={chatFilter}
-          onChange={setChatFilter}
-          unreadCount={unreadChatCount}
-          specialMode={isSpecialFavoritesOpen}
-          backMode={isBackModeOpen}
-        />
-        <div className="search-box">
-          <input
-            type="text"
-            placeholder={
-              isBackModeOpen
-                ? 'Искать… зачем?'
-                : isSpecialFavoritesOpen
-                  ? 'Search chats…  ⌘K'
-                  : 'Поиск по никнейму...'
-            }
-            value={searchQuery}
-            onChange={(e) => handleSearch(e.target.value)}
-          />
-          {searchResults.length > 0 && (
-            <ul className="search-results">
-              {searchResults.map((u) => (
-                <UserSearchResult
-                  key={u.id}
-                  user={u}
-                  onSelect={startChat}
-                  isOnline={isOnline(u.id, u.is_online)}
-                />
-              ))}
-            </ul>
-          )}
-        </div>
+        {!chatSidebarCompact && (
+          <>
+            <ChatFilters
+              active={chatFilter}
+              onChange={setChatFilter}
+              unreadCount={unreadChatCount}
+              specialMode={isSpecialFavoritesOpen}
+              backMode={isBackModeOpen}
+            />
+            <div className="search-box">
+              <input
+                type="text"
+                placeholder={
+                  isBackModeOpen
+                    ? 'Искать… зачем?'
+                    : isSpecialFavoritesOpen
+                      ? 'Search chats…  ⌘K'
+                      : 'Поиск по никнейму...'
+                }
+                value={searchQuery}
+                onChange={(e) => handleSearch(e.target.value)}
+              />
+              {searchResults.length > 0 && (
+                <ul className="search-results">
+                  {searchResults.map((u) => (
+                    <UserSearchResult
+                      key={u.id}
+                      user={u}
+                      onSelect={startChat}
+                      isOnline={isOnline(u.id, u.is_online)}
+                    />
+                  ))}
+                </ul>
+              )}
+            </div>
+          </>
+        )}
         <ul className="chat-list">
           {filteredChats.map((chat) => (
             <ChatListItem
@@ -2257,10 +2806,24 @@ export default function ChatsPage() {
               ringingMediaMode={callController.mediaMode}
               onAcceptCall={handleAcceptCall}
               onRejectCall={callController.rejectCall}
+              currentUserId={user?.id}
+              compact={chatSidebarCompact}
             />
           ))}
         </ul>
       </aside>
+      {!isMobileViewport && (
+        <div
+          className="panel-resizer panel-resizer--sidebar"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Изменить ширину списка чатов"
+          aria-valuenow={chatSidebarWidth}
+          aria-valuemin={72}
+          aria-valuemax={480}
+          onPointerDown={beginChatSidebarResize}
+        />
+      )}
 
       {accountSettingsOpen ? (
         <AccountSettings
@@ -2332,11 +2895,13 @@ export default function ChatsPage() {
                 onStartVideoCall={handleStartVideoCall}
                 callDisabled={
                   isGroupChat(selectedChat)
+                  || isFavoritesChat(selectedChat, user?.id)
                   || !selectedChat?.partner
                   || !['idle', 'ended'].includes(callController.status)
                   || Boolean(incomingInviteForOpenChat)
                 }
                 onBack={isMobileViewport ? handleBackToChatList : undefined}
+                currentUserId={user?.id}
               />
             )}
             {invitePending && !privateSessionId && !selectionMode && !isGroupChat(selectedChat) && (
@@ -2605,7 +3170,7 @@ export default function ChatsPage() {
                         className="btn-emoji"
                         title="Эмодзи"
                         aria-label="Эмодзи"
-                      disabled={Boolean(replyTo || pendingForward) || uploading || voiceRecording}
+                        disabled={Boolean(replyTo || pendingForward) || uploading || voiceRecording}
                       >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
                           <circle cx="12" cy="12" r="10" />
@@ -2734,6 +3299,21 @@ export default function ChatsPage() {
                             return;
                           }
                         }
+                        if (
+                          e.key === 'ArrowUp'
+                          && !e.shiftKey
+                          && !e.altKey
+                          && !e.ctrlKey
+                          && !e.metaKey
+                          && !String(input || '').trim()
+                          && pendingAttachments.length === 0
+                          && !pendingForward
+                          && !replyTo
+                        ) {
+                          e.preventDefault();
+                          beginEditLastOwnMessage();
+                          return;
+                        }
                         if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault();
                           clearAiSuggestion();
@@ -2839,18 +3419,36 @@ export default function ChatsPage() {
               type="button"
               className="chat-details-backdrop"
               aria-label="Закрыть детали"
-              onClick={() => setDetailsPanelOpen(false)}
+              onClick={closeDetailsPanel}
             />
+            {!isMobileViewport && (
+              <div
+                className="panel-resizer panel-resizer--details"
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Изменить ширину панели деталей"
+                aria-valuenow={detailsPanelWidth}
+                aria-valuemin={280}
+                aria-valuemax={560}
+                onPointerDown={beginDetailsPanelResize}
+              />
+            )}
             <ChatDetailsPanel
               chatId={selectedChat.id}
               chat={selectedChat}
               partner={selectedChat.partner}
               isOnline={isOnline(selectedChat.partner?.id, selectedChat.partner?.is_online)}
-              onClose={() => setDetailsPanelOpen(false)}
+              onClose={closeDetailsPanel}
               specialMode={isSpecialFavoritesOpen}
               backMode={isBackModeOpen}
               onJumpToMessage={jumpToMessage}
               backgroundUrl={chatBackground}
+              currentUserId={user?.id}
+              panelWidth={isMobileViewport ? undefined : detailsPanelWidth}
+              searchOpen={chatSearchOpen}
+              searchFocusSeq={chatSearchFocusSeq}
+              onSearchOpenChange={setChatSearchOpen}
+              onCloseSearch={closeChatSearch}
               onBackgroundChange={(url) => {
                 setChatBackgroundState(url);
                 const chatId = selectedChat?.id;

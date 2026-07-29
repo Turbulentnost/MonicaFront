@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { EMOJI_CATEGORIES } from './emojiData';
 import { AppleEmoji } from './AppleEmoji';
 import { StickerView } from './StickerView';
@@ -19,6 +19,10 @@ export function EmojiPicker({
   const [activeId, setActiveId] = useState(EMOJI_CATEGORIES[0]?.id || 'smileys');
   const [packs, setPacks] = useState(() => getInstalledStickerPacks());
   const [activePackId, setActivePackId] = useState(() => getInstalledStickerPacks()[0]?.id || '');
+  const [, setScrollEdge] = useState({ top: false, bottom: true });
+  const [, setScrolling] = useState(false);
+  const gridRef = useRef(null);
+  const scrollTimerRef = useRef(null);
 
   useEffect(() => {
     if (!visible) return;
@@ -32,6 +36,34 @@ export function EmojiPicker({
       next.some((pack) => pack.id === current) ? current : (next[0]?.id || '')
     ));
   }, [visible, installedPackIds, emojiOnly]);
+
+  const updateScrollEdges = () => {
+    const node = gridRef.current;
+    if (!node) return;
+    const top = node.scrollTop > 2;
+    const bottom = node.scrollTop + node.clientHeight < node.scrollHeight - 2;
+    setScrollEdge({ top, bottom });
+  };
+
+  useEffect(() => {
+    if (!visible || panel !== 'emoji') return undefined;
+    const node = gridRef.current;
+    if (!node) return undefined;
+    updateScrollEdges();
+    const onScroll = () => {
+      updateScrollEdges();
+      setScrolling(true);
+      if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
+      scrollTimerRef.current = window.setTimeout(() => setScrolling(false), 180);
+    };
+    node.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', updateScrollEdges);
+    return () => {
+      node.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', updateScrollEdges);
+      if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
+    };
+  }, [visible, panel, activeId]);
 
   const activeCategory = EMOJI_CATEGORIES.find((c) => c.id === activeId) || EMOJI_CATEGORIES[0];
   const activePack = packs.find((pack) => pack.id === activePackId) || packs[0] || null;
@@ -142,7 +174,7 @@ export function EmojiPicker({
                 tabIndex={visible ? 0 : -1}
               >
                 <span className="emoji-picker__tab-icon" aria-hidden="true">
-                  {pack.cover}
+                  <AppleEmoji emoji={pack.cover} size={18} />
                 </span>
               </button>
             ))}
@@ -169,7 +201,7 @@ export function EmojiPicker({
                   aria-label={sticker.label}
                   tabIndex={visible ? 0 : -1}
                 >
-                  <StickerView sticker={sticker} size="md" />
+                  <StickerView sticker={sticker} size="picker" />
                 </button>
               ))}
             </div>

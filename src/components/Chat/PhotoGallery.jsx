@@ -31,7 +31,6 @@ function fitPhotoSize(naturalW, naturalH, { minSide, maxW, maxH }) {
   let w = Math.max(1, naturalW);
   let h = Math.max(1, naturalH);
 
-  // Upscale tiny images so they stay readable in chat / lightbox.
   if (w < minSide && h < minSide) {
     const scale = minSide / Math.max(w, h);
     w *= scale;
@@ -45,17 +44,15 @@ function fitPhotoSize(naturalW, naturalH, { minSide, maxW, maxH }) {
   };
 }
 
-function GalleryThumb({ item, onOpen, single = false }) {
-  const key = item.path;
-  const remote = item.content_url;
+function usePhotoSrc(item) {
+  const key = item?.path;
+  const remote = item?.content_url;
   const [src, setSrc] = useState(() => getCachedMediaSrc(key, remote));
-  const [sizeStyle, setSizeStyle] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
     const cached = getCachedMediaSrc(key, remote);
     setSrc(cached);
-    setSizeStyle(null);
     if (key && remote) {
       warmMediaCache(key, remote).then((url) => {
         if (!cancelled && url) setSrc(url);
@@ -65,6 +62,17 @@ function GalleryThumb({ item, onOpen, single = false }) {
       cancelled = true;
     };
   }, [key, remote]);
+
+  return src;
+}
+
+function GalleryThumb({ item, onOpen, single = false }) {
+  const src = usePhotoSrc(item);
+  const [sizeStyle, setSizeStyle] = useState(null);
+
+  useEffect(() => {
+    setSizeStyle(null);
+  }, [src]);
 
   const handleLoad = (event) => {
     if (!single) return;
@@ -105,31 +113,33 @@ function GalleryThumb({ item, onOpen, single = false }) {
   );
 }
 
+function LightboxTile({ item, active = false, onClick }) {
+  const src = usePhotoSrc(item);
+  return (
+    <button
+      type="button"
+      className={`photo-lightbox__tile${active ? ' is-active' : ''}`}
+      onClick={onClick}
+      aria-current={active ? 'true' : undefined}
+    >
+      {src ? (
+        <img src={src} alt={item.file_name || 'Фото'} />
+      ) : (
+        <span className="photo-lightbox__tile-empty" />
+      )}
+    </button>
+  );
+}
+
 export function PhotoLightbox({ items, index, onClose, onChange }) {
   const current = items[index];
-  const key = current?.path;
-  const remote = current?.content_url;
-  const [src, setSrc] = useState(() => getCachedMediaSrc(key, remote));
+  const src = usePhotoSrc(current);
   const [host, setHost] = useState(null);
   const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     setHost(getLightboxHost());
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    const cached = getCachedMediaSrc(key, remote);
-    setSrc(cached);
-    if (key && remote) {
-      warmMediaCache(key, remote).then((url) => {
-        if (!cancelled && url) setSrc(url);
-      });
-    }
-    return () => {
-      cancelled = true;
-    };
-  }, [key, remote]);
 
   const go = useCallback(
     (delta) => {
@@ -233,18 +243,18 @@ export function PhotoLightbox({ items, index, onClose, onChange }) {
           <div className="photo-lightbox__empty">Загрузка…</div>
         )}
       </div>
+
       {items.length > 1 && (
-        <button
-          type="button"
-          className="photo-lightbox__nav photo-lightbox__nav--next"
-          onClick={(e) => {
-            e.stopPropagation();
-            go(1);
-          }}
-          aria-label="Следующее"
-        >
-          ›
-        </button>
+        <div className="photo-lightbox__tiles" onClick={(e) => e.stopPropagation()}>
+          {items.map((item, i) => (
+            <LightboxTile
+              key={item.path || item.content_url || i}
+              item={item}
+              active={i === index}
+              onClick={() => onChange(i)}
+            />
+          ))}
+        </div>
       )}
     </div>,
     host,
@@ -271,7 +281,7 @@ export function PhotoGallery({ items }) {
           const absoluteIndex = offset - size + colIdx;
           return (
             <GalleryThumb
-              key={item.path || `${rowIdx}-${colIdx}`}
+              key={item.path || item.content_url || `${rowIdx}-${colIdx}`}
               item={item}
               single={photos.length === 1}
               onOpen={() => setLightboxIndex(absoluteIndex)}

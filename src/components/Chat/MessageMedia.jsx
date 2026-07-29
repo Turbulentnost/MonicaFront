@@ -4,7 +4,7 @@ import javascriptLang from 'react-syntax-highlighter/dist/esm/languages/prism/ja
 import pythonLang from 'react-syntax-highlighter/dist/esm/languages/prism/python';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { chatsApi } from '../../api/client';
-import { getCachedMediaSrc, warmMediaCache } from '../../utils/mediaCache';
+import { warmMediaCache } from '../../utils/mediaCache';
 import { downloadMediaFile, isVideoMessage } from '../../utils/videoMedia';
 import { FileTypeIcon } from './FileTypeIcon';
 import { PhotoGallery } from './PhotoGallery';
@@ -99,7 +99,6 @@ export function getCodeLanguage(message) {
 export function MessageMedia({ message, chatId }) {
   const mediaKey = message.content;
   const remoteUrl = message.content_url;
-  const [src, setSrc] = useState(() => getCachedMediaSrc(mediaKey, remoteUrl));
   const [codeText, setCodeText] = useState(() => codeTextCache.get(mediaKey) || '');
   const [codeLoading, setCodeLoading] = useState(false);
   const [codeError, setCodeError] = useState('');
@@ -112,21 +111,10 @@ export function MessageMedia({ message, chatId }) {
   const hasOutput = Boolean(runResult || runError);
 
   useEffect(() => {
-    let cancelled = false;
-
-    if (message.message_type === 'photo') {
-      const cached = getCachedMediaSrc(mediaKey, remoteUrl);
-      setSrc(cached);
-      if (mediaKey && remoteUrl) {
-        warmMediaCache(mediaKey, remoteUrl).then((url) => {
-          if (!cancelled && url) setSrc(url);
-        });
-      }
-    }
-
-    return () => {
-      cancelled = true;
-    };
+    if (message.message_type !== 'photo' || !mediaKey || !remoteUrl) return undefined;
+    // Prefetch into media cache for PhotoGallery / lightbox.
+    warmMediaCache(mediaKey, remoteUrl);
+    return undefined;
   }, [mediaKey, remoteUrl, message.message_type]);
 
   useEffect(() => {

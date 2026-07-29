@@ -1,10 +1,12 @@
 import { UserAvatar } from './UserAvatar';
+import { FavoritesAvatar } from './FavoritesAvatar';
 import { renderTextWithAppleEmoji } from './AppleEmoji';
 import { formatChatListTime } from '../../utils/formatChatDate';
 import { getPhotoCaption } from '../../utils/messageText';
 import {
   getChatListName,
   getGroupAvatarUser,
+  isFavoritesChat,
   isGroupChat,
 } from '../../utils/chatDisplay';
 import { isVideoMessage } from '../../utils/videoMedia';
@@ -69,10 +71,13 @@ export function ChatListItem({
   ringingMediaMode = 'audio',
   onAcceptCall,
   onRejectCall,
+  currentUserId = null,
+  compact = false,
 }) {
   const group = isGroupChat(chat);
+  const favorites = isFavoritesChat(chat, currentUserId);
   const avatarUser = getGroupAvatarUser(chat);
-  const name = getChatListName(chat);
+  const name = getChatListName(chat, currentUserId);
   const preview = formatPreview(chat.last_message);
   const timeLabel = formatChatListTime(
     chat.last_message?.sent_at || chat.updated_at
@@ -81,7 +86,8 @@ export function ChatListItem({
     ? 'Входящий видеозвонок…'
     : 'Входящий звонок…';
   const showUnread = unread && !ringing;
-  const canRing = ringing && !group;
+  const canRing = ringing && !group && !favorites;
+  const avatarSize = compact ? 40 : 44;
 
   return (
     <li className={[
@@ -89,31 +95,55 @@ export function ChatListItem({
       canRing ? 'ringing' : '',
       showUnread ? 'has-unread' : '',
       group ? 'is-group' : '',
+      favorites ? 'is-favorites' : '',
+      compact ? 'is-compact' : '',
     ].filter(Boolean).join(' ')}>
       <div className={`chat-item-row ${canRing ? 'chat-item-row--ringing' : ''}`}>
-        <button type="button" className="chat-item-btn" onClick={() => onSelect(chat)}>
-          <UserAvatar
-            user={avatarUser}
-            size={44}
-            showOnline={!group}
-            isOnline={isOnline}
-            className={group ? 'chat-item-avatar--group' : ''}
-          />
-          <span className="chat-item-text">
-            <span className="chat-item-top">
-              <span className="chat-item-name">{name}</span>
-              {!canRing && timeLabel && <span className="chat-item-time">{timeLabel}</span>}
-            </span>
-            <span className="chat-item-preview">
-              {canRing && <span className="chat-ringing-dot" aria-hidden="true" />}
-              {canRing ? ringingLabel : renderTextWithAppleEmoji(preview)}
-            </span>
+        <button
+          type="button"
+          className="chat-item-btn"
+          onClick={() => onSelect(chat)}
+          title={compact ? name : undefined}
+          aria-label={compact ? name : undefined}
+        >
+          <span className="chat-item-avatar-wrap">
+            {favorites ? (
+              <FavoritesAvatar size={avatarSize} className="chat-item-avatar--favorites" />
+            ) : (
+              <UserAvatar
+                user={avatarUser}
+                size={avatarSize}
+                showOnline={!group && !compact}
+                isOnline={isOnline}
+                className={group ? 'chat-item-avatar--group' : ''}
+              />
+            )}
+            {showUnread && compact && (
+              <span
+                className="chat-item-unread-badge"
+                aria-label="Есть непрочитанные сообщения"
+              />
+            )}
           </span>
-          {showUnread && (
-            <span className="chat-item-unread" aria-label="Есть непрочитанные сообщения" />
+          {!compact && (
+            <>
+              <span className="chat-item-text">
+                <span className="chat-item-top">
+                  <span className="chat-item-name">{name}</span>
+                  {!canRing && timeLabel && <span className="chat-item-time">{timeLabel}</span>}
+                </span>
+                <span className="chat-item-preview">
+                  {canRing && <span className="chat-ringing-dot" aria-hidden="true" />}
+                  {canRing ? ringingLabel : renderTextWithAppleEmoji(preview)}
+                </span>
+              </span>
+              {showUnread && (
+                <span className="chat-item-unread" aria-label="Есть непрочитанные сообщения" />
+              )}
+            </>
           )}
         </button>
-        {canRing && (
+        {canRing && !compact && (
           <div className="chat-item-call-actions" role="group" aria-label={ringingLabel}>
             <button
               type="button"
