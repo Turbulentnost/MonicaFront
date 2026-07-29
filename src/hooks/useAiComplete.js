@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { aiApi } from '../api/client';
 
-const DEFAULT_DEBOUNCE_MS = 380;
-const MIN_DRAFT_LEN = 8;
+const MIN_DRAFT_LEN = 1;
+const DEFAULT_DEBOUNCE_MS = 450;
 
 /**
  * Ghost-text completion for the chat composer.
@@ -121,15 +121,26 @@ export function useAiComplete({
       return undefined;
     }
 
-    // Draft changed — drop stale ghost immediately
+    // Every character cancels the old request and restarts the pause timer.
+    // Request only after the user has stopped typing for debounceMs.
     setSuggestion('');
-
+    setLoading(false);
+    requestSeqRef.current += 1;
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
     const timer = setTimeout(() => {
       fetchComplete(text);
     }, debounceMs);
 
     return () => {
       clearTimeout(timer);
+      requestSeqRef.current += 1;
+      if (abortRef.current) {
+        abortRef.current.abort();
+        abortRef.current = null;
+      }
     };
   }, [draft, chatId, enabled, styleEnabled, reasonActive, debounceMs, fetchComplete]);
 
