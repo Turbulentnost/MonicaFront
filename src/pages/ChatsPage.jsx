@@ -201,10 +201,11 @@ export default function ChatsPage() {
     suggestion: aiSuggestion,
     loading: aiLoading,
     styleEnabled: aiStyleEnabled,
+    reasonActive: aiReasonActive,
     clearSuggestion: clearAiSuggestion,
     acceptAll: acceptAiAll,
     acceptWord: acceptAiWord,
-    requestComplete: requestAiComplete,
+    toggleReason: toggleAiReason,
   } = useAiComplete({
     draft: codeMode || voiceRecording ? '' : input,
     chatId: selectedChat?.id,
@@ -3349,7 +3350,7 @@ export default function ChatsPage() {
                             {renderTextWithAppleEmoji(input, 'composer-input', 18)}
                           </span>
                         ) : null}
-                        {aiSuggestion && aiStyleEnabled ? (
+                        {aiReasonActive && aiSuggestion && aiStyleEnabled ? (
                           <span className="message-input-ai-ghost__suggestion">
                             {renderTextWithAppleEmoji(aiSuggestion, 'composer-ai', 18)}
                           </span>
@@ -3430,7 +3431,7 @@ export default function ChatsPage() {
                                   : 'Сообщение...'
                       }
                     />
-                      {aiSuggestion && aiStyleEnabled ? (
+                      {aiReasonActive && aiSuggestion && aiStyleEnabled ? (
                         <div className="message-input-ai-hint">Tab — принять · Esc — отклонить</div>
                       ) : null}
                     </div>
@@ -3439,26 +3440,22 @@ export default function ChatsPage() {
                 {!codeMode && aiStyleEnabled ? (
                   <button
                     type="button"
-                    className={`btn-ai-reason${aiLoading ? ' is-loading' : ''}${aiSuggestion ? ' has-suggestion' : ''}`}
+                    className={[
+                      'btn-ai-reason',
+                      aiReasonActive ? 'is-active' : '',
+                      aiLoading ? 'is-loading' : '',
+                    ].filter(Boolean).join(' ')}
                     title={
-                      String(input || '').trim().length < 8
-                        ? 'Наберите минимум 8 символов для автодополнения'
-                        : aiLoading
-                          ? 'Думаю…'
-                          : 'Reason — предложить продолжение'
+                      aiReasonActive
+                        ? (aiLoading ? 'Думаю…' : 'Reason — выключить автодополнение')
+                        : 'Reason — включить автодополнение'
                     }
                     aria-label="Reason — автодополнение"
-                    disabled={
-                      voiceRecording
-                      || uploading
-                      || forwardBusy
-                      || aiLoading
-                      || String(input || '').trim().length < 8
-                    }
+                    aria-pressed={aiReasonActive}
+                    disabled={voiceRecording || uploading || forwardBusy}
                     onClick={() => {
-                      requestAiComplete().then(() => {
-                        requestAnimationFrame(() => resizeMessageInput());
-                      });
+                      toggleAiReason();
+                      requestAnimationFrame(() => resizeMessageInput());
                     }}
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">

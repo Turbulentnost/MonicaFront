@@ -6,7 +6,7 @@ const MIN_DRAFT_LEN = 8;
 
 /**
  * Ghost-text completion for the chat composer.
- * Returns the suggestion suffix (continuation only).
+ * Suggestions run only while Reason mode is active (composer sparkles toggle).
  */
 export function useAiComplete({
   draft,
@@ -18,6 +18,7 @@ export function useAiComplete({
   const [suggestion, setSuggestion] = useState('');
   const [loading, setLoading] = useState(false);
   const [styleEnabled, setStyleEnabled] = useState(true);
+  const [reasonActive, setReasonActive] = useState(false);
   const abortRef = useRef(null);
   const requestSeqRef = useRef(0);
   const lastFetchedDraftRef = useRef('');
@@ -49,7 +50,10 @@ export function useAiComplete({
 
   const setEnabled = useCallback(async (nextEnabled) => {
     setStyleEnabled(Boolean(nextEnabled));
-    if (!nextEnabled) clearSuggestion();
+    if (!nextEnabled) {
+      setReasonActive(false);
+      clearSuggestion();
+    }
     try {
       const { data } = await aiApi.updateStyle({ enabled: Boolean(nextEnabled) });
       setStyleEnabled(data?.enabled !== false);
@@ -59,10 +63,49 @@ export function useAiComplete({
     }
   }, [clearSuggestion]);
 
+  const fetchComplete = useCallback(async (text) => {
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const seq = ++requestSeqRef.current;
+    setLoading(true);
+    try {
+      const { data } = await aiApi.complete(
+        { draft: text, chat_id: chatId || undefined },
+        { signal: controller.signal, timeout: 30000 }
+      );
+      if (seq !== requestSeqRef.current) return false;
+      lastFetchedDraftRef.current = text;
+      if (data?.disabled || data?.rate_limited || data?.error) {
+        setSuggestion('');
+        if (data?.detail === 'llm_unavailable') {
+          // eslint-disable-next-line no-console
+          console.warn('[ai] LLM unavailable — check OPENAI_BASE_URL / LM Studio network');
+        }
+        return false;
+      }
+      const next = String(data?.suggestion || '');
+      setSuggestion(next);
+      return Boolean(next);
+    } catch (err) {
+      if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return false;
+      if (seq !== requestSeqRef.current) return false;
+      setSuggestion('');
+      return false;
+    } finally {
+      if (seq === requestSeqRef.current) setLoading(false);
+    }
+  }, [chatId]);
+
   useEffect(() => {
-    if (!enabled || !styleEnabled) {
+    if (!enabled || !styleEnabled || !reasonActive) {
       setSuggestion('');
       setLoading(false);
+      lastFetchedDraftRef.current = '';
+      if (abortRef.current) {
+        abortRef.current.abort();
+        abortRef.current = null;
+      }
       return undefined;
     }
 
@@ -81,42 +124,14 @@ export function useAiComplete({
     // Draft changed — drop stale ghost immediately
     setSuggestion('');
 
-    const timer = setTimeout(async () => {
-      if (abortRef.current) abortRef.current.abort();
-      const controller = new AbortController();
-      abortRef.current = controller;
-      const seq = ++requestSeqRef.current;
-      setLoading(true);
-      try {
-        const { data } = await aiApi.complete(
-          { draft: text, chat_id: chatId || undefined },
-          { signal: controller.signal, timeout: 30000 }
-        );
-        if (seq !== requestSeqRef.current) return;
-        lastFetchedDraftRef.current = text;
-        if (data?.disabled || data?.rate_limited || data?.error) {
-          setSuggestion('');
-          if (data?.detail === 'llm_unavailable') {
-            // Soft signal in console for debugging; UI stays calm.
-            // eslint-disable-next-line no-console
-            console.warn('[ai] LLM unavailable — check OPENAI_BASE_URL / LM Studio network');
-          }
-        } else {
-          setSuggestion(String(data?.suggestion || ''));
-        }
-      } catch (err) {
-        if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
-        if (seq !== requestSeqRef.current) return;
-        setSuggestion('');
-      } finally {
-        if (seq === requestSeqRef.current) setLoading(false);
-      }
+    const timer = setTimeout(() => {
+      fetchComplete(text);
     }, debounceMs);
 
     return () => {
       clearTimeout(timer);
     };
-  }, [draft, chatId, enabled, styleEnabled, debounceMs]);
+  }, [draft, chatId, enabled, styleEnabled, reasonActive, debounceMs, fetchComplete]);
 
   const acceptAll = useCallback(() => {
     if (!suggestion) return '';
@@ -140,48 +155,46 @@ export function useAiComplete({
     return next;
   }, [acceptAll, draft, suggestion]);
 
-  const requestComplete = useCallback(async () => {
-    if (!enabled || !styleEnabled) return false;
-    const text = String(draft || '');
-    if (text.trim().length < MIN_DRAFT_LEN) return false;
-
-    if (abortRef.current) abortRef.current.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    const seq = ++requestSeqRef.current;
-    setLoading(true);
-    try {
-      const { data } = await aiApi.complete(
-        { draft: text, chat_id: chatId || undefined },
-        { signal: controller.signal, timeout: 30000 }
-      );
-      if (seq !== requestSeqRef.current) return false;
-      lastFetchedDraftRef.current = text;
-      if (data?.disabled || data?.rate_limited || data?.error) {
+  const toggleReason = useCallback(() => {
+    setReasonActive((prev) => {
+      if (prev) {
         setSuggestion('');
+        lastFetchedDraftRef.current = '';
+        if (abortRef.current) {
+          abortRef.current.abort();
+          abortRef.current = null;
+        }
+        setLoading(false);
         return false;
       }
-      const next = String(data?.suggestion || '');
-      setSuggestion(next);
-      return Boolean(next);
-    } catch (err) {
-      if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return false;
-      if (seq !== requestSeqRef.current) return false;
-      setSuggestion('');
-      return false;
-    } finally {
-      if (seq === requestSeqRef.current) setLoading(false);
+      // Activate: clear cache so the effect refetches for the current draft.
+      lastFetchedDraftRef.current = '';
+      return true;
+    });
+  }, []);
+
+  // Reset Reason mode when leaving the chat / disabling composer AI.
+  useEffect(() => {
+    if (!enabled) {
+      setReasonActive(false);
+      clearSuggestion();
     }
-  }, [enabled, styleEnabled, draft, chatId]);
+  }, [enabled, clearSuggestion]);
+
+  useEffect(() => {
+    setReasonActive(false);
+    clearSuggestion();
+  }, [chatId, clearSuggestion]);
 
   return {
     suggestion,
     loading,
     styleEnabled,
+    reasonActive,
     setEnabled,
     clearSuggestion,
     acceptAll,
     acceptWord,
-    requestComplete,
+    toggleReason,
   };
 }
