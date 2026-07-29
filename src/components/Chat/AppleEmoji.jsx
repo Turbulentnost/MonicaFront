@@ -72,7 +72,7 @@ export function AppleEmoji({
   );
 }
 
-export function renderTextWithAppleEmoji(text, keyPrefix = 'ae') {
+export function renderTextWithAppleEmoji(text, keyPrefix = 'ae', size = 18) {
   if (text == null || text === '') return null;
   const source = String(text);
   const re = emojiRegex();
@@ -89,7 +89,7 @@ export function renderTextWithAppleEmoji(text, keyPrefix = 'ae') {
       <AppleEmoji
         key={`${keyPrefix}-${key++}`}
         emoji={emoji}
-        size={18}
+        size={size}
       />
     );
     lastIndex = match.index + emoji.length;

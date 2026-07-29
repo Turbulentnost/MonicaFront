@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MessageMedia } from './MessageMedia';
 import { VoiceMessagePlayer } from './VoiceMessagePlayer';
-import { AppleEmoji } from './AppleEmoji';
+import { AppleEmoji, renderTextWithAppleEmoji } from './AppleEmoji';
 import { EmojiPicker } from './EmojiPicker';
 import { ForwardedBundle } from './ForwardedBundle';
 import { LinkPreviewCard } from './LinkPreviewCard';
@@ -701,7 +701,11 @@ function ChatMessageBubble({
             <span>
               {isStickerMessageContent(message.reply_to_summary.preview)
                 ? 'Стикер'
-                : (message.reply_to_summary.preview || 'Сообщение')}
+                : renderTextWithAppleEmoji(
+                  message.reply_to_summary.preview || 'Сообщение',
+                  `reply-${message.id}`,
+                  14
+                )}
             </span>
           </button>
         )}

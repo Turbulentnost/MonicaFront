@@ -44,6 +44,7 @@ import { QuoteComposerBar } from '../components/Chat/QuoteComposerBar';
 import { SendIconButton } from '../components/Chat/SendIconButton';
 import { UploadProgressRing } from '../components/Chat/UploadProgressRing';
 import { FileTypeIcon } from '../components/Chat/FileTypeIcon';
+import { renderTextWithAppleEmoji } from '../components/Chat/AppleEmoji';
 import { warmAvatarCache } from '../utils/avatarCache';
 import { groupMessagesByDay } from '../utils/formatChatDate';
 import { invalidateMediaCache, warmMediaCache } from '../utils/mediaCache';
@@ -2890,6 +2891,8 @@ export default function ChatsPage() {
                 onInvitePrivate={handleInvitePrivate}
                 privateBusy={privateBusy || invitePending || Boolean(privateSessionId)}
                 incomingInvitePending={Boolean(incomingInviteForOpenChat)}
+                onAcceptPrivateInvite={() => handleAcceptInvite(incomingInviteForOpenChat)}
+                onDeclinePrivateInvite={() => handleDeclineInvite(incomingInviteForOpenChat)}
                 onOpenDetails={() => setDetailsPanelOpen((open) => !open)}
                 onStartCall={handleStartCall}
                 onStartVideoCall={handleStartVideoCall}
@@ -2958,16 +2961,6 @@ export default function ChatsPage() {
                   ))}
                 </div>
               ))}
-              {partnerActivity === 'typing' && !isGroupChat(selectedChat) && (
-                <div className="typing-indicator">
-                  @{selectedChat.partner?.nickname} печатает...
-                </div>
-              )}
-              {partnerActivity === 'typing' && isGroupChat(selectedChat) && (
-                <div className="typing-indicator">
-                  Печатают...
-                </div>
-              )}
               <div ref={messagesEndRef} />
               </div>
             </div>
@@ -3256,9 +3249,15 @@ export default function ChatsPage() {
                   ) : (
                     <div className="message-input-ai">
                       <div className="message-input-ai-ghost" aria-hidden="true">
-                        <span className="message-input-ai-ghost__typed">{input}</span>
+                        {input ? (
+                          <span className="message-input-ai-ghost__typed is-visible">
+                            {renderTextWithAppleEmoji(input, 'composer-input', 18)}
+                          </span>
+                        ) : null}
                         {aiSuggestion && aiStyleEnabled ? (
-                          <span className="message-input-ai-ghost__suggestion">{aiSuggestion}</span>
+                          <span className="message-input-ai-ghost__suggestion">
+                            {renderTextWithAppleEmoji(aiSuggestion, 'composer-ai', 18)}
+                          </span>
                         ) : null}
                       </div>
                       <textarea

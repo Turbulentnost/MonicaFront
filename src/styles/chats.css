@@ -1349,6 +1349,24 @@ body.is-resizing-panels * {
   background: rgba(255, 255, 255, 0.06);
 }
 
+.chats-page .chat-header-icon-btn--decline-private {
+  color: #ff7185;
+}
+
+.chats-page .chat-header-icon-btn--decline-private:hover:not(:disabled) {
+  color: #ff9baa;
+  background: rgba(255, 83, 112, 0.14);
+}
+
+.chats-page .chat-header-icon-btn--accept-private {
+  color: #55dca5;
+}
+
+.chats-page .chat-header-icon-btn--accept-private:hover:not(:disabled) {
+  color: #8aefc5;
+  background: rgba(69, 214, 154, 0.14);
+}
+
 .chats-page .chat-header-icon-btn:focus-visible {
   outline: 2px solid rgba(91, 124, 255, 0.7);
   outline-offset: 2px;
@@ -2588,15 +2606,33 @@ body.is-resizing-panels * {
   white-space: pre-wrap;
 }
 
+.chats-page .message-input-ai-ghost__typed.is-visible {
+  color: var(--text-primary);
+}
+
 .chats-page .message-input-ai-ghost__suggestion {
   color: rgba(190, 200, 220, 0.62);
   white-space: pre-wrap;
+}
+
+.chats-page .message-input-ai-ghost .apple-emoji {
+  width: 18px;
+  height: 18px;
+  vertical-align: -0.25em;
 }
 
 .chats-page .message-input-ai .message-input-textarea {
   position: relative;
   z-index: 1;
   background: transparent;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: var(--text-primary);
+}
+
+.chats-page .message-input-ai .message-input-textarea::placeholder {
+  color: var(--text-muted);
+  -webkit-text-fill-color: var(--text-muted);
 }
 
 .chats-page .message-input-ai-hint {
@@ -2667,11 +2703,21 @@ body.is-resizing-panels * {
   font-family: var(--dev-mono, 'JetBrains Mono', monospace);
   font-size: 13px;
   line-height: 22px;
-  color: var(--text-primary);
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: var(--text-primary);
 }
 
 .chats-page .message-input--special .message-input-main .message-input-textarea::placeholder {
   color: var(--dev-comment, #546e7a);
+  -webkit-text-fill-color: var(--dev-comment, #546e7a);
+}
+
+.chats-page .message-input--special .message-input-ai-ghost {
+  padding: 11px 14px;
+  font-family: var(--dev-mono, 'JetBrains Mono', monospace);
+  font-size: 13px;
+  line-height: 22px;
 }
 
 .chats-page .message-input--special .message-input-main .message-input-textarea:focus {
@@ -6733,6 +6779,13 @@ body.is-resizing-panels * {
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.quote-composer-bar__body span .apple-emoji,
+.message-reply-quote span .apple-emoji {
+  width: 14px;
+  height: 14px;
+  vertical-align: -0.2em;
 }
 
 .quote-composer-bar > button {

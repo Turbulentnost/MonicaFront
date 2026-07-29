@@ -44,6 +44,22 @@ function IconLock() {
   );
 }
 
+function IconCheck() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <path d="m5 12 4.5 4.5L19 7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconClose() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function ChatHeader({
   chat = null,
   partner,
@@ -57,6 +73,8 @@ export function ChatHeader({
   onStartVideoCall,
   callDisabled,
   incomingInvitePending = false,
+  onAcceptPrivateInvite,
+  onDeclinePrivateInvite,
   onBack,
   currentUserId = null,
 }) {
@@ -153,16 +171,41 @@ export function ChatHeader({
 
       {!group && !favorites && (
         <div className="chat-header-actions">
-          <button
-            type="button"
-            className="chat-header-icon-btn"
-            onClick={onInvitePrivate}
-            disabled={privateBusy}
-            title="Пригласить в приватный чат"
-            aria-label="Приватный чат"
-          >
-            <IconLock />
-          </button>
+          {incomingInvitePending ? (
+            <>
+              <button
+                type="button"
+                className="chat-header-icon-btn chat-header-icon-btn--decline-private"
+                onClick={onDeclinePrivateInvite}
+                disabled={privateBusy}
+                title="Отклонить приватный чат"
+                aria-label="Отклонить приглашение в приватный чат"
+              >
+                <IconClose />
+              </button>
+              <button
+                type="button"
+                className="chat-header-icon-btn chat-header-icon-btn--accept-private"
+                onClick={onAcceptPrivateInvite}
+                disabled={privateBusy}
+                title="Принять приватный чат"
+                aria-label="Принять приглашение в приватный чат"
+              >
+                <IconCheck />
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="chat-header-icon-btn"
+              onClick={onInvitePrivate}
+              disabled={privateBusy}
+              title="Пригласить в приватный чат"
+              aria-label="Приватный чат"
+            >
+              <IconLock />
+            </button>
+          )}
           <button
             type="button"
             className="chat-header-icon-btn"
