@@ -248,6 +248,7 @@ export function ChatDetailsPanel({
   const [pinnedError, setPinnedError] = useState('');
   const [unpinBusyId, setUnpinBusyId] = useState(null);
   const [lightboxIndex, setLightboxIndex] = useState(null);
+  const [avatarLightboxOpen, setAvatarLightboxOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -347,6 +348,7 @@ export function ChatDetailsPanel({
     setPinnedError('');
     setUnpinBusyId(null);
     setLightboxIndex(null);
+    setAvatarLightboxOpen(false);
     setSearchQuery('');
     setSearchResults([]);
     setSearchError('');
@@ -454,6 +456,18 @@ export function ChatDetailsPanel({
 
   const files = useMemo(() => flattenFiles(fileMessages), [fileMessages]);
   const photos = useMemo(() => flattenPhotos(fileMessages), [fileMessages]);
+  const avatarGalleryItems = useMemo(() => {
+    const url = (displayUser?.photo_url || '').trim();
+    const path = (displayUser?.photo || '').trim();
+    if (!url && !path) return [];
+    const name = displayUser?.nickname || displayUser?.first_name || 'avatar';
+    return [{
+      path: path || `avatar:${displayUser?.id || name}`,
+      content_url: url || null,
+      file_name: `${name}.jpg`,
+    }];
+  }, [displayUser]);
+  const canOpenAvatarGallery = avatarGalleryItems.length > 0;
   const visibleFiles = showAllFiles ? files : files.slice(0, 5);
   const searchActive = searchQuery.trim().length >= 2;
   const photosLoading = filesLoading;
@@ -653,6 +667,25 @@ export function ChatDetailsPanel({
         {!specialMode && (
           favorites ? (
             <FavoritesAvatar size={56} className="chat-details__avatar--favorites" />
+          ) : canOpenAvatarGallery ? (
+            <button
+              type="button"
+              className="chat-details__avatar-btn"
+              onClick={() => {
+                setLightboxIndex(null);
+                setAvatarLightboxOpen(true);
+              }}
+              aria-label={group ? 'Открыть фото группы' : 'Открыть аватар'}
+              title={group ? 'Открыть фото' : 'Открыть аватар'}
+            >
+              <UserAvatar
+                user={displayUser}
+                size={56}
+                showOnline={!backMode && !group}
+                isOnline={backMode || group ? false : isOnline}
+                className={group ? 'chat-details__avatar--group' : ''}
+              />
+            </button>
           ) : (
             <UserAvatar
               user={displayUser}
@@ -1004,6 +1037,15 @@ export function ChatDetailsPanel({
           index={lightboxIndex}
           onClose={() => setLightboxIndex(null)}
           onChange={setLightboxIndex}
+        />
+      )}
+
+      {avatarLightboxOpen && canOpenAvatarGallery && (
+        <PhotoLightbox
+          items={avatarGalleryItems}
+          index={0}
+          onClose={() => setAvatarLightboxOpen(false)}
+          onChange={() => {}}
         />
       )}
     </aside>

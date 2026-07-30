@@ -2659,6 +2659,11 @@ export default function ChatsPage() {
       if (event.key !== 'Escape') return;
       if (event.defaultPrevented) return;
 
+      // Photo gallery / lightbox owns Escape — do not leave the chat
+      if (document.querySelector('.photo-lightbox')) {
+        return;
+      }
+
       // Message edit first — do not leave the chat while a bubble is being edited
       if (document.querySelector('.chats-page .message-edit')) {
         return;
