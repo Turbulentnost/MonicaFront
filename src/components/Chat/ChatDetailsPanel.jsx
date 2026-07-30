@@ -221,6 +221,8 @@ export function ChatDetailsPanel({
   specialMode = false,
   backMode = false,
   onJumpToMessage,
+  onUnpinMessage,
+  pinnedRefreshKey = 0,
   onBackgroundChange,
   backgroundUrl = null,
   currentUserId = null,
@@ -241,6 +243,10 @@ export function ChatDetailsPanel({
   const [filesLoading, setFilesLoading] = useState(false);
   const [filesError, setFilesError] = useState('');
   const [showAllFiles, setShowAllFiles] = useState(false);
+  const [pinnedMessages, setPinnedMessages] = useState([]);
+  const [pinnedLoading, setPinnedLoading] = useState(false);
+  const [pinnedError, setPinnedError] = useState('');
+  const [unpinBusyId, setUnpinBusyId] = useState(null);
   const [lightboxIndex, setLightboxIndex] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -337,6 +343,9 @@ export function ChatDetailsPanel({
     setShowAllFiles(false);
     setFileMessages([]);
     setFilesError('');
+    setPinnedMessages([]);
+    setPinnedError('');
+    setUnpinBusyId(null);
     setLightboxIndex(null);
     setSearchQuery('');
     setSearchResults([]);
@@ -359,6 +368,32 @@ export function ChatDetailsPanel({
       cancelled = true;
     };
   }, [chatId]);
+
+  useEffect(() => {
+    if (!chatId || activeTab !== 'pinned') return undefined;
+
+    let cancelled = false;
+    setPinnedLoading(true);
+    setPinnedError('');
+    chatsApi.pinned(chatId)
+      .then(({ data }) => {
+        if (!cancelled) setPinnedMessages(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPinnedError(
+            specialMode ? 'Failed to load pinned messages' : 'Не удалось загрузить закреплённые'
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setPinnedLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [chatId, activeTab, pinnedRefreshKey, specialMode]);
 
   // Members tab (direct chats): retry media load if the shared files request previously failed.
   useEffect(() => {
@@ -867,9 +902,77 @@ export function ChatDetailsPanel({
 
       {activeTab === 'pinned' && (
         <div className="chat-details__section">
-          <p className="chat-details__placeholder">
-            {specialMode ? 'No pinned messages yet' : 'Закреплённых сообщений пока нет'}
-          </p>
+          <div className="chat-details__section-head">
+            <span>{specialMode ? 'Pinned' : 'Закреплённые'}</span>
+            {!pinnedLoading && pinnedMessages.length > 0 && (
+              <span className="chat-details__count">{pinnedMessages.length}</span>
+            )}
+          </div>
+          {pinnedLoading && (
+            <p className="chat-details__placeholder">
+              {specialMode ? 'Loading…' : 'Загрузка…'}
+            </p>
+          )}
+          {!pinnedLoading && pinnedError && (
+            <p className="chat-details__placeholder">{pinnedError}</p>
+          )}
+          {!pinnedLoading && !pinnedError && pinnedMessages.length === 0 && (
+            <p className="chat-details__placeholder">
+              {specialMode ? 'No pinned messages yet' : 'Закреплённых сообщений пока нет'}
+            </p>
+          )}
+          {!pinnedLoading && !pinnedError && pinnedMessages.length > 0 && (
+            <div className="chat-details__pinned-list">
+              {pinnedMessages.map((message) => (
+                <div key={message.id} className="chat-details__pinned-item">
+                  <button
+                    type="button"
+                    className="chat-details__pinned-main"
+                    onClick={() => onJumpToMessage?.(message.id)}
+                  >
+                    <span className="chat-details__search-item-text">
+                      {getSearchPreview(message)}
+                    </span>
+                    <span className="chat-details__search-item-meta">
+                      @{message.sender?.nickname || 'user'}
+                      {message.pinned_at || message.sent_at
+                        ? ` · ${formatSearchTime(message.pinned_at || message.sent_at)}`
+                        : ''}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="chat-details__pinned-unpin"
+                    disabled={unpinBusyId === message.id}
+                    title={specialMode ? 'Unpin' : 'Открепить'}
+                    aria-label={specialMode ? 'Unpin message' : 'Открепить сообщение'}
+                    onClick={async (event) => {
+                      event.stopPropagation();
+                      if (!onUnpinMessage || unpinBusyId === message.id) return;
+                      setUnpinBusyId(message.id);
+                      try {
+                        await onUnpinMessage({ ...message, is_pinned: true });
+                        setPinnedMessages((prev) => prev.filter((item) => item.id !== message.id));
+                      } finally {
+                        setUnpinBusyId(null);
+                      }
+                    }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path
+                        d="M15 4.5 9.5 10H7v2.5L4 16l4 4 3.5-3H14l5.5-5.5"
+                        stroke="currentColor"
+                        strokeWidth="1.7"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path d="m5 5 14 14" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

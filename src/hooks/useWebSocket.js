@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { WS_URL } from '../config';
 
-export function useWebSocket(chatId, { onMessage, onTyping, onDeleted, onEdited, onRead } = {}) {
+export function useWebSocket(chatId, { onMessage, onTyping, onDeleted, onEdited, onRead, onPinned } = {}) {
   const wsRef = useRef(null);
   const [connected, setConnected] = useState(false);
   const onMessageRef = useRef(onMessage);
@@ -9,11 +9,13 @@ export function useWebSocket(chatId, { onMessage, onTyping, onDeleted, onEdited,
   const onDeletedRef = useRef(onDeleted);
   const onEditedRef = useRef(onEdited);
   const onReadRef = useRef(onRead);
+  const onPinnedRef = useRef(onPinned);
   onMessageRef.current = onMessage;
   onTypingRef.current = onTyping;
   onDeletedRef.current = onDeleted;
   onEditedRef.current = onEdited;
   onReadRef.current = onRead;
+  onPinnedRef.current = onPinned;
 
   useEffect(() => {
     if (!chatId) return undefined;
@@ -68,6 +70,9 @@ export function useWebSocket(chatId, { onMessage, onTyping, onDeleted, onEdited,
         }
         if (data.action === 'message.edited' && onEditedRef.current) {
           onEditedRef.current(data.message);
+        }
+        if (data.action === 'message.pinned' && onPinnedRef.current) {
+          onPinnedRef.current(data.message);
         }
         if (data.action === 'messages.read' && onReadRef.current) {
           onReadRef.current(data);

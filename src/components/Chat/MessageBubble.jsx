@@ -188,6 +188,7 @@ function ChatMessageBubble({
   onReply,
   onJumpToReply,
   onOpenOriginal,
+  onTogglePin,
   /** Внешний запрос начать редактирование (из шапки выбора). */
   requestEdit = false,
   onRequestEditHandled,
@@ -223,6 +224,11 @@ function ChatMessageBubble({
   const photoCaption = getPhotoCaption(message);
   const selectable = !isPending && message.message_type !== 'call' && !String(message.id).startsWith('temp-');
   const showSelectControl = selectable && Boolean(onToggleSelect);
+  const canPin = Boolean(onTogglePin)
+    && canInteract
+    && selectable
+    && message.message_type !== 'call';
+  const isPinned = Boolean(message.is_pinned);
 
   const closeReactions = useCallback(() => {
     releaseReactionBar(message.id);
@@ -452,7 +458,7 @@ function ChatMessageBubble({
     closeReactions();
 
     const menuWidth = 188;
-    const menuHeight = canCopyPhoto ? 260 : 220;
+    const menuHeight = (canCopyPhoto ? 260 : 220) + (canPin ? 36 : 0);
     const pad = 8;
     const x = Math.min(event.clientX, window.innerWidth - menuWidth - pad);
     const y = Math.min(event.clientY, window.innerHeight - menuHeight - pad);
@@ -480,6 +486,11 @@ function ChatMessageBubble({
   const handleForwardFromMenu = () => {
     closeContextMenu();
     onQuickForward?.(message);
+  };
+
+  const handleTogglePin = () => {
+    closeContextMenu();
+    onTogglePin?.(message);
   };
 
   const handleCopyPhoto = async () => {
@@ -861,6 +872,11 @@ function ChatMessageBubble({
           {onQuickForward && (
             <button type="button" role="menuitem" onClick={handleForwardFromMenu}>
               Переслать
+            </button>
+          )}
+          {canPin && (
+            <button type="button" role="menuitem" onClick={handleTogglePin}>
+              {isPinned ? 'Открепить' : 'Закрепить'}
             </button>
           )}
           <button type="button" role="menuitem" onClick={() => handleDelete('me')}>

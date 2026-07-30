@@ -3543,6 +3543,63 @@ body.is-resizing-panels * {
   color: var(--text-muted);
 }
 
+.chat-details__pinned-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chat-details__pinned-item {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.chat-details__pinned-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: rgba(12, 16, 28, 0.5);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.chat-details__pinned-main:hover {
+  border-color: rgba(91, 124, 255, 0.4);
+  background: rgba(91, 124, 255, 0.1);
+}
+
+.chat-details__pinned-unpin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  flex-shrink: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: rgba(12, 16, 28, 0.5);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.chat-details__pinned-unpin:hover:not(:disabled) {
+  border-color: rgba(239, 68, 68, 0.45);
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+}
+
+.chat-details__pinned-unpin:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .chats-page .message-wrapper.is-highlighted .message {
   box-shadow: 0 0 0 1px rgba(91, 124, 255, 0.55), 0 0 24px rgba(91, 124, 255, 0.22);
   animation: message-highlight-pulse 1.6s ease;

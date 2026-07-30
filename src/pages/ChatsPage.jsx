@@ -151,6 +151,7 @@ export default function ChatsPage() {
   const [chatBackground, setChatBackgroundState] = useState(null);
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [aiStyleRefreshKey, setAiStyleRefreshKey] = useState(0);
+  const [pinnedRefreshKey, setPinnedRefreshKey] = useState(0);
   const [stickerStoreOpen, setStickerStoreOpen] = useState(false);
   const [installedStickerPackIds, setInstalledStickerPackIds] = useState(() => getInstalledStickerPackIds());
   const [isFileDragOver, setIsFileDragOver] = useState(false);
@@ -868,6 +869,7 @@ export default function ChatsPage() {
         }
         return prev.filter((m) => m.id !== messageId);
       });
+      setPinnedRefreshKey((value) => value + 1);
       loadChats();
     },
     [loadChats]
@@ -892,6 +894,38 @@ export default function ChatsPage() {
     });
   }, []);
 
+  const applyPinnedMessage = useCallback((message) => {
+    if (!message?.id) return;
+    setMessages((prev) => prev.map((m) => (
+      String(m.id) === String(message.id)
+        ? { ...m, ...message, is_pinned: Boolean(message.is_pinned), pinned_at: message.pinned_at || null }
+        : m
+    )));
+    setPinnedRefreshKey((value) => value + 1);
+  }, []);
+
+  const handleMessagePinned = useCallback((message) => {
+    applyPinnedMessage(message);
+  }, [applyPinnedMessage]);
+
+  const handleTogglePinMessage = useCallback(async (message) => {
+    if (!selectedChat?.id || !message?.id) return;
+    if (String(message.id).startsWith('temp-')) return;
+    const pinned = Boolean(message.is_pinned);
+    try {
+      const { data } = pinned
+        ? await chatsApi.unpinMessage(selectedChat.id, message.id)
+        : await chatsApi.pinMessage(selectedChat.id, message.id);
+      applyPinnedMessage(data || {
+        ...message,
+        is_pinned: !pinned,
+        pinned_at: pinned ? null : new Date().toISOString(),
+      });
+    } catch {
+      // ignore
+    }
+  }, [selectedChat?.id, applyPinnedMessage]);
+
   const handleTyping = useCallback((data) => {
     if (data.user_id === user?.id) return;
     if (!data.is_typing) {
@@ -906,6 +940,7 @@ export default function ChatsPage() {
     onTyping: handleTyping,
     onDeleted: handleMessageDeleted,
     onEdited: handleMessageEdited,
+    onPinned: handleMessagePinned,
     onRead: handleMessagesRead,
   });
   markReadRef.current = markMessagesRead;
@@ -3035,6 +3070,7 @@ export default function ChatsPage() {
                       onReply={beginReplyToMessage}
                       onJumpToReply={jumpToMessage}
                       onOpenOriginal={handleOpenOriginal}
+                      onTogglePin={handleTogglePinMessage}
                       requestEdit={String(requestEditMessageId) === String(msg.id)}
                       onRequestEditHandled={() => setRequestEditMessageId(null)}
                     />
@@ -3583,6 +3619,8 @@ export default function ChatsPage() {
               specialMode={isSpecialFavoritesOpen}
               backMode={isBackModeOpen}
               onJumpToMessage={jumpToMessage}
+              onUnpinMessage={handleTogglePinMessage}
+              pinnedRefreshKey={pinnedRefreshKey}
               backgroundUrl={chatBackground}
               currentUserId={user?.id}
               panelWidth={isMobileViewport ? undefined : detailsPanelWidth}
