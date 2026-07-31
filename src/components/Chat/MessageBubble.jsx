@@ -17,6 +17,14 @@ import {
   releaseReactionBar,
   subscribeReactionBar,
 } from '../../utils/reactionBarHover';
+import {
+  ReplyActionIcon,
+  ForwardActionIcon,
+  EditActionIcon,
+  CopyActionIcon,
+  PinActionIcon,
+  DeleteActionIcon,
+} from './actionIcons';
 
 const QUICK_REACTIONS = ['👍', '❤️', '👎', '🔥', '🥰', '👏', '😁'];
 const BACK_QUICK_REACTIONS = ['🥀', '💀', '😭', '🖤', '😞', '💔'];
@@ -97,85 +105,6 @@ function MenuIcon({ children }) {
   );
 }
 
-function ReplyIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M10 7 5 12l5 5"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M5 12h9a5 5 0 0 1 5 5v1"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function CopyIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <rect x="8" y="8" width="11" height="11" rx="2" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M6 15V6a2 2 0 0 1 2-2h9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function EditIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M4 20h4l10.5-10.5a1.8 1.8 0 0 0-2.5-2.5L5.5 17.5 4 20Z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function PinIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M14.5 4.5 9 10H6.5v2.5L4 16l4 4 3.5-2.5H14l5.5-5.5"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path d="m9.5 14.5 5-5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function ForwardIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="m14 7 5 5-5 5"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M19 12H10a5 5 0 0 0-5 5v1"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 function SelectIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -187,16 +116,6 @@ function SelectIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-    </svg>
-  );
-}
-
-function DeleteIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M5 7h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M8 7l.8 12h6.4L16 7" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -868,7 +787,7 @@ function ChatMessageBubble({
       <div className="message-context-menu is-open" role="menu">
         {showEdit && (
           <button type="button" role="menuitem" onClick={startEdit}>
-            <MenuIcon><EditIcon /></MenuIcon>
+            <MenuIcon><EditActionIcon /></MenuIcon>
             Редактировать
           </button>
         )}
@@ -879,13 +798,13 @@ function ChatMessageBubble({
             onClick={handleCopyPhoto}
             disabled={copyBusy}
           >
-            <MenuIcon><CopyIcon /></MenuIcon>
+            <MenuIcon><CopyActionIcon /></MenuIcon>
             {copyFeedback || (copyBusy ? 'Копирование…' : 'Скопировать')}
           </button>
         )}
         {onReply && (
           <button type="button" role="menuitem" onClick={handleReply}>
-            <MenuIcon><ReplyIcon /></MenuIcon>
+            <MenuIcon><ReplyActionIcon /></MenuIcon>
             Ответить
           </button>
         )}
@@ -895,13 +814,13 @@ function ChatMessageBubble({
         </button>
         {onQuickForward && (
           <button type="button" role="menuitem" onClick={handleForwardFromMenu}>
-            <MenuIcon><ForwardIcon /></MenuIcon>
+            <MenuIcon><ForwardActionIcon /></MenuIcon>
             Переслать
           </button>
         )}
         {canPin && (
           <button type="button" role="menuitem" onClick={handleTogglePin}>
-            <MenuIcon><PinIcon /></MenuIcon>
+            <MenuIcon><PinActionIcon /></MenuIcon>
             {isPinned ? 'Открепить' : 'Закрепить'}
           </button>
         )}
@@ -911,7 +830,7 @@ function ChatMessageBubble({
           className="message-context-menu__danger"
           onClick={() => handleDelete('me')}
         >
-          <MenuIcon><DeleteIcon /></MenuIcon>
+          <MenuIcon><DeleteActionIcon /></MenuIcon>
           Удалить у себя
         </button>
         {showDeleteForAll && (
@@ -921,7 +840,7 @@ function ChatMessageBubble({
             className="message-context-menu__danger"
             onClick={() => handleDelete('everyone')}
           >
-            <MenuIcon><DeleteIcon /></MenuIcon>
+            <MenuIcon><DeleteActionIcon /></MenuIcon>
             Удалить у всех
           </button>
         )}
@@ -982,7 +901,7 @@ function ChatMessageBubble({
           aria-label="Ответить на сообщение"
           onClick={handleReply}
         >
-          <ReplyIcon />
+          <ReplyActionIcon />
         </button>
       )}
 

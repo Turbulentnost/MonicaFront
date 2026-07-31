@@ -6964,6 +6964,31 @@ body.is-resizing-panels * {
   color: rgba(255, 255, 255, 0.88);
 }
 
+.action-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex-shrink: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+.message-context-menu__icon .action-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.chat-header-selection__action .action-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.selection-toolbar__actions .action-icon {
+  width: 16px;
+  height: 16px;
+}
+
 .message-context-menu__danger,
 .message-context-menu__danger .message-context-menu__icon {
   color: #ff6b6b;

@@ -1,3 +1,5 @@
+import { ForwardActionIcon, ReplyActionIcon } from './actionIcons';
+
 function pluralMessages(count) {
   const n = Math.abs(Number(count) || 0);
   const mod10 = n % 10;
@@ -16,10 +18,10 @@ export function SelectionToolbar({ count, onClose, onReply, onForward }) {
       </strong>
       <div className="selection-toolbar__actions">
         <button type="button" onClick={onReply} disabled={count < 1}>
-          <span aria-hidden="true">↩</span> Ответить
+          <ReplyActionIcon size={16} /> Ответить
         </button>
         <button type="button" onClick={onForward} disabled={count < 1}>
-          <span aria-hidden="true">➤</span> Переслать
+          <ForwardActionIcon size={16} /> Переслать
         </button>
         <button type="button" className="selection-toolbar__more" aria-label="Ещё" title="Ещё">•••</button>
       </div>
