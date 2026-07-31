@@ -2997,6 +2997,26 @@ body.is-resizing-panels * {
   word-break: break-word;
 }
 
+.chats-page .related-messages-panel__meta {
+  display: block;
+  margin-top: 4px;
+  text-align: right;
+  font-size: 11px;
+  line-height: 1.2;
+  opacity: 0.72;
+  white-space: nowrap;
+}
+
+.chats-page .related-messages-panel__row.is-own .related-messages-panel__meta {
+  color: var(--bubble-own-text);
+  opacity: 0.78;
+}
+
+.chats-page .related-messages-panel__row.is-other .related-messages-panel__meta {
+  color: var(--text-muted);
+  opacity: 0.9;
+}
+
 @keyframes related-message-line-in {
   to {
     opacity: 1;

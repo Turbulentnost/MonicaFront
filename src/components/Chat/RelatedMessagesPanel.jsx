@@ -1,10 +1,25 @@
 import { useEffect, useState } from 'react';
+import { formatMessageDayLabel } from '../../utils/formatChatDate';
 
 const AUTO_HIDE_MS = 4000;
 
+function formatRelatedMeta(iso) {
+  if (!iso) return '';
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return '';
+  const day = formatMessageDayLabel(iso);
+  const time = then.toLocaleTimeString('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  if (!day) return time;
+  if (!time) return day;
+  return `${day}, ${time}`;
+}
+
 /**
  * Floating list of semantically related messages used as Reason context.
- * Appears above the composer (right-aligned); auto-hides 1s after suggestion is ready.
+ * Appears above the composer (right-aligned); auto-hides after suggestion is ready.
  */
 export function RelatedMessagesPanel({
   messages = [],
@@ -61,6 +76,7 @@ export function RelatedMessagesPanel({
           const label = mine
             ? 'Вы'
             : (item.sender_label || 'Собеседник');
+          const meta = formatRelatedMeta(item.sent_at);
           return (
             <li
               key={item.id || `related-${index}`}
@@ -70,6 +86,9 @@ export function RelatedMessagesPanel({
               <div className="related-messages-panel__label">{label}:</div>
               <div className="related-messages-panel__bubble">
                 <span className="related-messages-panel__text">{item.text}</span>
+                {meta ? (
+                  <span className="related-messages-panel__meta">{meta}</span>
+                ) : null}
               </div>
             </li>
           );
