@@ -22,19 +22,71 @@ const QUICK_REACTIONS = ['👍', '❤️', '👎', '🔥', '🥰', '👏', '😁
 const BACK_QUICK_REACTIONS = ['🥀', '💀', '😭', '🖤', '😞', '💔'];
 const POPOVER_PAD = 8;
 const POPOVER_ESTIMATE = { width: 220, height: 320 };
+const POPOVER_GAP = 6;
 
-function placeActionPopover(clientX, clientY, width, height) {
-  let x = clientX;
-  let y = clientY + 6;
-  if (y + height > window.innerHeight - POPOVER_PAD) {
-    y = clientY - height - 6;
+function isMessageOutsideArea(messageRect, areaRect) {
+  return (
+    messageRect.bottom < areaRect.top
+    || messageRect.top > areaRect.bottom
+    || messageRect.right < areaRect.left
+    || messageRect.left > areaRect.right
+  );
+}
+
+/** Place fixed popover relative to message, clamped inside chat messages area. */
+function placePopoverInChat({ messageRect, areaRect, width, height, preferX }) {
+  const minX = areaRect.left + POPOVER_PAD;
+  const maxX = areaRect.right - width - POPOVER_PAD;
+  let x = typeof preferX === 'number' ? preferX : messageRect.left;
+  if (maxX < minX) {
+    x = areaRect.left + Math.max(0, (areaRect.width - width) / 2);
+  } else {
+    x = Math.min(Math.max(x, minX), maxX);
   }
-  if (y < POPOVER_PAD) y = POPOVER_PAD;
-  if (x + width > window.innerWidth - POPOVER_PAD) {
-    x = window.innerWidth - width - POPOVER_PAD;
+
+  const spaceBelow = areaRect.bottom - messageRect.bottom - POPOVER_PAD;
+  const spaceAbove = messageRect.top - areaRect.top - POPOVER_PAD;
+  let y;
+  if (spaceBelow >= height || spaceBelow >= spaceAbove) {
+    y = messageRect.bottom + POPOVER_GAP;
+    if (y + height > areaRect.bottom - POPOVER_PAD) {
+      y = areaRect.bottom - height - POPOVER_PAD;
+    }
+  } else {
+    y = messageRect.top - height - POPOVER_GAP;
+    if (y < areaRect.top + POPOVER_PAD) {
+      y = areaRect.top + POPOVER_PAD;
+    }
   }
-  if (x < POPOVER_PAD) x = POPOVER_PAD;
+
+  const minY = areaRect.top + POPOVER_PAD;
+  const maxY = areaRect.bottom - height - POPOVER_PAD;
+  if (maxY < minY) {
+    y = minY;
+  } else {
+    y = Math.min(Math.max(y, minY), maxY);
+  }
+
   return { x, y };
+}
+
+function getMessagesAreaRect(wrapperEl) {
+  const area = wrapperEl?.closest('.messages-area')
+    || document.querySelector('.chats-page .messages-area');
+  if (!area) {
+    return {
+      area: null,
+      rect: {
+        left: POPOVER_PAD,
+        top: POPOVER_PAD,
+        right: window.innerWidth - POPOVER_PAD,
+        bottom: window.innerHeight - POPOVER_PAD,
+        width: window.innerWidth - POPOVER_PAD * 2,
+        height: window.innerHeight - POPOVER_PAD * 2,
+      },
+    };
+  }
+  return { area, rect: area.getBoundingClientRect() };
 }
 
 function MenuIcon({ children }) {
@@ -375,25 +427,68 @@ function ChatMessageBubble({
     });
   }, [message.id, actionPopover]);
 
-  useLayoutEffect(() => {
-    if (!actionPopover || popoverLeaving) return undefined;
+  const syncPopoverPosition = useCallback((closeIfOutside = false) => {
+    const wrapper = wrapperRef.current;
     const node = popoverRef.current;
-    if (!node) return undefined;
-    const rect = node.getBoundingClientRect();
-    const next = placeActionPopover(
-      actionPopover.anchorX,
-      actionPopover.anchorY,
-      rect.width || POPOVER_ESTIMATE.width,
-      rect.height || POPOVER_ESTIMATE.height,
-    );
-    if (
-      Math.abs(next.x - actionPopover.x) > 1
-      || Math.abs(next.y - actionPopover.y) > 1
-    ) {
-      setActionPopover((prev) => (prev ? { ...prev, ...next } : prev));
+    if (!wrapper || !node) return;
+
+    const messageRect = wrapper.getBoundingClientRect();
+    const { rect: areaRect } = getMessagesAreaRect(wrapper);
+
+    if (closeIfOutside && isMessageOutsideArea(messageRect, areaRect)) {
+      closeActionPopover(true);
+      return;
     }
+
+    setActionPopover((prev) => {
+      if (!prev) return prev;
+      const width = node.getBoundingClientRect().width || POPOVER_ESTIMATE.width;
+      const height = node.getBoundingClientRect().height || POPOVER_ESTIMATE.height;
+      const next = placePopoverInChat({
+        messageRect,
+        areaRect,
+        width,
+        height,
+        preferX: prev.preferX,
+      });
+      if (Math.abs(next.x - prev.x) <= 1 && Math.abs(next.y - prev.y) <= 1) {
+        return prev;
+      }
+      return { ...prev, ...next };
+    });
+  }, [closeActionPopover]);
+
+  // Remeasure after open / expand (follow-loop handles ongoing layout shifts).
+  useLayoutEffect(() => {
+    if (!popoverOpen) return undefined;
+    syncPopoverPosition(false);
     return undefined;
-  }, [actionPopover, popoverLeaving, pickerExpanded]);
+  }, [popoverOpen, pickerExpanded, syncPopoverPosition]);
+
+  // Follow the message bubble while popover is open (new messages shift layout).
+  useEffect(() => {
+    if (!popoverOpen) return undefined;
+
+    let rafId = 0;
+    const tick = () => {
+      syncPopoverPosition(true);
+      rafId = window.requestAnimationFrame(tick);
+    };
+    rafId = window.requestAnimationFrame(tick);
+
+    const wrapper = wrapperRef.current;
+    const { area } = getMessagesAreaRect(wrapper);
+    const observer = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(() => syncPopoverPosition(true))
+      : null;
+    if (observer && wrapper) observer.observe(wrapper);
+    if (observer && area) observer.observe(area);
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      observer?.disconnect();
+    };
+  }, [popoverOpen, syncPopoverPosition]);
 
   // Lock message list scroll while the action popover is open.
   useEffect(() => {
@@ -522,20 +617,30 @@ function ChatMessageBubble({
       popoverCloseTimerRef.current = null;
     }
 
-    const placed = placeActionPopover(
-      event.clientX,
-      event.clientY,
-      POPOVER_ESTIMATE.width,
-      POPOVER_ESTIMATE.height + (pickerExpanded ? 220 : 0),
-    );
+    const wrapper = wrapperRef.current;
+    const messageRect = wrapper?.getBoundingClientRect() || {
+      left: event.clientX,
+      top: event.clientY,
+      right: event.clientX,
+      bottom: event.clientY,
+      width: 0,
+      height: 0,
+    };
+    const { rect: areaRect } = getMessagesAreaRect(wrapper);
+    const placed = placePopoverInChat({
+      messageRect,
+      areaRect,
+      width: POPOVER_ESTIMATE.width,
+      height: POPOVER_ESTIMATE.height,
+      preferX: event.clientX,
+    });
     claimReactionBar(message.id);
     setPopoverLeaving(false);
     setPickerExpanded(false);
     setCopyFeedback('');
     setActionPopover({
       ...placed,
-      anchorX: event.clientX,
-      anchorY: event.clientY,
+      preferX: event.clientX,
     });
   };
 

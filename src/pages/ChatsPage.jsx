@@ -190,6 +190,7 @@ export default function ChatsPage() {
   const pendingSelectIdRef = useRef(null);
   const lastImagePasteAtRef = useRef(0);
   const emojiHideTimeoutRef = useRef(null);
+  const emojiZoneRef = useRef(null);
   const voiceRecorderRef = useRef(null);
   const [emojiPickerVisible, setEmojiPickerVisible] = useState(false);
   const [micAvailable, setMicAvailable] = useState(false);
@@ -2132,16 +2133,9 @@ export default function ChatsPage() {
     }
   }, []);
 
-  const handleEmojiZoneEnter = useCallback(() => {
+  const toggleEmojiPicker = useCallback(() => {
     clearEmojiHideTimeout();
-    setEmojiPickerVisible(true);
-  }, [clearEmojiHideTimeout]);
-
-  const handleEmojiZoneLeave = useCallback(() => {
-    clearEmojiHideTimeout();
-    emojiHideTimeoutRef.current = setTimeout(() => {
-      setEmojiPickerVisible(false);
-    }, 280);
+    setEmojiPickerVisible((open) => !open);
   }, [clearEmojiHideTimeout]);
 
   const handleEmojiSelect = useCallback(
@@ -2227,6 +2221,17 @@ export default function ChatsPage() {
   }, [clearEmojiHideTimeout]);
 
   useEffect(() => () => clearEmojiHideTimeout(), [clearEmojiHideTimeout]);
+
+  useEffect(() => {
+    if (!emojiPickerVisible) return undefined;
+    const onPointerDown = (event) => {
+      if (emojiZoneRef.current?.contains(event.target)) return;
+      clearEmojiHideTimeout();
+      setEmojiPickerVisible(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [emojiPickerVisible, clearEmojiHideTimeout]);
 
   const searchLocalCacheRef = useRef(new Map());
 
@@ -3300,16 +3305,18 @@ export default function ChatsPage() {
                   </button>
                   {!codeMode && (
                     <div
+                      ref={emojiZoneRef}
                       className="message-input-toolbar-emoji-wrap"
-                      onMouseEnter={handleEmojiZoneEnter}
-                      onMouseLeave={handleEmojiZoneLeave}
                     >
                       <button
                         type="button"
-                        className="btn-emoji"
+                        className={`btn-emoji${emojiPickerVisible ? ' active' : ''}`}
                         title="Эмодзи"
                         aria-label="Эмодзи"
+                        aria-expanded={emojiPickerVisible}
+                        aria-haspopup="dialog"
                         disabled={Boolean(replyTo || pendingForward) || uploading || voiceRecording}
+                        onClick={toggleEmojiPicker}
                       >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
                           <circle cx="12" cy="12" r="10" />

@@ -2198,7 +2198,13 @@ body.is-resizing-panels * {
 }
 
 /* Выше специфичность, чем у .chats-page .emoji-picker (absolute над инпутом) —
-   иначе полный пикер «всплывает» поверх ряда быстрых реакций. */
+   иначе полный пикер «всплывает» поверх ряда быстрых реакций.
+   Селекторы без .chats-page — popover порталится в document.body. */
+.message-action-popover .message-reaction-bar__picker .emoji-picker,
+.message-action-popover .message-reaction-bar__picker .emoji-picker--visible,
+.message-action-popover .message-reaction-bar__picker .emoji-picker--open,
+.message-action-popover .message-reaction-bar__picker .emoji-picker--closing,
+.message-action-popover .message-reaction-bar__picker .emoji-picker.emoji-picker--reaction,
 .chats-page .message-reaction-bar__picker .emoji-picker,
 .chats-page .message-reaction-bar__picker .emoji-picker--visible,
 .chats-page .message-reaction-bar__picker .emoji-picker--open,
@@ -3036,7 +3042,8 @@ body.is-resizing-panels * {
   background: transparent;
 }
 
-.chats-page .btn-code-mode.active {
+.chats-page .btn-code-mode.active,
+.chats-page .btn-emoji.active {
   color: var(--accent-primary);
   background: transparent;
 }
