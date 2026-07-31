@@ -41,6 +41,7 @@ import { SelectionToolbar } from '../components/Chat/SelectionToolbar';
 import { ForwardPickerModal } from '../components/Chat/ForwardPickerModal';
 import { CreateGroupModal } from '../components/Chat/CreateGroupModal';
 import { QuoteComposerBar } from '../components/Chat/QuoteComposerBar';
+import { RelatedMessagesPanel } from '../components/Chat/RelatedMessagesPanel';
 import { SendIconButton } from '../components/Chat/SendIconButton';
 import { UploadProgressRing } from '../components/Chat/UploadProgressRing';
 import { FileTypeIcon } from '../components/Chat/FileTypeIcon';
@@ -201,6 +202,11 @@ export default function ChatsPage() {
   const callController = useCallContext();
   const {
     suggestion: aiSuggestion,
+    relatedMessages: aiRelatedMessages,
+    relatedDismissed: aiRelatedDismissed,
+    showRelatedPanel: aiShowRelatedPanel,
+    setShowRelatedPanel: setAiShowRelatedPanel,
+    dismissRelatedPanel: dismissAiRelatedPanel,
     loading: aiLoading,
     styleEnabled: aiStyleEnabled,
     reasonActive: aiReasonActive,
@@ -215,6 +221,27 @@ export default function ChatsPage() {
     refreshKey: aiStyleRefreshKey,
   });
   const aiGhostRef = useRef(null);
+  const aiReasonMenuRef = useRef(null);
+  const [aiReasonMenuOpen, setAiReasonMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (!aiReasonMenuOpen) return undefined;
+    const onPointerDown = (event) => {
+      if (!aiReasonMenuRef.current?.contains(event.target)) {
+        setAiReasonMenuOpen(false);
+      }
+    };
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setAiReasonMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [aiReasonMenuOpen]);
+
   const { isOnline, getLastSeen } = callController;
   const callChatId = callController.call?.chat_id
     || (typeof callController.call?.chat === 'object'
@@ -3158,6 +3185,24 @@ export default function ChatsPage() {
                 .join(' ')}
               onSubmit={handleSend}
             >
+              <RelatedMessagesPanel
+                messages={aiRelatedMessages}
+                visible={
+                  Boolean(
+                    aiReasonActive
+                    && aiStyleEnabled
+                    && aiShowRelatedPanel
+                    && !aiRelatedDismissed
+                    && aiRelatedMessages.length
+                  )
+                }
+                suggestionReady={Boolean(aiSuggestion)}
+                onHide={dismissAiRelatedPanel}
+                onHideForever={() => {
+                  setAiShowRelatedPanel(false);
+                  dismissAiRelatedPanel();
+                }}
+              />
               {(replyTo || pendingForward) && (
                 <QuoteComposerBar
                   mode={pendingForward ? 'forward' : 'reply'}
@@ -3495,41 +3540,62 @@ export default function ChatsPage() {
                   )}
                 </div>
                 {!codeMode && aiStyleEnabled ? (
-                  <button
-                    type="button"
-                    className={[
-                      'btn-ai-reason',
-                      aiReasonActive ? 'is-active' : '',
-                      aiLoading ? 'is-loading' : '',
-                    ].filter(Boolean).join(' ')}
-                    title={
-                      aiReasonActive
-                        ? (aiLoading ? 'Думаю…' : 'Reason — выключить автодополнение')
-                        : 'Reason — включить автодополнение'
-                    }
-                    aria-label="Reason — автодополнение"
-                    aria-pressed={aiReasonActive}
-                    disabled={voiceRecording || uploading || forwardBusy}
-                    onClick={() => {
-                      toggleAiReason();
-                      requestAnimationFrame(() => resizeMessageInput());
-                    }}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
-                      <path
-                        d="M12 3l1.2 3.8L17 8l-3.8 1.2L12 13l-1.2-3.8L7 8l3.8-1.2L12 3z"
-                        strokeLinejoin="round"
-                      />
-                      <path
-                        d="M18.5 13.5l.7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7.7-2.1z"
-                        strokeLinejoin="round"
-                      />
-                      <path
-                        d="M5.5 14.5l.55 1.65L7.7 16.7l-1.65.55L5.5 18.9l-.55-1.65L3.3 16.7l1.65-.55L5.5 14.5z"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </button>
+                  <div className="btn-ai-reason-wrap" ref={aiReasonMenuRef}>
+                    <button
+                      type="button"
+                      className={[
+                        'btn-ai-reason',
+                        aiReasonActive ? 'is-active' : '',
+                        aiLoading ? 'is-loading' : '',
+                      ].filter(Boolean).join(' ')}
+                      title={
+                        aiReasonActive
+                          ? (aiLoading ? 'Думаю…' : 'Reason — выключить автодополнение')
+                          : 'Reason — включить автодополнение'
+                      }
+                      aria-label="Reason — автодополнение"
+                      aria-pressed={aiReasonActive}
+                      disabled={voiceRecording || uploading || forwardBusy}
+                      onClick={() => {
+                        setAiReasonMenuOpen(false);
+                        toggleAiReason();
+                        requestAnimationFrame(() => resizeMessageInput());
+                      }}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setAiReasonMenuOpen((open) => !open);
+                      }}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+                        <path
+                          d="M12 3l1.2 3.8L17 8l-3.8 1.2L12 13l-1.2-3.8L7 8l3.8-1.2L12 3z"
+                          strokeLinejoin="round"
+                        />
+                        <path
+                          d="M18.5 13.5l.7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7.7-2.1z"
+                          strokeLinejoin="round"
+                        />
+                        <path
+                          d="M5.5 14.5l.55 1.65L7.7 16.7l-1.65.55L5.5 18.9l-.55-1.65L3.3 16.7l1.65-.55L5.5 14.5z"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </button>
+                    {aiReasonMenuOpen ? (
+                      <div className="ai-reason-menu" role="menu">
+                        <label className="ai-reason-menu__item">
+                          <input
+                            type="checkbox"
+                            checked={aiShowRelatedPanel}
+                            onChange={(e) => {
+                              setAiShowRelatedPanel(e.target.checked);
+                            }}
+                          />
+                          <span>найденные сообщения</span>
+                        </label>
+                      </div>
+                    ) : null}
+                  </div>
                 ) : null}
                 <SendIconButton
                   busy={uploading || forwardBusy}
