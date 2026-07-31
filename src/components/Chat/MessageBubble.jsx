@@ -909,6 +909,7 @@ function ChatMessageBubble({
         className={[
           'message',
           isOwn ? 'own' : 'other',
+          isPinned ? 'is-pinned' : '',
           isPending ? 'pending' : '',
           isStickerMessage ? 'message--sticker' : '',
         ].filter(Boolean).join(' ')}

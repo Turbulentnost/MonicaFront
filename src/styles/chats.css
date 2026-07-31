@@ -1963,6 +1963,52 @@ body.is-resizing-panels * {
   border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) var(--radius-xs);
 }
 
+.chats-page .message.is-pinned.own {
+  background: #1f9d55;
+  color: #f3fff8;
+  box-shadow: 0 6px 18px rgba(31, 157, 85, 0.28);
+}
+
+.chats-page .message.is-pinned.own .message-status,
+.chats-page .message.is-pinned.own .message-status-sending,
+.chats-page .message.is-pinned.own .message-status-sent,
+.chats-page .message.is-pinned.own .message-status-read,
+.chats-page .message.is-pinned.own .message-time,
+.chats-page .message.is-pinned.own .message-content a.message-link {
+  color: #f3fff8;
+}
+
+.chats-page .message.is-pinned.other {
+  background: #1a4d34;
+  border-color: rgba(74, 222, 128, 0.28);
+  color: #eafff2;
+  box-shadow: 0 6px 18px rgba(26, 77, 52, 0.24);
+}
+
+.chats-page .message.is-pinned.other .message-meta,
+.chats-page .message.is-pinned.other .message-time {
+  color: rgba(234, 255, 242, 0.82);
+}
+
+.chats-page .message.is-pinned.other .message-content a.message-link {
+  color: #86efac;
+}
+
+.chats-page .message.is-pinned .message-link-preview {
+  border-color: rgba(134, 239, 172, 0.28);
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.chats-page .message.is-pinned.own .message-reply-quote {
+  background: rgba(0, 0, 0, 0.14);
+  border-left-color: rgba(243, 255, 248, 0.55);
+}
+
+.chats-page .message.is-pinned.other .message-reply-quote {
+  background: rgba(0, 0, 0, 0.18);
+  border-left-color: rgba(134, 239, 172, 0.65);
+}
+
 .chats-page--special .message.own {
   background: linear-gradient(135deg, #4f46e5 0%, #6366f1 40%, #7c3aed 100%);
   box-shadow:
@@ -3821,18 +3867,18 @@ body.is-resizing-panels * {
   flex: 1;
   min-width: 0;
   padding: 9px 10px;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid rgba(74, 222, 128, 0.28);
   border-radius: var(--radius-md);
-  background: rgba(12, 16, 28, 0.5);
-  color: inherit;
+  background: rgba(26, 77, 52, 0.72);
+  color: #eafff2;
   text-align: left;
   cursor: pointer;
   font: inherit;
 }
 
 .chat-details__pinned-main:hover {
-  border-color: rgba(91, 124, 255, 0.4);
-  background: rgba(91, 124, 255, 0.1);
+  border-color: rgba(74, 222, 128, 0.5);
+  background: rgba(31, 157, 85, 0.28);
 }
 
 .chat-details__pinned-unpin {
