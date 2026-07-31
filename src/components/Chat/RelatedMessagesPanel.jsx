@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-const AUTO_HIDE_MS = 1000;
+const AUTO_HIDE_MS = 4000;
 
 /**
  * Floating list of semantically related messages used as Reason context.
