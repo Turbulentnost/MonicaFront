@@ -215,6 +215,20 @@ function ChevronDownIcon() {
   );
 }
 
+function ChevronUpIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="m7 14 5-5 5 5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function getDeliveryStatus(message, isOwn) {
   if (!isOwn) return null;
   if (message.client_status === 'sending' || String(message.id).startsWith('temp-')) {
@@ -825,17 +839,15 @@ function ChatMessageBubble({
                 <AppleEmoji emoji={emoji} size={22} />
               </button>
             ))}
-            {!pickerExpanded && (
-              <button
-                type="button"
-                className="message-reaction-bar__expand"
-                onClick={handleExpandClick}
-                aria-label="Больше эмодзи"
-                aria-expanded={false}
-              >
-                <ChevronDownIcon />
-              </button>
-            )}
+            <button
+              type="button"
+              className="message-reaction-bar__expand"
+              onClick={handleExpandClick}
+              aria-label={pickerExpanded ? 'Скрыть эмодзи' : 'Больше эмодзи'}
+              aria-expanded={pickerExpanded}
+            >
+              {pickerExpanded ? <ChevronUpIcon /> : <ChevronDownIcon />}
+            </button>
           </div>
           {pickerExpanded && (
             <div className="message-reaction-bar__picker">
@@ -852,6 +864,7 @@ function ChatMessageBubble({
         </div>
       )}
 
+      {!pickerExpanded && (
       <div className="message-context-menu is-open" role="menu">
         {showEdit && (
           <button type="button" role="menuitem" onClick={startEdit}>
@@ -913,6 +926,7 @@ function ChatMessageBubble({
           </button>
         )}
       </div>
+      )}
     </div>,
     document.body,
   );
