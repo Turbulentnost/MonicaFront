@@ -6951,7 +6951,7 @@ body.is-resizing-panels * {
 }
 
 .message-context-menu button:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.32);
 }
 
 .message-context-menu__icon {
@@ -6970,7 +6970,7 @@ body.is-resizing-panels * {
 }
 
 .message-context-menu__danger:hover {
-  background: rgba(255, 107, 107, 0.14);
+  background: rgba(0, 0, 0, 0.38);
 }
 
 /* Reactions open from right-click popover only — hide hover trigger. */
