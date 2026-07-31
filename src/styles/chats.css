@@ -2391,9 +2391,15 @@ body.is-resizing-panels * {
   background: rgba(124, 58, 237, 0.28);
 }
 
-.chats-page--special .message-context-menu {
+.chats-page--special .message-action-popover .message-context-menu,
+.message-action-popover--special .message-context-menu {
   border-color: rgba(124, 58, 237, 0.35);
-  background: rgba(10, 12, 22, 0.98);
+  background: rgba(28, 24, 40, 0.82);
+}
+
+.message-action-popover--special .message-reaction-bar--popover {
+  border-color: rgba(124, 58, 237, 0.35);
+  background: rgba(28, 24, 40, 0.82);
 }
 
 /* Special mode reaction UI */
@@ -6821,20 +6827,21 @@ body.is-resizing-panels * {
   background: rgba(255, 255, 255, 0.08);
 }
 
-.message-context-menu {
+.messages-area.is-menu-locked {
+  overflow: hidden !important;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
+.message-action-popover {
   position: fixed;
-  z-index: 80;
-  min-width: 176px;
-  padding: 4px;
-  border: 1px solid rgba(135, 153, 190, 0.28);
-  border-radius: 10px;
-  background: rgba(22, 28, 46, 0.98);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  z-index: 220;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  align-items: stretch;
+  gap: 8px;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 16px));
   opacity: 0;
   transform: translateY(-4px) scale(0.98);
   transition:
@@ -6843,32 +6850,130 @@ body.is-resizing-panels * {
   pointer-events: none;
 }
 
-.message-context-menu.is-open {
+.message-action-popover.is-open {
   opacity: 1;
   transform: translateY(0) scale(1);
   pointer-events: auto;
 }
 
-.message-context-menu.is-leaving {
+.message-action-popover.is-leaving {
   opacity: 0;
   transform: translateY(-4px) scale(0.98);
   pointer-events: none;
 }
 
+.message-reaction-bar--popover {
+  position: relative;
+  z-index: 1;
+  width: max-content;
+  max-width: min(280px, 92vw);
+  margin: 0 auto;
+  padding: 6px 8px;
+  border-radius: 999px;
+  background: rgba(40, 40, 44, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.message-reaction-bar--popover.is-expanded {
+  border-radius: 18px;
+  width: min(280px, 92vw);
+}
+
+.message-reaction-bar--popover .message-reaction-bar__expand {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.message-context-menu {
+  position: relative;
+  z-index: 1;
+  min-width: 196px;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  background: rgba(40, 40, 44, 0.78);
+  box-shadow:
+    0 14px 36px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.message-context-menu.is-open {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.message-context-menu.is-leaving {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .message-context-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   border: none;
   background: transparent;
-  color: #e8eaed;
+  color: #f2f2f4;
   text-align: left;
-  padding: 8px 10px;
-  border-radius: 7px;
+  padding: 10px 12px;
+  border-radius: 10px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.25;
+  font-weight: 500;
 }
 
 .message-context-menu button:hover {
-  background: rgba(91, 124, 255, 0.18);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.message-context-menu__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.message-context-menu__danger,
+.message-context-menu__danger .message-context-menu__icon {
+  color: #ff6b6b;
+}
+
+.message-context-menu__danger:hover {
+  background: rgba(255, 107, 107, 0.14);
+}
+
+/* Reactions open from right-click popover only — hide hover trigger. */
+.chats-page .message-react-trigger,
+.chats-page .message-react-hover-bridge,
+.chats-page .message-wrapper:hover .message-react-trigger,
+.chats-page .message-wrapper:hover .message-react-hover-bridge {
+  display: none !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
 }
 
 .message-reply-quote {

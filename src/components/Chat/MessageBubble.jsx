@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { MessageMedia } from './MessageMedia';
 import { VoiceMessagePlayer } from './VoiceMessagePlayer';
 import { AppleEmoji, renderTextWithAppleEmoji } from './AppleEmoji';
@@ -17,36 +18,144 @@ import {
   subscribeReactionBar,
 } from '../../utils/reactionBarHover';
 
-const QUICK_REACTIONS = ['👍', '❤️', '😂', '🔥', '😮', '😢'];
+const QUICK_REACTIONS = ['👍', '❤️', '👎', '🔥', '🥰', '👏', '😁'];
 const BACK_QUICK_REACTIONS = ['🥀', '💀', '😭', '🖤', '😞', '💔'];
+const POPOVER_PAD = 8;
+const POPOVER_ESTIMATE = { width: 220, height: 320 };
 
-function PlusIcon() {
+function placeActionPopover(clientX, clientY, width, height) {
+  let x = clientX;
+  let y = clientY + 6;
+  if (y + height > window.innerHeight - POPOVER_PAD) {
+    y = clientY - height - 6;
+  }
+  if (y < POPOVER_PAD) y = POPOVER_PAD;
+  if (x + width > window.innerWidth - POPOVER_PAD) {
+    x = window.innerWidth - width - POPOVER_PAD;
+  }
+  if (x < POPOVER_PAD) x = POPOVER_PAD;
+  return { x, y };
+}
+
+function MenuIcon({ children }) {
   return (
-    <svg width="12" height="12" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-      <path
-        d="M7 2.5v9M2.5 7h9"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-    </svg>
+    <span className="message-context-menu__icon" aria-hidden="true">
+      {children}
+    </span>
   );
 }
 
 function ReplyIcon() {
   return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path
-        d="M6.5 3.5 2.5 7l4 3.5"
+        d="M10 7 5 12l5 5"
         stroke="currentColor"
-        strokeWidth="1.55"
+        strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <path
-        d="M2.5 7h6.2c2.4 0 4.3 1.7 4.3 4v1"
+        d="M5 12h9a5 5 0 0 1 5 5v1"
         stroke="currentColor"
-        strokeWidth="1.55"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function CopyIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="8" y="8" width="11" height="11" rx="2" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M6 15V6a2 2 0 0 1 2-2h9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function EditIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M4 20h4l10.5-10.5a1.8 1.8 0 0 0-2.5-2.5L5.5 17.5 4 20Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function PinIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M14.5 4.5 9 10H6.5v2.5L4 16l4 4 3.5-2.5H14l5.5-5.5"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="m9.5 14.5 5-5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ForwardIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="m14 7 5 5-5 5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M19 12H10a5 5 0 0 0-5 5v1"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function SelectIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="m8.5 12.2 2.4 2.4 4.6-4.8"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function DeleteIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M5 7h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M8 7l.8 12h6.4L16 7" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ChevronDownIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="m7 10 5 5 5-5"
+        stroke="currentColor"
+        strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -193,21 +302,18 @@ function ChatMessageBubble({
   requestEdit = false,
   onRequestEditHandled,
 }) {
-  const [contextMenu, setContextMenu] = useState(null);
-  const [contextMenuLeaving, setContextMenuLeaving] = useState(false);
-  const [barOpen, setBarOpen] = useState(false);
+  const [actionPopover, setActionPopover] = useState(null);
+  const [popoverLeaving, setPopoverLeaving] = useState(false);
   const [pickerExpanded, setPickerExpanded] = useState(false);
-  /** Реакции всегда ниже сообщения */
-  const [reactionSide, setReactionSide] = useState('below');
-  /** up = пикер раскрывается вверх, down = вниз */
-  const [pickerSide, setPickerSide] = useState('down');
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState('');
   const [copyBusy, setCopyBusy] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState('');
   const wrapperRef = useRef(null);
+  const popoverRef = useRef(null);
   const editInputRef = useRef(null);
-  const contextMenuCloseTimerRef = useRef(null);
+  const popoverCloseTimerRef = useRef(null);
+  const popoverOpen = Boolean(actionPopover) && !popoverLeaving;
 
   const stickerPayload = message.message_type === 'text'
     ? parseStickerMessage(message.content)
@@ -230,124 +336,98 @@ function ChatMessageBubble({
     && message.message_type !== 'call';
   const isPinned = Boolean(message.is_pinned);
 
-  const closeReactions = useCallback(() => {
-    releaseReactionBar(message.id);
-    setBarOpen(false);
-    setPickerExpanded(false);
-  }, [message.id]);
-
-  const closeContextMenu = useCallback((animated = true) => {
-    if (contextMenuCloseTimerRef.current) {
-      window.clearTimeout(contextMenuCloseTimerRef.current);
-      contextMenuCloseTimerRef.current = null;
+  const closeActionPopover = useCallback((animated = true) => {
+    if (popoverCloseTimerRef.current) {
+      window.clearTimeout(popoverCloseTimerRef.current);
+      popoverCloseTimerRef.current = null;
     }
+    releaseReactionBar(message.id);
+    setPickerExpanded(false);
 
     if (!animated) {
-      setContextMenuLeaving(false);
-      setContextMenu(null);
+      setPopoverLeaving(false);
+      setActionPopover(null);
       return;
     }
 
-    setContextMenuLeaving(true);
-    contextMenuCloseTimerRef.current = window.setTimeout(() => {
-      contextMenuCloseTimerRef.current = null;
-      setContextMenu(null);
-      setContextMenuLeaving(false);
+    setPopoverLeaving(true);
+    popoverCloseTimerRef.current = window.setTimeout(() => {
+      popoverCloseTimerRef.current = null;
+      setActionPopover(null);
+      setPopoverLeaving(false);
     }, 160);
-  }, []);
+  }, [message.id]);
 
   useEffect(() => () => {
-    if (contextMenuCloseTimerRef.current) {
-      window.clearTimeout(contextMenuCloseTimerRef.current);
+    if (popoverCloseTimerRef.current) {
+      window.clearTimeout(popoverCloseTimerRef.current);
     }
-  }, []);
-
-  useEffect(() => {
-    if (!contextMenu || contextMenuLeaving) return undefined;
-    const area = wrapperRef.current?.closest('.messages-area');
-    if (!area) return undefined;
-
-    const onScrollAway = () => {
-      closeContextMenu(true);
-    };
-
-    area.addEventListener('scroll', onScrollAway, { passive: true });
-    area.addEventListener('wheel', onScrollAway, { passive: true });
-    area.addEventListener('touchmove', onScrollAway, { passive: true });
-    return () => {
-      area.removeEventListener('scroll', onScrollAway);
-      area.removeEventListener('wheel', onScrollAway);
-      area.removeEventListener('touchmove', onScrollAway);
-    };
-  }, [contextMenu, contextMenuLeaving, closeContextMenu]);
-
-  const updateReactionLayout = useCallback((expanded = pickerExpanded) => {
-    const node = wrapperRef.current;
-    if (!node) return;
-    const rect = node.getBoundingClientRect();
-    const area = node.closest('.messages-area');
-    const areaRect = area?.getBoundingClientRect();
-    const bottomBound = areaRect?.bottom ?? window.innerHeight;
-    const spaceBelow = bottomBound - rect.bottom;
-
-    // Реакции всегда сразу под сообщением (~5px); полный пикер раскрываем
-    // вверх, если снизу мало места — чтобы не резать следующее сообщение.
-    setReactionSide('below');
-    const pickerNeed = expanded ? 260 : 48;
-    setPickerSide(spaceBelow >= pickerNeed ? 'down' : 'up');
-  }, [pickerExpanded]);
-
-  useEffect(() => () => {
     releaseReactionBar(message.id);
   }, [message.id]);
 
   useEffect(() => {
     return subscribeReactionBar((activeId) => {
-      if (activeId === message.id) {
-        setBarOpen(true);
-        return;
-      }
-      setBarOpen(false);
+      if (activeId === message.id) return;
+      if (!actionPopover) return;
       setPickerExpanded(false);
+      setPopoverLeaving(false);
+      setActionPopover(null);
     });
-  }, [message.id]);
+  }, [message.id, actionPopover]);
 
-  useEffect(() => {
-    const node = wrapperRef.current;
+  useLayoutEffect(() => {
+    if (!actionPopover || popoverLeaving) return undefined;
+    const node = popoverRef.current;
     if (!node) return undefined;
-    const onEnter = () => updateReactionLayout(false);
-    node.addEventListener('mouseenter', onEnter);
-    return () => node.removeEventListener('mouseenter', onEnter);
-  }, [updateReactionLayout]);
+    const rect = node.getBoundingClientRect();
+    const next = placeActionPopover(
+      actionPopover.anchorX,
+      actionPopover.anchorY,
+      rect.width || POPOVER_ESTIMATE.width,
+      rect.height || POPOVER_ESTIMATE.height,
+    );
+    if (
+      Math.abs(next.x - actionPopover.x) > 1
+      || Math.abs(next.y - actionPopover.y) > 1
+    ) {
+      setActionPopover((prev) => (prev ? { ...prev, ...next } : prev));
+    }
+    return undefined;
+  }, [actionPopover, popoverLeaving, pickerExpanded]);
 
+  // Lock message list scroll while the action popover is open.
   useEffect(() => {
-    if (!barOpen) return undefined;
-    updateReactionLayout(pickerExpanded);
-    const onScrollOrResize = () => updateReactionLayout(pickerExpanded);
-    window.addEventListener('resize', onScrollOrResize);
-    const area = wrapperRef.current?.closest('.messages-area');
-    area?.addEventListener('scroll', onScrollOrResize, { passive: true });
-    return () => {
-      window.removeEventListener('resize', onScrollOrResize);
-      area?.removeEventListener('scroll', onScrollOrResize);
+    if (!popoverOpen) return undefined;
+    const area = wrapperRef.current?.closest('.messages-area')
+      || document.querySelector('.chats-page .messages-area');
+    if (!area) return undefined;
+
+    area.classList.add('is-menu-locked');
+    const blockScroll = (event) => {
+      event.preventDefault();
     };
-  }, [barOpen, pickerExpanded, updateReactionLayout]);
+    area.addEventListener('wheel', blockScroll, { passive: false });
+    area.addEventListener('touchmove', blockScroll, { passive: false });
+    return () => {
+      area.classList.remove('is-menu-locked');
+      area.removeEventListener('wheel', blockScroll);
+      area.removeEventListener('touchmove', blockScroll);
+    };
+  }, [popoverOpen]);
 
   useEffect(() => {
-    if (!barOpen && !contextMenu) return undefined;
+    if (!actionPopover) return undefined;
 
     const onPointerDown = (event) => {
-      if (wrapperRef.current?.contains(event.target)) return;
-      closeReactions();
-      closeContextMenu();
+      if (popoverRef.current?.contains(event.target)) return;
+      closeActionPopover(true);
     };
 
     const onKeyDown = (event) => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
       event.stopPropagation();
-      closeReactions();
-      closeContextMenu();
+      closeActionPopover(true);
     };
 
     document.addEventListener('mousedown', onPointerDown);
@@ -356,7 +436,7 @@ function ChatMessageBubble({
       document.removeEventListener('mousedown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [barOpen, contextMenu, closeReactions, closeContextMenu]);
+  }, [actionPopover, closeActionPopover]);
 
   useEffect(() => {
     if (!editing) return undefined;
@@ -370,16 +450,15 @@ function ChatMessageBubble({
   }, [editing]);
 
   const handleDelete = (scope) => {
-    closeContextMenu();
+    closeActionPopover();
     onDelete?.(message.id, scope);
   };
 
   const startEdit = useCallback(() => {
-    closeContextMenu();
+    closeActionPopover();
     setEditText(getEditableMessageText(message));
     setEditing(true);
-    closeReactions();
-  }, [closeContextMenu, closeReactions, message]);
+  }, [closeActionPopover, message]);
 
   useEffect(() => {
     if (!requestEdit || !canEditMessage(message, isOwn)) return;
@@ -420,34 +499,16 @@ function ChatMessageBubble({
 
   const handleReactionPick = (emoji) => {
     onToggleReaction?.(message.id, emoji);
-    closeReactions();
+    closeActionPopover();
   };
 
   const handleReactionChipClick = (emoji) => {
     onToggleReaction?.(message.id, emoji);
   };
 
-  const openReactions = (event) => {
-    event.stopPropagation();
-    closeContextMenu();
-    if (barOpen) {
-      closeReactions();
-      return;
-    }
-    updateReactionLayout(false);
-    claimReactionBar(message.id);
-    setBarOpen(true);
-    setPickerExpanded(false);
-  };
-
   const handleExpandClick = (event) => {
     event.stopPropagation();
-    setPickerExpanded((value) => {
-      const next = !value;
-      updateReactionLayout(next);
-      return next;
-    });
-    setBarOpen(true);
+    setPickerExpanded((value) => !value);
     claimReactionBar(message.id);
   };
 
@@ -455,41 +516,47 @@ function ChatMessageBubble({
     if (!canInteract || selectionMode) return;
     event.preventDefault();
     event.stopPropagation();
-    closeReactions();
 
-    const menuWidth = 188;
-    const menuHeight = (canCopyPhoto ? 260 : 220) + (canPin ? 36 : 0);
-    const pad = 8;
-    const x = Math.min(event.clientX, window.innerWidth - menuWidth - pad);
-    const y = Math.min(event.clientY, window.innerHeight - menuHeight - pad);
-    if (contextMenuCloseTimerRef.current) {
-      window.clearTimeout(contextMenuCloseTimerRef.current);
-      contextMenuCloseTimerRef.current = null;
+    if (popoverCloseTimerRef.current) {
+      window.clearTimeout(popoverCloseTimerRef.current);
+      popoverCloseTimerRef.current = null;
     }
-    setContextMenuLeaving(false);
-    setContextMenu({ x: Math.max(pad, x), y: Math.max(pad, y) });
+
+    const placed = placeActionPopover(
+      event.clientX,
+      event.clientY,
+      POPOVER_ESTIMATE.width,
+      POPOVER_ESTIMATE.height + (pickerExpanded ? 220 : 0),
+    );
+    claimReactionBar(message.id);
+    setPopoverLeaving(false);
+    setPickerExpanded(false);
     setCopyFeedback('');
+    setActionPopover({
+      ...placed,
+      anchorX: event.clientX,
+      anchorY: event.clientY,
+    });
   };
 
   const handleReply = (event) => {
     event?.stopPropagation?.();
-    closeContextMenu();
-    closeReactions();
+    closeActionPopover();
     onReply?.(message);
   };
 
   const handleSelectFromMenu = () => {
-    closeContextMenu();
+    closeActionPopover();
     onToggleSelect?.(message);
   };
 
   const handleForwardFromMenu = () => {
-    closeContextMenu();
+    closeActionPopover();
     onQuickForward?.(message);
   };
 
   const handleTogglePin = () => {
-    closeContextMenu();
+    closeActionPopover();
     onTogglePin?.(message);
   };
 
@@ -501,7 +568,7 @@ function ChatMessageBubble({
       await copyMessagePhoto(message);
       setCopyFeedback('Скопировано');
       window.setTimeout(() => {
-        closeContextMenu();
+        closeActionPopover();
         setCopyFeedback('');
       }, 650);
     } catch {
@@ -606,20 +673,6 @@ function ChatMessageBubble({
     );
   };
 
-  const reactionBarClass = [
-    'message-reaction-bar',
-    'is-docked',
-    `is-${reactionSide}`,
-    `picker-${pickerSide}`,
-    isOwn ? 'message-reaction-bar--own' : 'message-reaction-bar--other',
-    specialMode ? 'message-reaction-bar--special' : '',
-    backMode ? 'message-reaction-bar--back' : '',
-    barOpen ? 'is-visible' : '',
-    pickerExpanded ? 'is-expanded' : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
-
   const reactionsClass = [
     'message-reactions',
     isOwn ? 'message-reactions--own' : 'message-reactions--other',
@@ -628,6 +681,136 @@ function ChatMessageBubble({
   ]
     .filter(Boolean)
     .join(' ');
+
+  const actionPopoverNode = actionPopover && createPortal(
+    <div
+      ref={popoverRef}
+      className={[
+        'message-action-popover',
+        popoverLeaving ? 'is-leaving' : 'is-open',
+        specialMode ? 'message-action-popover--special' : '',
+        backMode ? 'message-action-popover--back' : '',
+      ].filter(Boolean).join(' ')}
+      style={{ left: actionPopover.x, top: actionPopover.y }}
+      onClick={(event) => event.stopPropagation()}
+      onContextMenu={(event) => event.preventDefault()}
+    >
+      {showReactionUi && (
+        <div
+          className={[
+            'message-reaction-bar',
+            'message-reaction-bar--popover',
+            'is-visible',
+            pickerExpanded ? 'is-expanded' : '',
+            specialMode ? 'message-reaction-bar--special' : '',
+            backMode ? 'message-reaction-bar--back' : '',
+          ].filter(Boolean).join(' ')}
+          role="toolbar"
+          aria-label="Реакции на сообщение"
+        >
+          <div className="message-reaction-bar__row">
+            {(backMode ? BACK_QUICK_REACTIONS : QUICK_REACTIONS).map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                className="message-reaction-bar__emoji"
+                onClick={() => handleReactionPick(emoji)}
+                aria-label={`Реакция ${emoji}`}
+              >
+                <AppleEmoji emoji={emoji} size={22} />
+              </button>
+            ))}
+            {!pickerExpanded && (
+              <button
+                type="button"
+                className="message-reaction-bar__expand"
+                onClick={handleExpandClick}
+                aria-label="Больше эмодзи"
+                aria-expanded={false}
+              >
+                <ChevronDownIcon />
+              </button>
+            )}
+          </div>
+          {pickerExpanded && (
+            <div className="message-reaction-bar__picker">
+              <EmojiPicker
+                visible={pickerExpanded}
+                specialMode={specialMode}
+                backMode={backMode}
+                onSelect={handleReactionPick}
+                emojiOnly
+                className="emoji-picker--reaction"
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="message-context-menu is-open" role="menu">
+        {showEdit && (
+          <button type="button" role="menuitem" onClick={startEdit}>
+            <MenuIcon><EditIcon /></MenuIcon>
+            Редактировать
+          </button>
+        )}
+        {canCopyPhoto && (
+          <button
+            type="button"
+            role="menuitem"
+            onClick={handleCopyPhoto}
+            disabled={copyBusy}
+          >
+            <MenuIcon><CopyIcon /></MenuIcon>
+            {copyFeedback || (copyBusy ? 'Копирование…' : 'Скопировать')}
+          </button>
+        )}
+        {onReply && (
+          <button type="button" role="menuitem" onClick={handleReply}>
+            <MenuIcon><ReplyIcon /></MenuIcon>
+            Ответить
+          </button>
+        )}
+        <button type="button" role="menuitem" onClick={handleSelectFromMenu}>
+          <MenuIcon><SelectIcon /></MenuIcon>
+          Выбрать
+        </button>
+        {onQuickForward && (
+          <button type="button" role="menuitem" onClick={handleForwardFromMenu}>
+            <MenuIcon><ForwardIcon /></MenuIcon>
+            Переслать
+          </button>
+        )}
+        {canPin && (
+          <button type="button" role="menuitem" onClick={handleTogglePin}>
+            <MenuIcon><PinIcon /></MenuIcon>
+            {isPinned ? 'Открепить' : 'Закрепить'}
+          </button>
+        )}
+        <button
+          type="button"
+          role="menuitem"
+          className="message-context-menu__danger"
+          onClick={() => handleDelete('me')}
+        >
+          <MenuIcon><DeleteIcon /></MenuIcon>
+          Удалить у себя
+        </button>
+        {showDeleteForAll && (
+          <button
+            type="button"
+            role="menuitem"
+            className="message-context-menu__danger"
+            onClick={() => handleDelete('everyone')}
+          >
+            <MenuIcon><DeleteIcon /></MenuIcon>
+            Удалить у всех
+          </button>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
 
   return (
     <div
@@ -640,11 +823,9 @@ function ChatMessageBubble({
         highlighted ? 'is-highlighted' : '',
         selected ? 'is-selected' : '',
         selectionMode ? 'is-selection-mode' : '',
-        barOpen ? 'is-reacting' : '',
-        `reaction-side-${reactionSide}`,
+        popoverOpen ? 'is-menu-open' : '',
       ].filter(Boolean).join(' ')}
       data-message-id={message.id}
-      data-reaction-side={reactionSide}
       onClick={selectionMode && selectable ? () => onToggleSelect?.(message) : undefined}
       onContextMenu={handleContextMenu}
     >
@@ -740,84 +921,6 @@ function ChatMessageBubble({
         </div>
       </div>
 
-      {showReactionUi && (
-        <>
-          {/* Невидимый мост через зазор — иначе hover сбрасывается по пути к реакции */}
-          <span
-            className={`message-react-hover-bridge is-${reactionSide}`}
-            aria-hidden="true"
-          />
-          {/* Пока открыта панель реакций — триггер 😊+ для этого сообщения скрыт */}
-          {!barOpen && (
-            <button
-              type="button"
-              className={`message-react-trigger is-${reactionSide}`}
-              title="Реакция"
-              aria-label="Добавить реакцию"
-              aria-expanded={false}
-              onClick={openReactions}
-            >
-              <span className="message-react-trigger__emoji" aria-hidden="true">
-                <AppleEmoji emoji="😊" size={16} />
-              </span>
-              <span className="message-react-trigger__plus" aria-hidden="true">
-                <PlusIcon />
-              </span>
-            </button>
-          )}
-        </>
-      )}
-
-      {showReactionUi && barOpen && (
-        <div
-          className={reactionBarClass}
-          role="toolbar"
-          aria-label="Реакции на сообщение"
-          onMouseEnter={() => updateReactionLayout(pickerExpanded)}
-        >
-          <div className="message-reaction-bar__row">
-            {(backMode ? BACK_QUICK_REACTIONS : QUICK_REACTIONS).map((emoji) => (
-              <button
-                key={emoji}
-                type="button"
-                className="message-reaction-bar__emoji"
-                onClick={() => handleReactionPick(emoji)}
-                aria-label={`Реакция ${emoji}`}
-              >
-                <AppleEmoji emoji={emoji} size={20} />
-              </button>
-            ))}
-            {/* Кнопка 😊+ только до раскрытия полного пикера */}
-            {!pickerExpanded && (
-              <button
-                type="button"
-                className="message-reaction-bar__expand"
-                onClick={handleExpandClick}
-                aria-label="Больше эмодзи"
-                aria-expanded={false}
-              >
-                <span className="message-reaction-bar__expand-icon" aria-hidden="true">
-                  <AppleEmoji emoji="😊" size={16} />
-                </span>
-                <PlusIcon />
-              </button>
-            )}
-          </div>
-          {pickerExpanded && (
-            <div className="message-reaction-bar__picker">
-              <EmojiPicker
-                visible={pickerExpanded}
-                specialMode={specialMode}
-                backMode={backMode}
-                onSelect={handleReactionPick}
-                emojiOnly
-                className="emoji-picker--reaction"
-              />
-            </div>
-          )}
-        </div>
-      )}
-
       {reactions.length > 0 && (
         <div className={reactionsClass}>
           {reactions.map(({ emoji, count, reactedByMe }) => (
@@ -838,57 +941,7 @@ function ChatMessageBubble({
         </div>
       )}
 
-      {contextMenu && (
-        <div
-          className={`message-context-menu${contextMenuLeaving ? ' is-leaving' : ' is-open'}`}
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          role="menu"
-          onClick={(event) => event.stopPropagation()}
-          onContextMenu={(event) => event.preventDefault()}
-        >
-          {showEdit && (
-            <button type="button" role="menuitem" onClick={startEdit}>
-              Редактировать
-            </button>
-          )}
-          {canCopyPhoto && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={handleCopyPhoto}
-              disabled={copyBusy}
-            >
-              {copyFeedback || (copyBusy ? 'Копирование…' : 'Скопировать')}
-            </button>
-          )}
-          {onReply && (
-            <button type="button" role="menuitem" onClick={handleReply}>
-              Ответить
-            </button>
-          )}
-          <button type="button" role="menuitem" onClick={handleSelectFromMenu}>
-            Выбрать
-          </button>
-          {onQuickForward && (
-            <button type="button" role="menuitem" onClick={handleForwardFromMenu}>
-              Переслать
-            </button>
-          )}
-          {canPin && (
-            <button type="button" role="menuitem" onClick={handleTogglePin}>
-              {isPinned ? 'Открепить' : 'Закрепить'}
-            </button>
-          )}
-          <button type="button" role="menuitem" onClick={() => handleDelete('me')}>
-            Удалить у себя
-          </button>
-          {showDeleteForAll && (
-            <button type="button" role="menuitem" onClick={() => handleDelete('everyone')}>
-              Удалить у всех
-            </button>
-          )}
-        </div>
-      )}
+      {actionPopoverNode}
     </div>
   );
 }
