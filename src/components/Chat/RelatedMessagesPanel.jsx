@@ -56,15 +56,24 @@ export function RelatedMessagesPanel({
         </button>
       </div>
       <ul className="related-messages-panel__list">
-        {messages.map((item, index) => (
-          <li
-            key={item.id || `related-${index}`}
-            className="related-messages-panel__item"
-            style={{ animationDelay: `${index * 70}ms` }}
-          >
-            {item.text}
-          </li>
-        ))}
+        {messages.map((item, index) => {
+          const mine = Boolean(item.is_mine);
+          const label = mine
+            ? 'Вы'
+            : (item.sender_label || 'Собеседник');
+          return (
+            <li
+              key={item.id || `related-${index}`}
+              className={`related-messages-panel__row${mine ? ' is-own' : ' is-other'}`}
+              style={{ animationDelay: `${index * 70}ms` }}
+            >
+              <div className="related-messages-panel__label">{label}:</div>
+              <div className="related-messages-panel__bubble">
+                <span className="related-messages-panel__text">{item.text}</span>
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

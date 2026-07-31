@@ -2860,8 +2860,8 @@ body.is-resizing-panels * {
   right: 0;
   bottom: calc(100% + 8px);
   z-index: 30;
-  width: min(360px, 100%);
-  max-height: 220px;
+  width: min(340px, 100%);
+  max-height: 280px;
   padding: 10px 12px 12px;
   border: 1px solid var(--border-default);
   border-radius: 14px;
@@ -2920,28 +2920,81 @@ body.is-resizing-panels * {
 .chats-page .related-messages-panel__list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 2px 2px 4px;
+  overflow-x: hidden;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
   min-height: 0;
+  isolation: isolate;
 }
 
-.chats-page .related-messages-panel__item {
+.chats-page .related-messages-panel__row {
   margin: 0;
-  padding: 6px 8px;
-  border-radius: 8px;
-  background: rgba(148, 163, 184, 0.08);
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  line-height: 1.35;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  max-width: 92%;
+  position: relative;
+  z-index: 0;
   opacity: 0;
-  transform: translateY(6px);
+  transform: translateY(8px);
   animation: related-message-line-in 0.28s ease forwards;
+}
+
+.chats-page .related-messages-panel__row.is-own {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.chats-page .related-messages-panel__row.is-other {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+.chats-page .related-messages-panel__label {
+  padding: 0 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.chats-page .related-messages-panel__row.is-own .related-messages-panel__label {
+  color: rgba(167, 190, 255, 0.9);
+}
+
+.chats-page .related-messages-panel__bubble {
+  position: relative;
+  max-width: 100%;
+  padding: 7px 11px;
+  border-radius: 14px;
+  box-sizing: border-box;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+}
+
+.chats-page .related-messages-panel__row.is-other .related-messages-panel__bubble {
+  background: var(--bubble-other);
+  color: var(--text-primary);
+  border-bottom-left-radius: 5px;
+}
+
+.chats-page .related-messages-panel__row.is-own .related-messages-panel__bubble {
+  background: var(--bubble-own);
+  color: var(--bubble-own-text);
+  border-bottom-right-radius: 5px;
+}
+
+.chats-page .related-messages-panel__text {
+  display: block;
+  font-size: 13px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 @keyframes related-message-line-in {
