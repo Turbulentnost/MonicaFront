@@ -2017,6 +2017,14 @@ body.is-resizing-panels * {
   border: 1px solid rgba(129, 140, 248, 0.3);
 }
 
+.chats-page--special .message.is-pinned.own,
+.chats-page--special .message.is-pinned.other {
+  background: #1f9d55;
+  border-color: rgba(134, 239, 172, 0.35);
+  color: #f3fff8;
+  box-shadow: 0 8px 24px rgba(31, 157, 85, 0.32);
+}
+
 /* ??? Message wrapper & reactions ??? */
 
 .chats-page .message-wrapper {
